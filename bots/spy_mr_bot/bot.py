@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
+import cc
 import strategy as S
 from broker import BrokerError, PaperBroker, SchwabBroker
 
@@ -82,7 +83,7 @@ def trading_day_today() -> bool:
 
 
 # ---------------------------------------------------------------------------
-def cmd_decide(b, st):
+def cmd_decide(b, st, run=cc._NullRun()):
     """3:50 pm ET. Decide and queue a MOC order."""
     if not trading_day_today():
         log.info("weekend, nothing to do"); return
@@ -98,6 +99,8 @@ def cmd_decide(b, st):
     snap = S.snapshot(closes, P)
     log.info("decide %s price=%.2f rsi2=%s sma200=%s sma5=%s in_pos=%s bars_held=%d",
              today, live, _f(snap.rsi), _f(snap.sma_trend), _f(snap.sma_exit), st["in_position"], st["bars_held"])
+    signal = {"price": live, "rsi2": _f(snap.rsi), "sma200": _f(snap.sma_trend), "sma5": _f(snap.sma_exit),
+              "in_position": st["in_position"], "bars_held": st["bars_held"]}
 
     broker_qty = b.position(SYMBOL)
     if st["in_position"] and broker_qty <= 0:
@@ -109,14 +112,21 @@ def cmd_decide(b, st):
 
     if st["in_position"]:
         reason = S.exit_signal(snap, st["bars_held"] + 1, P)  # +1: today's bar counts once it closes
+        if cc.flatten_requested() and not reason:
+            reason = "flatten"
         if reason:
             b.cancel_open_orders(SYMBOL)
-            oid = b.sell_moc(SYMBOL, st["qty"])
+            oid = cc.guarded(run, side="SELL", qty=st["qty"], type_="MOC", symbol=SYMBOL, ref_price=live,
+                             reduces_risk=True, send=lambda: b.sell_moc(SYMBOL, st["qty"]))
             st["pending"] = {"side": "SELL", "qty": st["qty"], "date": today, "reason": reason, "order_id": oid}
+            run.decision(signal, "SELL_MOC", reason)
             log.info("SELL MOC %d %s queued (%s) order=%s", st["qty"], SYMBOL, reason, oid)
         else:
+            run.decision(signal, "HOLD", "no exit signal")
             log.info("hold; no exit signal")
     else:
+        if cc.flatten_requested():
+            cc.clear_flatten()
         if S.entry_signal(snap, P):
             eq = b.equity()
             qty = int(eq * ALLOC_PCT / 100.0 // live)
@@ -124,16 +134,24 @@ def cmd_decide(b, st):
                 qty = min(qty, MAX_SHARES)
             if qty <= 0:
                 log.warning("entry signal but qty computes to 0 (equity %.2f)", eq); return
-            oid = b.buy_moc(SYMBOL, qty)
+            try:
+                oid = cc.guarded(run, side="BUY", qty=qty, type_="MOC", symbol=SYMBOL, ref_price=live,
+                                 reduces_risk=False, send=lambda: b.buy_moc(SYMBOL, qty))
+            except cc.Rejected as e:
+                run.decision(signal, "NONE", f"entry rejected: {e}")
+                log.warning("entry signal but order rejected by risk engine: %s", e)
+                st["last_decide"] = today; save_state(st); return
             st["pending"] = {"side": "BUY", "qty": qty, "date": today, "reason": "rsi2_entry", "order_id": oid}
+            run.decision(signal, "BUY_MOC", "rsi2_entry")
             log.info("BUY MOC %d %s queued, provisional price %.2f, order=%s", qty, SYMBOL, live, oid)
         else:
+            run.decision(signal, "NONE", "no entry signal")
             log.info("flat; no entry signal")
     st["last_decide"] = today
     save_state(st)
 
 
-def cmd_reconcile(b, st):
+def cmd_reconcile(b, st, run=cc._NullRun()):
     """9:45 am ET next day. Confirm fills, place stop, advance bars_held."""
     bars = b.daily_closes(SYMBOL, 5)
     last = bars[-1]
@@ -149,17 +167,31 @@ def cmd_reconcile(b, st):
         if pend["side"] == "BUY":
             if qty > 0:
                 st.update(in_position=True, qty=qty, entry_price=last["close"], entry_date=last["date"], bars_held=0)
+                cc.record_fill("BUY", qty, last["close"], last["close"])
                 log.info("BUY confirmed: %d @ ~%.2f on %s", qty, last["close"], last["date"])
             else:
                 log.warning("BUY did not fill (broker qty=0)")
         else:
             if qty == 0:
+                cc.record_fill("SELL", pend["qty"], last["close"], last["close"])
+                if st.get("entry_price"):
+                    cc.record_trade(entry_at=st["entry_date"], exit_at=last["date"], qty=pend["qty"],
+                                    entry_px=st["entry_price"], exit_px=last["close"], bars=st["bars_held"] + 1,
+                                    exit_reason=pend["reason"], pnl=(last["close"] - st["entry_price"]) * pend["qty"],
+                                    slippage=0.0)
+                if pend["reason"] == "flatten":
+                    cc.clear_flatten()
                 log.info("SELL confirmed on %s (%s)", last["date"], pend["reason"]); _flat(st)
             else:
                 log.warning("SELL did not fully fill; broker qty=%d", qty)
         st["pending"] = None
     elif st["in_position"]:
         if b.position(SYMBOL) <= 0:
+            if st.get("entry_price"):
+                stop_px = S.stop_price(st["entry_price"], P) or last["close"]
+                cc.record_trade(entry_at=st["entry_date"], exit_at=last["date"], qty=st["qty"], entry_px=st["entry_price"],
+                                exit_px=stop_px, bars=st["bars_held"] + 1, exit_reason="crash_stop",
+                                pnl=(stop_px - st["entry_price"]) * st["qty"], slippage=0.0)
             log.info("position gone without a pending sell: protective stop fired"); _flat(st)
         elif last["date"] != st.get("last_reconcile_bar"):
             st["bars_held"] += 1
@@ -168,7 +200,9 @@ def cmd_reconcile(b, st):
         stop = S.stop_price(st["entry_price"], P)
         if not st.get("stop_order_id"):
             b.cancel_open_orders(SYMBOL)
-            st["stop_order_id"] = b.place_stop(SYMBOL, st["qty"], stop)
+            st["stop_order_id"] = cc.guarded(run, side="SELL", qty=st["qty"], type_="STOP", symbol=SYMBOL,
+                                             ref_price=last["close"], reduces_risk=True, stop_price=stop,
+                                             send=lambda: b.place_stop(SYMBOL, st["qty"], stop))
             log.info("protective stop placed at %.2f order=%s", stop, st["stop_order_id"])
     if not st["in_position"]:
         st["stop_order_id"] = None
@@ -176,6 +210,9 @@ def cmd_reconcile(b, st):
     st["last_reconcile"] = datetime.now(ET).isoformat()
     st["last_reconcile_bar"] = last["date"]
     save_state(st)
+    cc.set_position(SYMBOL, st["qty"] if st["in_position"] else 0, st.get("entry_price"), st.get("entry_date"), st["bars_held"])
+    cc.record_equity(b.equity(), "broker" if MODE == "live" else "bot")
+    run.decision({"last_bar": last["date"], "close": last["close"]}, "RECONCILE", "ok")
     log.info("reconcile ok: last_bar=%s close=%.2f in_pos=%s qty=%d bars_held=%d pending=%s equity=%.2f",
              last["date"], last["close"], st["in_position"], st["qty"], st["bars_held"],
              bool(st["pending"]), b.equity())
@@ -216,6 +253,10 @@ if __name__ == "__main__":
     try:
         broker = make_broker()
         state = load_state()
-        {"decide": cmd_decide, "reconcile": cmd_reconcile, "status": cmd_status, "check": cmd_check}[cmd](broker, state)
+        if cmd in ("decide", "reconcile"):
+            with cc.run(cmd) as run:
+                {"decide": cmd_decide, "reconcile": cmd_reconcile}[cmd](broker, state, run)
+        else:
+            {"status": cmd_status, "check": cmd_check}[cmd](broker, state)
     except (BrokerError, KeyError) as e:
         log.error("run failed: %s", e); sys.exit(1)

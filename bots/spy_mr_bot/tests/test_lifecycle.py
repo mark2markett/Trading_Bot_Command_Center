@@ -1,7 +1,10 @@
 """End-to-end: synthetic feed -> decide -> reconcile -> entry -> stop/exit, in paper mode."""
-import json, os, sys, pathlib, importlib
+import json, os, sys, pathlib, importlib, tempfile
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "cc_sdk"))
 os.environ["MODE"] = "paper"; os.environ["SCHWAB_API_KEY"] = ""
+_VAR = pathlib.Path(tempfile.mkdtemp()) / "var"; (_VAR / "control").mkdir(parents=True)
+os.environ["CC_VAR"] = str(_VAR)
 
 
 class Feed:

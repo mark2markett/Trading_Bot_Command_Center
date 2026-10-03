@@ -12,3 +12,5 @@ node_modules/
 dist/
 *.egg-info/
 .venv/
+.env.local
+**/.env.local

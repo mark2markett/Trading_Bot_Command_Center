@@ -60,6 +60,12 @@ def run_replay(bot: Bot, rules: Rules, symbol: str, parquet_symbol: str, date: s
 
 def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[str], bot_dir: Path, replay_map: dict[str, str],
          risk_pct: float = 0.01) -> None:
+    try:  # .env.local overrides .env and is the place for values you don't want in the main file (e.g. SCHWAB_REFRESH_TOKEN)
+        from dotenv import load_dotenv
+
+        load_dotenv(bot_dir / ".env.local", override=True)
+    except ImportError:
+        pass
     bot = Bot(manifest)
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     if cmd in ("auth", "check"):

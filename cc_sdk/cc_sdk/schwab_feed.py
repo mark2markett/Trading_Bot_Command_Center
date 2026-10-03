@@ -62,19 +62,6 @@ class SchwabFeed:
         write_issued_sidecar(tp)
         return cls.from_env(bot_dir)
 
-
-def write_issued_sidecar(tp: Path) -> None:
-    """Record when the refresh token was issued, in a file that holds no secret, so the server can show days-left without
-    reading the token and without being fooled by schwab-py rewriting the token file on every access-token refresh."""
-    import json
-
-    try:
-        created = json.loads(tp.read_text()).get("creation_timestamp")
-    except Exception:  # noqa: BLE001
-        return
-    if created:
-        Path(str(tp) + ".issued").write_text(json.dumps({"creation_timestamp": int(created)}))
-
     def check(self, symbol: str = "SPY") -> dict:
         """Prove the token works: one quote, one minute-bar count. Prints nothing secret."""
         px, age = self.quote(symbol)
@@ -115,3 +102,16 @@ def write_issued_sidecar(tp: Path) -> None:
                                                need_extended_hours_data=False)
         r.raise_for_status()
         return self._bars(r.json())[-n:]
+
+
+def write_issued_sidecar(tp: Path) -> None:
+    """Record when the refresh token was issued, in a file that holds no secret, so the server can show days-left without
+    reading the token and without being fooled by schwab-py rewriting the token file on every access-token refresh."""
+    import json
+
+    try:
+        created = json.loads(tp.read_text()).get("creation_timestamp")
+    except Exception:  # noqa: BLE001
+        return
+    if created:
+        Path(str(tp) + ".issued").write_text(json.dumps({"creation_timestamp": int(created)}))

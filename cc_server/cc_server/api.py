@@ -191,6 +191,21 @@ def alert_test() -> dict[str, Any]:
     return alerter().test()
 
 
+@router.get("/research")
+def research() -> dict[str, Any]:
+    """Research results as markdown: the committed write-up plus the latest local run summary (if any)."""
+    root = Path(__file__).resolve().parents[2]
+    doc = root / "docs" / "RESEARCH_RESULTS.md"
+    summ = root / "var" / "research" / "SUMMARY.md"
+    out: dict[str, Any] = {"doc": doc.read_text(encoding="utf-8") if doc.exists() else "", "doc_at": None, "summary": "", "summary_at": None}
+    if doc.exists():
+        out["doc_at"] = datetime.fromtimestamp(doc.stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
+    if summ.exists():
+        out["summary"] = summ.read_text(encoding="utf-8")
+        out["summary_at"] = datetime.fromtimestamp(summ.stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
+    return out
+
+
 @router.get("/health")
 def health() -> dict[str, Any]:
     return {"ok": True, "db": str(db_path_safe()), "riskd_last": db.kv_get(L(), "riskd_last"), "control_dir_ok": control_dir().is_dir()}

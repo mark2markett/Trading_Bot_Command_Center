@@ -48,6 +48,8 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   fleet: () => j<Fleet>('/api/fleet'),
   bot: (id: string) => j<BotDetail>(`/api/bots/${id}`),
+  bots: () => j<BotSummary[]>('/api/bots'),
+  research: () => j<{ doc: string; doc_at: string | null; summary: string; summary_at: string | null }>('/api/research'),
   risk: () => j<Risk>('/api/risk'),
   alerts: () => j<Alert[]>('/api/alerts'),
   ack: (id: number) => j('/api/alerts/' + id + '/ack', { method: 'POST' }),

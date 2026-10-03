@@ -2,11 +2,11 @@
 export type Verdict = 'within' | 'drift' | 'n/a'
 export type Status = 'running' | 'degraded' | 'paused' | 'killed'
 
-export interface Position { bot_id: string; symbol: string; qty: number; avg_price: number | null; entry_at: string | null; bars_held: number; updated_at: string }
+export interface Position { bot_id: string; symbol: string; qty: number; avg_price: number | null; entry_at: string | null; bars_held: number; updated_at: string; stop_price?: number | null; side?: string | null }
 export interface Heartbeat { bot_id: string; run: string; at: string; ok: number; detail: string }
 export interface BotSummary {
   id: string; name: string; strategy_line: string; mode: 'paper' | 'live'; version: string; instrument: string; status: Status
-  cadence: Record<string, string>; position: Position | null; day_pnl: number; drawdown: number; equity: number | null
+  cadence: Record<string, string>; position: Position | null; positions: Position[]; day_pnl: number; drawdown: number; equity: number | null
   parity: { verdict: Verdict; sentence: string }; heartbeat: Heartbeat | null
   flags: { killed: boolean; paused: boolean; flatten: boolean }; rejected_24h: number
 }

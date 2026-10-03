@@ -1,0 +1,62 @@
+"""Schwab market-data feed for intraday bots (schwab-py). Data only — orders stay in each bot's broker layer.
+Env: SCHWAB_API_KEY, SCHWAB_APP_SECRET, SCHWAB_CALLBACK_URL, TOKEN_PATH (relative to the bot folder)."""
+from __future__ import annotations
+
+import os
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from .intraday import ET, Bar
+
+
+class SchwabFeed:
+    def __init__(self, client):
+        self.c = client
+        self._cache: dict[tuple[str, str], tuple[float, list[Bar]]] = {}
+
+    @classmethod
+    def from_env(cls, bot_dir: Path) -> SchwabFeed:
+        from schwab.auth import easy_client  # lazy: paper replays need no schwab-py
+
+        missing = [k for k in ("SCHWAB_API_KEY", "SCHWAB_APP_SECRET", "SCHWAB_CALLBACK_URL") if not os.getenv(k)]
+        if missing:
+            raise RuntimeError(f"Schwab credentials missing: {', '.join(missing)} (see .env.example)")
+        client = easy_client(api_key=os.environ["SCHWAB_API_KEY"], app_secret=os.environ["SCHWAB_APP_SECRET"],
+                             callback_url=os.environ["SCHWAB_CALLBACK_URL"], token_path=str(bot_dir / os.getenv("TOKEN_PATH", "schwab_token.json")))
+        return cls(client)
+
+    @staticmethod
+    def _bars(data: dict) -> list[Bar]:
+        out = []
+        for c in data.get("candles", []):
+            t = datetime.fromtimestamp(c["datetime"] / 1000, tz=ET)
+            out.append(Bar(t, float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"]), float(c["volume"])))
+        return out
+
+    def minute_bars(self, symbol: str, day: datetime) -> list[Bar]:
+        key = (symbol, day.strftime("%Y-%m-%d"))
+        hit = self._cache.get(key)
+        if hit and time.time() - hit[0] < 10:          # the runner polls every 15 s; don't hammer the API per symbol
+            return hit[1]
+        start = day.replace(hour=9, minute=30, second=0, microsecond=0)
+        r = self.c.get_price_history_every_minute(symbol, start_datetime=start, end_datetime=start + timedelta(hours=7),
+                                                  need_extended_hours_data=False)
+        r.raise_for_status()
+        bars = [b for b in self._bars(r.json()) if 570 <= b.mod < 960]
+        self._cache[key] = (time.time(), bars)
+        return bars
+
+    def quote(self, symbol: str) -> tuple[float, float]:
+        r = self.c.get_quote(symbol)
+        r.raise_for_status()
+        q = r.json()[symbol]["quote"]
+        age = max(0.0, time.time() - q.get("quoteTime", time.time() * 1000) / 1000)
+        return float(q["lastPrice"]), age
+
+    def daily_bars(self, symbol: str, n: int) -> list[Bar]:
+        end = datetime.now(ET)
+        r = self.c.get_price_history_every_day(symbol, start_datetime=end - timedelta(days=int(n * 1.6) + 20), end_datetime=end,
+                                               need_extended_hours_data=False)
+        r.raise_for_status()
+        return self._bars(r.json())[-n:]

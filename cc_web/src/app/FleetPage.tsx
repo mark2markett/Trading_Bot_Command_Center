@@ -111,7 +111,13 @@ function Heart({ b }: { b: BotSummary }) {
 }
 
 function Pos({ b }: { b: BotSummary }) {
-  if (b.position && b.position.qty) return <>LONG {b.position.qty} · {b.position.bars_held}/10 bars</>
+  const ps = (b.positions || []).filter(p => p.qty)
+  if (ps.length > 1) return <>{ps.length} open · {ps.map(p => `${p.qty > 0 ? 'L' : 'S'} ${p.symbol}`).join(', ')}</>
+  if (ps.length === 1) {
+    const p = ps[0]
+    const intraday = b.cadence && 'session' in b.cadence
+    return <>{p.qty > 0 ? 'LONG' : 'SHORT'} {Math.abs(p.qty)} {p.symbol}{intraday ? (p.stop_price ? ` · stop ${p.stop_price.toFixed(2)}` : '') : ` · ${p.bars_held}/10 bars`}</>
+  }
   return <span className="mut">flat</span>
 }
 

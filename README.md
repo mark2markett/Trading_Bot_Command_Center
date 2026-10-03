@@ -26,7 +26,8 @@ Linux/macOS dev: `make dev`, `make test`, `make seed`, `make drill`.
 
 ## Daily operation
 
-Install the scheduled tasks once (server at logon, each bot's `decide` 15:50 and `reconcile` 09:45, nightly backup):
+Install the scheduled tasks once (server at logon; daily bots `decide` 15:50 and `reconcile` 09:45; intraday bots one
+`session` task at 09:25; nightly backup):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install_tasks.ps1
@@ -48,6 +49,27 @@ Run `python bot.py decide` manually at 12:50 pm in each daily bot's folder, or e
 ### Monthly: kill drill
 `python scripts\kill_drill.py` exercises the real kill path against paper bots and records a `drill` audit row.
 It refuses to run if any live bot is registered unless you pass `--include-live` deliberately.
+
+## Intraday bots and research
+
+`research/` is the strategy harness: 12 intraday rule sets (`research/strategies.py`), a backtester with costs, walk-forward
+folds and a pre-registered pass bar (`research/engine.py`), run with `python -m research.run_all`. Data goes in
+`var/data/<SYMBOL>_1m_rth.parquet` (1-minute RTH bars; the shipped results used 2005–2020 index CFD bars as SPY/QQQ/IWM
+proxies). Results and verdicts: `docs/RESEARCH_RESULTS.md`. Nothing in `research/` is on the order path.
+
+Intraday bots share `cc_sdk.intraday.SessionRunner`: one process per bot per session (09:25 → close), 15-second polling,
+Schwab minute bars and quotes, **paper fills at quote ± 1 bp**, stops checked on every poll, flat by 15:58, control flags
+honored on every poll, heartbeat every 5 minutes (the server flags a dead session within the grace window). One trade per
+symbol per day. Bots: `bots/gap_go_bot` (passed research), `bots/nr7_bot` (watch list, below bar), `bots/sip_orb` (stocks in
+play from the M2M scanner via `SCANNER_URL`; contract in `sip_scanner.py`).
+
+Offline dry run without Schwab: `python bot.py replay 2020-05-08 SPY` in a bot folder replays a research day through the
+real runner; the trades, decisions and fills appear on the dashboard. Entry parity with the research rules is tested
+(`cc_sdk/tests/test_intraday.py`); stop exits in the runner fill at the next quote after the stop is crossed, so they are
+equal or worse than the backtest's stop-price fills by construction.
+
+Promotion rule (paper → live) is the research bar applied to paper results: PF ≥ 1.3 after costs on ≥ 200 trades, positive
+in every quarter, with live-vs-backtest parity "within band". No bot has met it yet.
 
 ## Adding a bot
 

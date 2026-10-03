@@ -159,8 +159,14 @@ def heartbeat_watch(L: Ledger, now: datetime | None = None) -> list[str]:
             due = now_et.replace(hour=hh, minute=mm, second=0, microsecond=0)
             if now_et < due + grace:
                 continue
+            if run == "session":
+                # intraday runner heartbeats every 5 min while the market is open: a dead session shows up within grace
+                close = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+                since = max(due, min(now_et, close) - grace)
+            else:
+                since = due
             hb = L.one("SELECT at, ok FROM heartbeats WHERE bot_id=? AND run=? AND at>=? ORDER BY id DESC LIMIT 1",
-                       (b["id"], run, due.astimezone(timezone.utc).isoformat()))
+                       (b["id"], run, since.astimezone(timezone.utc).isoformat()))
             key = f"{b['id']}:{run}:{now_et.date()}"
             if hb is None or not hb["ok"]:
                 flagged.append(b["id"])

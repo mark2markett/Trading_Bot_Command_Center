@@ -13,12 +13,15 @@ export function BotPage() {
   if (q.isLoading) return <main><div className="empty">Loading…</div></main>
   if (q.error || !q.data) return <main><div className="empty neg">Could not load bot: {String(q.error)}</div></main>
   const b: BotDetail = q.data
-  const pos = b.position && b.position.qty ? b.position : null
-  const sig = (b.decisions.find(d => d.run === 'decide')?.signal || {}) as Record<string, number | null>
+  const ps = (b.positions || []).filter(p => p.qty)
+  const pos = ps.length === 1 ? ps[0] : null
+  const intraday = 'session' in (b.cadence || {})
+  const lastDecide = b.decisions.find(d => d.run === 'decide') ?? (intraday ? b.decisions[0] : undefined)
+  const sig = (lastDecide?.signal || {}) as Record<string, number | null>
   const live = b.equity_series.map(e => e[1])
   const act = (action: string, note = '') => api.control(`bot/${id}/${action}`, { note }).then(() => q.refetch())
   const limits = b.limits
-  const posUsd = pos && pos.avg_price ? pos.qty * pos.avg_price : 0
+  const posUsd = ps.reduce((a, p) => a + Math.abs(p.qty) * (p.avg_price || 0), 0)
   const unreal = pos && pos.avg_price && sig.price ? (sig.price / pos.avg_price - 1) : null
   return (
     <main>
@@ -37,19 +40,24 @@ export function BotPage() {
       </header>
 
       <section className="tiles c4">
-        <Tile label="Position" value={pos ? <span className="pos">LONG {pos.qty} {b.instrument}</span> : <span className="mut" style={{ fontFamily: 'var(--font)' }}>FLAT</span>}
-          sub={pos ? undefined : b.trades[0] ? `Last trade closed ${dateET(b.trades[0].exit_at)} · ${pct(b.trades[0].exit_px / b.trades[0].entry_px - 1, 1, true)} in ${b.trades[0].bars} bars` : 'No trades yet'}>
-          {pos && <div className="kv" style={{ marginTop: 6 }}>
+        <Tile label={ps.length > 1 ? `Positions · ${ps.length} open` : 'Position'}
+          value={ps.length > 1 ? <span className="pos">{ps.length} symbols</span> : pos ? <span className="pos">{pos.qty > 0 ? 'LONG' : 'SHORT'} {Math.abs(pos.qty)} {pos.symbol || b.instrument}</span> : <span className="mut" style={{ fontFamily: 'var(--font)' }}>FLAT</span>}
+          sub={pos ? undefined : b.trades[0] ? `Last trade closed ${dateET(b.trades[0].exit_at)} · ${pct(b.trades[0].exit_px / b.trades[0].entry_px - 1, 1, true)}${b.trades[0].bars ? ` in ${b.trades[0].bars} bars` : ''}` : 'No trades yet'}>
+          {ps.length > 1 && <table className="tbl" style={{ marginTop: 6, fontSize: 12 }}><tbody>
+            {ps.map(p => <tr key={p.symbol}><td className="mono">{p.qty > 0 ? 'L' : 'S'} {Math.abs(p.qty)} {p.symbol}</td><td className="mono">@ {px(p.avg_price)}</td><td className="mono mut">stop {p.stop_price ? px(p.stop_price) : '—'}</td></tr>)}
+          </tbody></table>}
+          {ps.length === 1 && pos && <div className="kv" style={{ marginTop: 6 }}>
             <b>Entry</b><span className="mono">{dateET(pos.entry_at)} @ {px(pos.avg_price)}</span>
-            <b>Bars held</b><span className="mono">{pos.bars_held} / {limits.max_bars ?? 10}</span>
-            <b>Crash stop</b><span className="mono">{px(b.stop_price)}</span>
+            {intraday ? <><b>Stop</b><span className="mono">{px(pos.stop_price ?? null)}</span></> : <><b>Bars held</b><span className="mono">{pos.bars_held} / {limits.max_bars ?? 10}</span>
+            <b>Crash stop</b><span className="mono">{px(b.stop_price)}</span></>}
             <b>Unrealized</b><span className={`mono ${unreal != null ? tone(unreal) : ''}`}>{pct(unreal, 2, true)}</span>
           </div>}
           {b.flags.flatten && <div className="warn" style={{ fontSize: 12, marginTop: 8 }}>Flatten requested · executes on next run</div>}
         </Tile>
-        <Tile label={`Signal · last decide ${b.decisions.find(d => d.run === 'decide') ? timeET(b.decisions.find(d => d.run === 'decide')!.at) + ' ET' : ''}`}>
-          {Object.keys(sig).length === 0 && <div className="mut" style={{ marginTop: 6 }}>No decide run recorded yet.</div>}
-          {Object.keys(sig).length > 0 && <>
+        <Tile label={`Signal · last ${intraday ? 'session event' : 'decide'} ${lastDecide ? timeET(lastDecide.at) + ' ET' : ''}`}>
+          {Object.keys(sig).length === 0 && <div className="mut" style={{ marginTop: 6 }}>{intraday ? 'No session events yet.' : 'No decide run recorded yet.'}</div>}
+          {intraday && lastDecide && <div className="kv m" style={{ marginTop: 6 }}><b>Event</b><span>{lastDecide.action}</span><b>Why</b><span>{lastDecide.reason}</span>{Object.entries(sig).slice(0, 4).map(([k, v]) => <><b key={k}>{k}</b><span key={k + 'v'} className="mono">{typeof v === 'number' ? v.toFixed(2) : String(v)}</span></>)}</div>}
+          {!intraday && Object.keys(sig).length > 0 && <>
             <div className="kv m" style={{ marginTop: 6 }}>
               {'price' in sig && <><b>Price</b><span>{px(sig.price)}</span></>}
               {'rsi2' in sig && <><b>RSI(2)</b><span className={(sig.rsi2 ?? 99) < 10 ? 'pos' : ''}>{sig.rsi2?.toFixed(1)} <span className="mut">· buy &lt; 10</span></span></>}

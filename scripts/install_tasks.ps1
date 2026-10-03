@@ -11,15 +11,24 @@ $srvAct = New-ScheduledTaskAction -Execute $py -Argument "-m cc_server.main" -Wo
 $srvTrg = New-ScheduledTaskTrigger -AtLogOn
 Register-ScheduledTask -TaskName "CC server" -Action $srvAct -Trigger $srvTrg -Settings $set -Force | Out-Null
 
-# 2. Bots: one task per command per bot folder (skips _template_bot)
+# 2. Bots: one task per command per bot folder (skips _template_bot).
+#    Daily bots (cadence decide/reconcile): 15:50 and 09:45.  Intraday bots (cadence "session"): one task at 09:25, 8 h limit.
 $botSet = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+$sesSet = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 8)
 Get-ChildItem (Join-Path $root "bots") -Directory | Where-Object { $_.Name -notlike "_*" } | ForEach-Object {
   $bot = $_.FullName; $name = $_.Name
-  foreach ($pair in @(@("decide","15:50"), @("reconcile","09:45"))) {
-    $cmd, $at = $pair
-    $act = New-ScheduledTaskAction -Execute $py -Argument "bot.py $cmd" -WorkingDirectory $bot
-    $trg = New-ScheduledTaskTrigger -Daily -At $at
-    Register-ScheduledTask -TaskName "CC bot $name $cmd" -Action $act -Trigger $trg -Settings $botSet -Force | Out-Null
+  $src = Get-Content (Join-Path $bot "bot.py") -Raw
+  if ($src -match 'cadence=\{"session"') {
+    $act = New-ScheduledTaskAction -Execute $py -Argument "bot.py session" -WorkingDirectory $bot
+    $trg = New-ScheduledTaskTrigger -Daily -At "09:25"
+    Register-ScheduledTask -TaskName "CC bot $name session" -Action $act -Trigger $trg -Settings $sesSet -Force | Out-Null
+  } else {
+    foreach ($pair in @(@("decide","15:50"), @("reconcile","09:45"))) {
+      $cmd, $at = $pair
+      $act = New-ScheduledTaskAction -Execute $py -Argument "bot.py $cmd" -WorkingDirectory $bot
+      $trg = New-ScheduledTaskTrigger -Daily -At $at
+      Register-ScheduledTask -TaskName "CC bot $name $cmd" -Action $act -Trigger $trg -Settings $botSet -Force | Out-Null
+    }
   }
 }
 

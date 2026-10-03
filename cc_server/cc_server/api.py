@@ -45,6 +45,7 @@ def alerter() -> Alerter:
 def _bot_summary(b: dict[str, Any], par: dict[str, Any]) -> dict[str, Any]:
     hb = db.last_heartbeat(L(), b["id"])
     pos = db.position(L(), b["id"])
+    poss = db.positions(L(), b["id"])
     eq = db.equity_series(L(), b["id"], days=5)
     day = 0.0
     if len(eq) >= 2:
@@ -58,7 +59,7 @@ def _bot_summary(b: dict[str, Any], par: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": b["id"], "name": b["name"], "strategy_line": b["strategy_line"], "mode": b["mode"], "version": b["version"],
         "instrument": b["instrument"], "status": b["status"], "cadence": b.get("cadence", {}),
-        "position": pos, "day_pnl": day, "drawdown": dd, "equity": pe[1] if pe else None,
+        "position": pos, "positions": poss, "day_pnl": day, "drawdown": dd, "equity": pe[1] if pe else None,
         "parity": {"verdict": par.get("verdict", "n/a"), "sentence": par.get("sentence", "")},
         "heartbeat": hb, "flags": {"killed": c.killed(), "paused": c.entries_paused(), "flatten": c.flatten_requested()},
         "rejected_24h": db.rejected_orders_24h(L(), b["id"]),

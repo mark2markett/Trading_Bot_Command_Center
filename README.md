@@ -68,6 +68,10 @@ real runner; the trades, decisions and fills appear on the dashboard. Entry pari
 (`cc_sdk/tests/test_intraday.py`); stop exits in the runner fill at the next quote after the stop is crossed, so they are
 equal or worse than the backtest's stop-price fills by construction.
 
+Real ETF minute data from Schwab (once a bot folder has working credentials): from that folder run
+`python ..\..\research\schwab_dump.py SPY QQQ IWM`, then `python -m research.run_all --symbols SPY,QQQ,IWM` from the repo
+root. The dump appends to `var/data/<SYM>_1m_rth.parquet`, so a weekly run accumulates history beyond Schwab's lookback.
+
 Promotion rule (paper → live) is the research bar applied to paper results: PF ≥ 1.3 after costs on ≥ 200 trades, positive
 in every quarter, with live-vs-backtest parity "within band". No bot has met it yet.
 

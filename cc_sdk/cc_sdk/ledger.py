@@ -12,8 +12,21 @@ from typing import Any
 SCHEMA = Path(__file__).with_name("schema.sql").read_text()
 
 
+_CLOCK = None  # optional callable returning an aware datetime; set only by offline replays so records carry the replayed date
+
+
+def set_clock(fn) -> None:
+    """Override the ledger clock (replays). Pass None to restore wall time. Never used by live sessions."""
+    global _CLOCK
+    _CLOCK = fn
+
+
+def now() -> datetime:
+    return (_CLOCK() if _CLOCK else datetime.now(timezone.utc)).astimezone(timezone.utc)
+
+
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now().isoformat(timespec="seconds")
 
 
 def var_dir() -> Path:

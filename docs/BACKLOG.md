@@ -11,8 +11,8 @@
 
 ## After M6
 
-- Recheck gap_go / nr7 on Schwab minute data (SPY, QQQ, IWM) from the PC once `python bot.py auth` works; add a
-  `research/schwab_dump.py` that writes `var/data/<SYM>_1m_rth.parquet` from `get_price_history_every_minute`.
+- Recheck gap_go / nr7 on Schwab minute data (SPY, QQQ, IWM) from the PC once `python bot.py auth` works
+  (`research/schwab_dump.py` is in place; needs credentials).
 - Options paper strategies (0DTE condor after the range sets, directional debit spread off gap_go, straddle into range
   expansion, 7–14 DTE vertical on the daily MR signal): need an options paper-fill engine over Schwab chains (mid ± slippage)
   and an options position model; forward paper only, no historical chains available.

@@ -115,8 +115,11 @@ class SessionRunner:
 
     def __init__(self, bot: Bot, feed: Feed, rules: Rules, symbols: list[str], *, risk_pct: float = 0.01,
                  paper_equity: float = 100_000.0, poll_s: int = 15,
-                 universe_fn: Callable[[datetime], list[str]] | None = None, universe_at_mod: int = OPEN_MIN + 5):
-        """universe_fn: optional late-binding symbol list (e.g. a 09:35 stocks-in-play scan). Until it runs, no entries."""
+                 universe_fn: Callable[[datetime], list[str]] | None = None, universe_at_mod: int = OPEN_MIN + 5,
+                 adopt_positions: bool = True):
+        """universe_fn: optional late-binding symbol list (e.g. a 09:35 stocks-in-play scan). Until it runs, no entries.
+        adopt_positions: pick up positions left in the ledger by a crashed session (off for offline replays)."""
+        self.adopt_positions = adopt_positions
         self.bot, self.feed, self.rules, self.symbols = bot, feed, rules, list(symbols)
         self.risk_pct, self.equity, self.poll_s = risk_pct, paper_equity, poll_s
         self.universe_fn, self.universe_at_mod, self.universe_done = universe_fn, universe_at_mod, universe_fn is None
@@ -137,7 +140,7 @@ class SessionRunner:
             except Exception as e:  # noqa: BLE001 — one bad symbol must not stop the session
                 self.bot.L.decision(self.bot.m.id, "session", {"symbol": s}, "SKIP", f"no daily context: {e}")
         self.symbols = [s for s in self.symbols if s in self.ctx]
-        for p in self.bot.positions():   # positions left from a crashed session: adopt them so EOD flatten still happens
+        for p in (self.bot.positions() if self.adopt_positions else []):   # left by a crashed session: adopt so EOD flatten happens
             if p["qty"]:
                 self.open[p["symbol"]] = OpenPos(p["symbol"], 1 if p["side"] != "SHORT" else -1, abs(int(p["qty"])), float(p["avg_price"]),
                                                  float(p["stop_price"] or 0), None, p["entry_at"], None)
@@ -149,7 +152,11 @@ class SessionRunner:
         killed = self.bot.control.killed()
         flatten = killed or self.bot.control.flatten_requested() or mod >= FLATTEN_MIN
         for s in list(self.open):
-            px, age = self.feed.quote(s)
+            try:
+                px, age = self.feed.quote(s)
+            except Exception as e:  # noqa: BLE001 — no quote: keep the position, try again next poll, leave a trace
+                self.bot.L.decision(self.bot.m.id, "session", {"symbol": s}, "NOQUOTE", f"{type(e).__name__}: {e}"[:200])
+                continue
             pos = self.open[s]
             if flatten:
                 self._exit(pos, px, age, "kill" if killed else ("flatten" if mod < FLATTEN_MIN else "eod"))
@@ -176,7 +183,11 @@ class SessionRunner:
                 continue
             sig = self.rules.decide(bars, self.ctx[s])
             if sig:
-                self._enter(s, sig, now)
+                try:
+                    self._enter(s, sig, now)
+                except Exception as e:  # noqa: BLE001 — a failed entry must not kill the session for the other symbols
+                    self.bot.L.decision(self.bot.m.id, "session", {"symbol": s, "signal": sig.reason}, "NONE", f"entry failed: {e}"[:200])
+                    self.traded_today.add(s)
 
     def loop(self, day: datetime | None = None) -> None:
         day = day or datetime.now(ET)
@@ -248,7 +259,9 @@ class ReplayFeed:
 
     def quote(self, symbol: str) -> tuple[float, float]:
         assert self.clock is not None
-        cur = [b for b in self.minute[symbol] if b.t <= self.clock]
+        cur = [b for b in self.minute.get(symbol, []) if b.t <= self.clock]
+        if not cur:
+            raise LookupError(f"no {symbol} bar at or before {self.clock:%H:%M}")
         b = cur[-1]
         return (b.o if b.t == self.clock else b.c), 0.0   # at a bar boundary the quote is that bar's open
 

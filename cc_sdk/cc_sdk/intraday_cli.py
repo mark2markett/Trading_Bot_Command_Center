@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import Bot, BotManifest
 from .intraday import ET, Bar, ReplayFeed, Rules, SessionRunner, minutes_of
-from .ledger import var_dir
+from .ledger import set_clock, var_dir
 
 
 def replay_feed(parquet_symbol: str, as_symbol: str, day: datetime) -> ReplayFeed:
@@ -31,15 +31,31 @@ def replay_feed(parquet_symbol: str, as_symbol: str, day: datetime) -> ReplayFee
 def run_replay(bot: Bot, rules: Rules, symbol: str, parquet_symbol: str, date: str, **kw) -> dict:
     day = datetime.fromisoformat(date).replace(tzinfo=ET)
     feed = replay_feed(parquet_symbol, symbol, day)
-    runner = SessionRunner(bot, feed, rules, [symbol], **kw)
+    runner = SessionRunner(bot, feed, rules, [symbol], adopt_positions=False, **kw)
+    before = bot.L.one("SELECT COALESCE(MAX(id), 0) m FROM trades WHERE bot_id=?", (bot.m.id,))["m"]
+    before_dec = bot.L.one("SELECT COALESCE(MAX(id), 0) m FROM decisions WHERE bot_id=?", (bot.m.id,))["m"]
     with bot.run("replay"):
-        runner.prepare(day)
-        for t in minutes_of(day):
-            feed.clock = t
-            runner.step(t)
-    return {"date": date, "symbol": symbol, "trades": [dict(r) for r in bot.L.q(
-        "SELECT entry_at, exit_at, qty, entry_px, exit_px, exit_reason, pnl FROM trades WHERE bot_id=? ORDER BY id DESC LIMIT 5", (bot.m.id,))],
-        "realized": round(runner.realized, 2)}
+        try:
+            set_clock(lambda: feed.clock)   # ledger rows carry the replayed date, so today's risk counters are untouched
+            runner.prepare(day)
+            for t in minutes_of(day):
+                feed.clock = t
+                runner.step(t)
+        finally:
+            set_clock(None)
+    trades = [dict(r) for r in bot.L.q(
+        "SELECT entry_at, exit_at, qty, entry_px, exit_px, exit_reason, pnl FROM trades WHERE bot_id=? AND id>? ORDER BY id", (bot.m.id, before))]
+    bars = feed.minute[symbol]
+    why = None
+    if not trades:
+        first = bars[0].mod if bars else None
+        rej = bot.L.one("SELECT reason FROM decisions WHERE bot_id=? AND id>? AND action='NONE' ORDER BY id LIMIT 1", (bot.m.id, before_dec))
+        why = (f"signal fired but the risk engine refused it: {rej['reason']} (already replayed this day?)" if rej else
+               "no bars for this day" if not bars else
+               f"first bar at {first // 60:02d}:{first % 60:02d}, not 09:30 — opening-range rules refuse the day" if first != 570 else
+               "rules produced no signal (no gap / no breakout / no setup)")
+    return {"date": date, "symbol": symbol, "bars": len(bars), "trades": trades, "realized": round(runner.realized, 2),
+            **({"no_trade_reason": why} if why else {})}
 
 
 def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[str], bot_dir: Path, replay_map: dict[str, str],

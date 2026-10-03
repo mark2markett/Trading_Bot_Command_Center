@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from .control import Control
-from .ledger import Ledger
+from .ledger import Ledger, now
 from .manifest import PORTFOLIO_DEFAULTS, BotManifest
 
 ET = ZoneInfo("America/New_York")
@@ -119,8 +118,8 @@ class Risk:
         passed("price_collar")
 
         # 5. orders per day, duplicates
-        day = datetime.now(ET).date().isoformat()
-        today = self.L.orders_today(self.m.id, day_prefix=datetime.now(timezone.utc).date().isoformat())
+        day = now().astimezone(ET).date().isoformat()
+        today = self.L.orders_today(self.m.id, day_prefix=now().date().isoformat())
         if len(today) >= int(self._lim("max_orders_per_day")):
             return fail("max_orders_per_day", f"{len(today)} already today (limit {self._lim('max_orders_per_day')})")
         if any(r["side"] == o.side and (r["symbol"] or o.symbol) == o.symbol for r in today):

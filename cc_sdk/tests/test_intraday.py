@@ -183,3 +183,28 @@ def test_day_context_needs_history():
     with pytest.raises(ValueError):
         day_context(daily_history(DAY, n=5))
     assert isinstance(DayContext(1, 1, 1, 1), DayContext)
+
+
+def test_replay_clock_stamps_records_and_isolates_risk_counters(tmp_path):
+    """Replayed trades carry the replayed date, so a replay never consumes today's orders-per-day budget."""
+    from cc_sdk.ledger import set_clock
+
+    bars = mk_bars(DAY, gap_up_day())
+    feed = ReplayFeed({"SPY": bars}, {"SPY": daily_history(DAY)})
+    bot = make_bot(tmp_path)
+    try:
+        set_clock(lambda: feed.clock)
+        replay(bot, feed, GapGoRules(70, 30), ["SPY"], adopt_positions=False)
+    finally:
+        set_clock(None)
+    tr = bot.L.one("SELECT entry_at, exit_at FROM trades")
+    assert tr["entry_at"].startswith("2024-03-05") and tr["exit_at"].startswith("2024-03-05")
+    assert bot.L.orders_today("t_gap", datetime.now(ET).date().isoformat()) == []
+    # a second replay of the same day is refused by the per-symbol duplicate guard, not by a rules change
+    try:
+        set_clock(lambda: feed.clock)
+        replay(bot, feed, GapGoRules(70, 30), ["SPY"], adopt_positions=False)
+    finally:
+        set_clock(None)
+    assert bot.L.one("SELECT COUNT(*) n FROM trades")["n"] == 1
+    assert bot.L.one("SELECT reason FROM decisions WHERE action='NONE' ORDER BY id DESC LIMIT 1")["reason"].startswith("rejected: duplicate")

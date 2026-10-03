@@ -36,7 +36,44 @@ class SchwabFeed:
         tp = token_path(bot_dir)
         tp.parent.mkdir(parents=True, exist_ok=True)
         client = easy_client(api_key=key, app_secret=sec, callback_url=os.environ["SCHWAB_CALLBACK_URL"], token_path=str(tp))
+        write_issued_sidecar(tp)
         return cls(client)
+
+    @classmethod
+    def from_refresh_token(cls, bot_dir: Path, refresh_token: str, issued_at: datetime | None = None) -> SchwabFeed:
+        """Adopt a refresh token minted elsewhere (M2M's weekly login). Schwab does not rotate refresh tokens on use, so
+        two systems can share one. Writes the shared token file in schwab-py's format with an expired access token; the
+        first request refreshes it using the Client ID/Secret. Never prints the token."""
+        import json
+
+        for k in ("SCHWAB_API_KEY", "SCHWAB_APP_SECRET"):
+            if not os.getenv(k):
+                raise RuntimeError(f"{k} missing: the refresh token is only usable together with the app's Client ID and Client Secret")
+        refresh_token = refresh_token.strip()
+        if len(refresh_token) < 100:
+            raise RuntimeError(f"that is {len(refresh_token)} chars; a Schwab refresh token is ~140. Copy SCHWAB_REFRESH_TOKEN (or the "
+                               "Supabase scan_state.schwab_token_state.refresh_token), not the client id.")
+        issued = issued_at or datetime.now(ET)
+        tp = token_path(bot_dir)
+        tp.parent.mkdir(parents=True, exist_ok=True)
+        tp.write_text(json.dumps({"creation_timestamp": int(issued.timestamp()),
+                                  "token": {"access_token": "", "refresh_token": refresh_token, "token_type": "Bearer", "scope": "api",
+                                            "expires_in": 1800, "expires_at": 1}}))
+        write_issued_sidecar(tp)
+        return cls.from_env(bot_dir)
+
+
+def write_issued_sidecar(tp: Path) -> None:
+    """Record when the refresh token was issued, in a file that holds no secret, so the server can show days-left without
+    reading the token and without being fooled by schwab-py rewriting the token file on every access-token refresh."""
+    import json
+
+    try:
+        created = json.loads(tp.read_text()).get("creation_timestamp")
+    except Exception:  # noqa: BLE001
+        return
+    if created:
+        Path(str(tp) + ".issued").write_text(json.dumps({"creation_timestamp": int(created)}))
 
     def check(self, symbol: str = "SPY") -> dict:
         """Prove the token works: one quote, one minute-bar count. Prints nothing secret."""

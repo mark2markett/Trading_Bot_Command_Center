@@ -65,7 +65,17 @@ def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[s
     if cmd in ("auth", "check"):
         from .schwab_feed import SchwabFeed
 
-        feed = SchwabFeed.from_env(bot_dir)   # no token yet -> schwab-py opens the browser login and writes the shared token
+        if cmd == "auth" and "--from-token" in sys.argv:
+            # Share a refresh token minted by another system (M2M). Pasted at a hidden prompt; never echoed or logged.
+            import getpass
+
+            tok = getpass.getpass("Paste the current Schwab refresh token (input hidden): ")
+            issued = None
+            if "--issued" in sys.argv:
+                issued = datetime.fromisoformat(sys.argv[sys.argv.index("--issued") + 1]).astimezone(ET)
+            feed = SchwabFeed.from_refresh_token(bot_dir, tok, issued)
+        else:
+            feed = SchwabFeed.from_env(bot_dir)   # no token yet -> schwab-py opens the browser login and writes the shared token
         print(json.dumps({"ok": True, **feed.check(symbols[0] if symbols else "SPY")}, indent=2))
     elif cmd == "session":
         from .schwab_feed import SchwabFeed

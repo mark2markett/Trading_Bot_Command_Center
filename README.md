@@ -44,6 +44,11 @@ time; the server never reads the token). Under 2 days triggers a page alert. **O
 `research\schwab_dump.py` read the same file. (A bot that uses a different Schwab app can set `TOKEN_PATH` in its
 `.env` to keep its own.) `python bot.py check` proves the token works with one quote and today's minute-bar count.
 
+**Reusing an existing login.** If another system already holds a valid Schwab refresh token for the same app, the fleet
+can run on it: same Client ID / Client Secret in each bot's `.env`, then `python bot.py auth --from-token` in any bot
+folder and paste the refresh token at the hidden prompt (`--issued <ISO time>` records when it was minted so the days-left
+chip is right). Repeat when that system re-authenticates. A browser `auth` here instead mints a second token for the app.
+
 ### Early-close days
 On 1:00 pm closes (day after Thanksgiving, Christmas Eve, 7/3) the server posts a reminder the day before.
 Run `python bot.py decide` manually at 12:50 pm in each daily bot's folder, or edit the Task Scheduler time.

@@ -31,3 +31,10 @@
 - **One Schwab token for the fleet.** Schwab issues one refresh token per app per user; per-bot token files would
   invalidate each other on every `auth`. All bots and the research dump now read `var/schwab_token.json`; `TOKEN_PATH`
   in a bot's `.env` opts out for a bot on a different app. `from_env` refuses keys/secrets that are not 32/16 chars.
+- **Adopt M2M's existing Schwab login rather than minting a second token.** Schwab issues the refresh token at login and
+  does not rotate it when access tokens are minted, so one refresh token can serve both M2M and the Command Center for its
+  7-day life. `python bot.py auth --from-token` writes schwab-py's token file with an expired access token; the first call
+  refreshes it. Token age is tracked in a sidecar `.issued` file because schwab-py rewrites the token file every 30 min
+  (file mtime was a wrong signal for days-left).
+- **All Command Center bots are paper.** No intraday code path places an order; Schwab is data only. The daily bot's live
+  path stays behind MODE=live plus an explicit LIVE_CONFIRM.

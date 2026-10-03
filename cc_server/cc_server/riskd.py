@@ -186,7 +186,14 @@ def token_days_left(bots_dir: Path | None = None) -> dict[str, Any]:
     for p in [var_dir() / "schwab_token.json", *bots_dir.glob("*/schwab_token.json")]:
         if not p.exists():
             continue
-        m = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+        side = Path(str(p) + ".issued")   # written by the SDK: issue time only, no secret
+        try:
+            import json
+
+            m = datetime.fromtimestamp(int(json.loads(side.read_text())["creation_timestamp"]), tz=timezone.utc) if side.exists() \
+                else datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+        except Exception:  # noqa: BLE001
+            m = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
         newest = m if newest is None or m > newest else newest
     if newest is None:
         return {"present": False, "days_left": None}

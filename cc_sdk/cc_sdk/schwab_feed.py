@@ -51,8 +51,8 @@ class SchwabFeed:
                 raise RuntimeError(f"{k} missing: the refresh token is only usable together with the app's Client ID and Client Secret")
         refresh_token = refresh_token.strip()
         if len(refresh_token) < 100:
-            raise RuntimeError(f"that is {len(refresh_token)} chars; a Schwab refresh token is ~140. Copy SCHWAB_REFRESH_TOKEN (or the "
-                               "Supabase scan_state.schwab_token_state.refresh_token), not the client id.")
+            raise RuntimeError(f"refresh token is {len(refresh_token)} chars; expected ~140. If you pasted at the hidden prompt and it "
+                               "arrived truncated, set $env:SCHWAB_REFRESH_TOKEN in the same PowerShell session and rerun.")
         issued = issued_at or datetime.now(ET)
         tp = token_path(bot_dir)
         tp.parent.mkdir(parents=True, exist_ok=True)

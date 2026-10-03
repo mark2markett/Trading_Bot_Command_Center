@@ -68,8 +68,11 @@ def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[s
         if cmd == "auth" and "--from-token" in sys.argv:
             # Share a refresh token minted by another system (M2M). Pasted at a hidden prompt; never echoed or logged.
             import getpass
+            import os
 
-            tok = getpass.getpass("Paste the current Schwab refresh token (input hidden): ")
+            # Prefer an env var set in the same shell ($env:SCHWAB_REFRESH_TOKEN = Read-Host ...) — Windows consoles often
+            # swallow pastes into hidden prompts. Fall back to the hidden prompt.
+            tok = os.getenv("SCHWAB_REFRESH_TOKEN") or getpass.getpass("Paste the current Schwab refresh token (input hidden): ")
             issued = None
             if "--issued" in sys.argv:
                 issued = datetime.fromisoformat(sys.argv[sys.argv.index("--issued") + 1]).astimezone(ET)

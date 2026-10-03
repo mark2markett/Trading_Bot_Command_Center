@@ -22,9 +22,13 @@ class SchwabFeed:
         if missing:
             raise RuntimeError(f"Schwab credentials missing: {', '.join(missing)} (see .env.example)")
         key, sec = os.environ["SCHWAB_API_KEY"], os.environ["SCHWAB_APP_SECRET"]
+        # Schwab app keys are typically 32 chars and secrets 16; the portal labels them Client ID / Client Secret.
+        # Refuse only values that cannot be a Schwab pair (e.g. a 140-char token or a one-char typo); warn otherwise.
+        if not (20 <= len(key) <= 64) or not (8 <= len(sec) <= 64):
+            raise RuntimeError(f"SCHWAB_API_KEY is {len(key)} chars and SCHWAB_APP_SECRET is {len(sec)}; a Schwab Client ID/App Key is ~32 "
+                               "and its Client Secret ~16. These look like values from somewhere else (see .env.example).")
         if len(key) != 32 or len(sec) != 16:
-            raise RuntimeError(f"SCHWAB_API_KEY is {len(key)} chars and SCHWAB_APP_SECRET is {len(sec)}; a Schwab app key is 32 and its secret 16. "
-                               "These look like credentials for something else (see .env.example).")
+            print(f"note: key is {len(key)} chars and secret {len(sec)} (expected ~32/~16); trying anyway", file=__import__("sys").stderr)
         try:
             from schwab.auth import easy_client  # lazy: paper replays need no schwab-py
         except ImportError as e:

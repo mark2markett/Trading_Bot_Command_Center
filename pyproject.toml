@@ -15,5 +15,9 @@ testpaths = ["cc_sdk/tests", "cc_server/tests", "bots/spy_mr_bot/tests"]
 pythonpath = ["cc_sdk", "cc_server", "bots/spy_mr_bot"]
 
 [tool.ruff]
-line-length = 110
+line-length = 130
 target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E","F","I","B","UP"]
+ignore = ["B018","UP017","E501","E702"]

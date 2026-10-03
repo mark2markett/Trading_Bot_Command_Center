@@ -33,6 +33,17 @@ load_dotenv(HERE / ".env")
 ET = ZoneInfo("America/New_York")
 SYMBOL = os.getenv("SYMBOL", "SPY")
 MODE = os.getenv("MODE", "paper").lower()
+
+
+def _token_path() -> str:
+    """Shared fleet token (var/schwab_token.json) unless TOKEN_PATH is set in this bot's .env."""
+    try:
+        import sys as _s
+        _s.path.insert(0, str(HERE.parents[1] / "cc_sdk"))
+        from cc_sdk.ledger import token_path
+        return str(token_path(HERE))
+    except Exception:  # noqa: BLE001 - cc_sdk missing: fall back to a local token
+        return str(HERE / os.getenv("TOKEN_PATH", "schwab_token.json"))
 ALLOC_PCT = float(os.getenv("ALLOCATION_PCT", "100"))
 MAX_SHARES = int(os.getenv("MAX_SHARES", "0"))  # 0 = no cap
 STATE_PATH = HERE / f"state_{MODE}.json"
@@ -64,13 +75,13 @@ def make_broker():
         if not creds_ok:
             raise SystemExit("MODE=live needs SCHWAB_API_KEY, SCHWAB_APP_SECRET, SCHWAB_CALLBACK_URL")
         return SchwabBroker(os.environ["SCHWAB_API_KEY"], os.environ["SCHWAB_APP_SECRET"],
-                            os.environ["SCHWAB_CALLBACK_URL"], str(HERE / os.getenv("TOKEN_PATH", "schwab_token.json")),
+                            os.environ["SCHWAB_CALLBACK_URL"], _token_path(),
                             int(os.getenv("ACCOUNT_INDEX", "0")))
     data = None
     if creds_ok and os.getenv("PAPER_USE_SCHWAB_DATA", "true").lower() == "true":
         try:
             data = SchwabBroker(os.environ["SCHWAB_API_KEY"], os.environ["SCHWAB_APP_SECRET"],
-                                os.environ["SCHWAB_CALLBACK_URL"], str(HERE / os.getenv("TOKEN_PATH", "schwab_token.json")))
+                                os.environ["SCHWAB_CALLBACK_URL"], _token_path())
             log.info("paper mode: using Schwab market data, no orders will be sent")
         except Exception as e:  # noqa: BLE001
             log.warning("Schwab data unavailable (%s); falling back to Stooq end-of-day data", e)
@@ -248,7 +259,7 @@ if __name__ == "__main__":
     if cmd == "auth":
         make_broker() if MODE == "live" else SchwabBroker(
             os.environ["SCHWAB_API_KEY"], os.environ["SCHWAB_APP_SECRET"], os.environ["SCHWAB_CALLBACK_URL"],
-            str(HERE / os.getenv("TOKEN_PATH", "schwab_token.json")))
+            _token_path())
         print("Schwab token saved."); sys.exit(0)
     try:
         broker = make_broker()

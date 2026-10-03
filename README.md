@@ -39,8 +39,10 @@ top right).
 
 ### Weekly: Schwab re-auth
 Schwab refresh tokens expire after 7 days. The header chip shows days left (from the token file's modification
-time; the server never reads the token). Under 2 days triggers a page alert. In each bot folder:
-`python bot.py auth`.
+time; the server never reads the token). Under 2 days triggers a page alert. **One token serves the whole fleet**
+(`var\schwab_token.json`): run `python bot.py auth` in any one bot folder, log in once, done. Every bot and
+`research\schwab_dump.py` read the same file. (A bot that uses a different Schwab app can set `TOKEN_PATH` in its
+`.env` to keep its own.) `python bot.py check` proves the token works with one quote and today's minute-bar count.
 
 ### Early-close days
 On 1:00 pm closes (day after Thanksgiving, Christmas Eve, 7/3) the server posts a reminder the day before.

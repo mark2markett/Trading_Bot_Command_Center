@@ -28,3 +28,6 @@
   entry parity with the research code is a test, not a claim.
 - **Watch-list bots are allowed on paper** (nr7) and labelled as below the bar in their manifest `backtest.source`, so the
   parity band and the UI never imply an edge that was not shown.
+- **One Schwab token for the fleet.** Schwab issues one refresh token per app per user; per-bot token files would
+  invalidate each other on every `auth`. All bots and the research dump now read `var/schwab_token.json`; `TOKEN_PATH`
+  in a bot's `.env` opts out for a bot on a different app. `from_env` refuses keys/secrets that are not 32/16 chars.

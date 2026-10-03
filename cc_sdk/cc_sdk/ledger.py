@@ -41,6 +41,17 @@ def var_dir() -> Path:
     return Path.cwd() / "var"
 
 
+def token_path(bot_dir: Path | None = None) -> Path:
+    """One Schwab token for the whole fleet: var/schwab_token.json. TOKEN_PATH in a bot's .env overrides
+    (relative to that bot folder) — only do that if the bot uses a different Schwab app."""
+    import os
+
+    override = os.getenv("TOKEN_PATH")
+    if override:
+        return (bot_dir or Path.cwd()) / override
+    return var_dir() / "schwab_token.json"
+
+
 def db_path() -> Path:
     return var_dir() / "cc.db"
 

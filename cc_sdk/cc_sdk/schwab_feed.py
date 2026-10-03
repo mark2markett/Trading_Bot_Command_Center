@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .intraday import ET, Bar
+from .ledger import token_path
 
 
 class SchwabFeed:
@@ -17,14 +18,27 @@ class SchwabFeed:
 
     @classmethod
     def from_env(cls, bot_dir: Path) -> SchwabFeed:
-        from schwab.auth import easy_client  # lazy: paper replays need no schwab-py
-
         missing = [k for k in ("SCHWAB_API_KEY", "SCHWAB_APP_SECRET", "SCHWAB_CALLBACK_URL") if not os.getenv(k)]
         if missing:
             raise RuntimeError(f"Schwab credentials missing: {', '.join(missing)} (see .env.example)")
-        client = easy_client(api_key=os.environ["SCHWAB_API_KEY"], app_secret=os.environ["SCHWAB_APP_SECRET"],
-                             callback_url=os.environ["SCHWAB_CALLBACK_URL"], token_path=str(bot_dir / os.getenv("TOKEN_PATH", "schwab_token.json")))
+        key, sec = os.environ["SCHWAB_API_KEY"], os.environ["SCHWAB_APP_SECRET"]
+        if len(key) != 32 or len(sec) != 16:
+            raise RuntimeError(f"SCHWAB_API_KEY is {len(key)} chars and SCHWAB_APP_SECRET is {len(sec)}; a Schwab app key is 32 and its secret 16. "
+                               "These look like credentials for something else (see .env.example).")
+        try:
+            from schwab.auth import easy_client  # lazy: paper replays need no schwab-py
+        except ImportError as e:
+            raise RuntimeError("schwab-py is not installed in this environment: pip install schwab-py") from e
+        tp = token_path(bot_dir)
+        tp.parent.mkdir(parents=True, exist_ok=True)
+        client = easy_client(api_key=key, app_secret=sec, callback_url=os.environ["SCHWAB_CALLBACK_URL"], token_path=str(tp))
         return cls(client)
+
+    def check(self, symbol: str = "SPY") -> dict:
+        """Prove the token works: one quote, one minute-bar count. Prints nothing secret."""
+        px, age = self.quote(symbol)
+        bars = self.minute_bars(symbol, datetime.now(ET))
+        return {"symbol": symbol, "last": px, "quote_age_s": round(age, 1), "minute_bars_today": len(bars), "token_file": str(token_path())}
 
     @staticmethod
     def _bars(data: dict) -> list[Bar]:

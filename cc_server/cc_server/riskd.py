@@ -183,7 +183,9 @@ def token_days_left(bots_dir: Path | None = None) -> dict[str, Any]:
     """Schwab refresh tokens die after 7 days. We only look at the token file's mtime; never its contents."""
     bots_dir = bots_dir or (var_dir().parent / "bots")
     newest = None
-    for p in bots_dir.glob("*/schwab_token.json"):
+    for p in [var_dir() / "schwab_token.json", *bots_dir.glob("*/schwab_token.json")]:
+        if not p.exists():
+            continue
         m = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
         newest = m if newest is None or m > newest else newest
     if newest is None:

@@ -21,6 +21,8 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "cc_sdk"))
+from cc_sdk.ledger import token_path  # noqa: E402
+
 ET = ZoneInfo("America/New_York")
 OUT = ROOT / "var" / "data"
 
@@ -38,7 +40,7 @@ def client():
     if missing:
         raise SystemExit(f"run from a bot folder whose .env has Schwab credentials; missing {', '.join(missing)}")
     return easy_client(api_key=os.environ["SCHWAB_API_KEY"], app_secret=os.environ["SCHWAB_APP_SECRET"],
-                       callback_url=os.environ["SCHWAB_CALLBACK_URL"], token_path=str(Path.cwd() / os.getenv("TOKEN_PATH", "schwab_token.json")))
+                       callback_url=os.environ["SCHWAB_CALLBACK_URL"], token_path=str(token_path(Path.cwd())))
 
 
 def fetch(c, symbol: str, days: int) -> pd.DataFrame:

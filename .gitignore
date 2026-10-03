@@ -1,0 +1,14 @@
+var/
+.env
+.env.*
+!.env.example
+*token*.json
+state_*.json
+paper_ledger.json
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+dist/
+*.egg-info/
+.venv/

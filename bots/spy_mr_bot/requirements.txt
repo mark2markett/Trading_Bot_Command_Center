@@ -1,0 +1,4 @@
+schwab-py>=1.5
+pytest
+pandas
+python-dotenv>=1.0

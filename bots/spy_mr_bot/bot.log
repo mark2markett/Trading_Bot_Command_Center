@@ -1,0 +1,1 @@
+2026-10-03 04:11:33,920 ERROR run failed: No free data source reachable: Stooq: <urlopen error Tunnel connection failed: 403 Forbidden>; Yahoo: <urlopen error Tunnel connection failed: 403 Forbidden>

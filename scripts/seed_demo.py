@@ -13,8 +13,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "cc_sdk"))
-from cc_sdk import Bot, BotManifest  # noqa: E402
 from cc_sdk.ledger import Ledger, db_path  # noqa: E402
+
+from cc_sdk import Bot, BotManifest  # noqa: E402
 
 random.seed(7)
 NOW = datetime.now(timezone.utc)

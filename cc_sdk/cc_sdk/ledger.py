@@ -146,7 +146,7 @@ class Ledger:
         return self.q("SELECT pnl FROM trades WHERE bot_id=? ORDER BY exit_at DESC LIMIT ?", (bot_id, n))
 
     def bot_peak_and_last_equity(self, bot_id: str) -> tuple[float, float] | None:
-        rows = self.q("SELECT equity FROM equity WHERE bot_id=? ORDER BY at", (bot_id,))
+        rows = self.q("SELECT equity FROM equity WHERE bot_id=? AND source='bot' ORDER BY at", (bot_id,))
         if not rows:
             return None
         vals = [float(r["equity"]) for r in rows]

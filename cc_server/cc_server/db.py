@@ -37,7 +37,7 @@ def position(L: Ledger, bot_id: str) -> dict[str, Any] | None:
 def equity_series(L: Ledger, bot_id: str, days: int = 400) -> list[tuple[str, float]]:
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     return [(r["at"], float(r["equity"])) for r in L.q(
-        "SELECT at, equity FROM equity WHERE bot_id=? AND at>=? ORDER BY at", (bot_id, since))]
+        "SELECT at, equity FROM equity WHERE bot_id=? AND source='bot' AND at>=? ORDER BY at", (bot_id, since))]
 
 
 def broker_equity_series(L: Ledger, days: int = 400) -> list[tuple[str, float]]:

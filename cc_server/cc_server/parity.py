@@ -60,8 +60,9 @@ def evaluate(backtest: dict[str, Any], trades: list[dict[str, Any]], fills: list
     return out
 
 
-def expected_path(backtest: dict[str, Any], n_points: int, start_equity: float) -> dict[str, list[float]]:
-    """Median and 5–95% band of equity after k trades, from backtest per-trade stats (normal approx on log returns)."""
+def expected_path(backtest: dict[str, Any], n_points: int, start_equity: float, trades_per_point: float = 1.0) -> dict[str, list[float]]:
+    """Median and 5–95% band of equity along n_points, from backtest per-trade stats scaled by trades_per_point
+    (so a daily equity series and a per-trade backtest share one x-axis). Normal approximation."""
     wr = float(backtest.get("win_rate") or 0.5)
     aw = float(backtest.get("avg_win") or 0.01)
     al = float(backtest.get("avg_loss") or -0.01)
@@ -70,8 +71,9 @@ def expected_path(backtest: dict[str, Any], n_points: int, start_equity: float) 
     sd = math.sqrt(max(var, 1e-12))
     med, lo, hi = [], [], []
     for k in range(n_points):
-        m = mu * k
-        s = sd * math.sqrt(k)
+        t = k * trades_per_point
+        m = mu * t
+        s = sd * math.sqrt(t)
         med.append(start_equity * (1 + m))
         lo.append(start_equity * (1 + m - 1.645 * s))
         hi.append(start_equity * (1 + m + 1.645 * s))

@@ -122,7 +122,9 @@ def bot(bot_id: str) -> dict[str, Any]:
     par = parity.evaluate(b.get("backtest") or {}, tr, fl)
     eq = db.equity_series(L(), bot_id)
     start = eq[0][1] if eq else 100_000.0
-    band = parity.expected_path(b.get("backtest") or {}, max(len(tr) + 1, 2), start)
+    n_pts = max(len(eq), 2)
+    tpp = (len(tr) / n_pts) if tr else float((b.get("backtest") or {}).get("trades_per_year") or 5) / 252.0
+    band = parity.expected_path(b.get("backtest") or {}, n_pts, start, trades_per_point=tpp)
     limits = {**DEFAULT_LIMITS, **(b.get("limits") or {}), **db.limits(L(), bot_id)}
     today = datetime.now(timezone.utc).date().isoformat()
     orders_today = len(L().orders_today(bot_id, today))

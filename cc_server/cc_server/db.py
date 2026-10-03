@@ -29,9 +29,14 @@ def last_heartbeat(L: Ledger, bot_id: str) -> dict[str, Any] | None:
     return dict(r) if r else None
 
 
+def positions(L: Ledger, bot_id: str) -> list[dict[str, Any]]:
+    return [dict(r) for r in L.positions_for(bot_id)]
+
+
 def position(L: Ledger, bot_id: str) -> dict[str, Any] | None:
-    r = L.one("SELECT * FROM positions WHERE bot_id=?", (bot_id,))
-    return dict(r) if r else None
+    """First open position, kept for single-instrument bots and the fleet table."""
+    ps = positions(L, bot_id)
+    return ps[0] if ps else None
 
 
 def equity_series(L: Ledger, bot_id: str, days: int = 400) -> list[tuple[str, float]]:

@@ -71,8 +71,11 @@ class Bot:
         return fid
 
     def set_position(self, symbol: str, qty: int, avg_price: float | None = None, entry_at: str | None = None,
-                     bars_held: int = 0) -> None:
-        self.L.set_position(self.m.id, symbol, qty, avg_price, entry_at, bars_held)
+                     bars_held: int = 0, stop_price: float | None = None, side: str | None = None) -> None:
+        self.L.set_position(self.m.id, symbol, qty, avg_price, entry_at, bars_held, stop_price, side)
+
+    def positions(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.L.positions_for(self.m.id)]
 
     def record_equity(self, value: float, source: str = "bot") -> int:
         return self.L.equity(self.m.id, value, source)

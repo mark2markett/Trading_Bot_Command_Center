@@ -55,7 +55,7 @@ def test_kill_path_end_to_end(env):
     assert L.one("SELECT 1 FROM alerts WHERE kind='kill' AND severity='page'")
     # bot's next run flattens through its own path and clears the flag
     run_template(var, "decide")
-    assert L.one("SELECT qty FROM positions WHERE bot_id='template'")["qty"] == 0
+    assert L.one("SELECT qty FROM positions WHERE bot_id='template'") is None  # flat ⇒ row removed
     assert not (var / "control" / "template.flatten").exists()
     fleet = c.get("/api/fleet").json()
     assert fleet["killed"] and any(b["status"] == "killed" for b in fleet["bots"])

@@ -123,3 +123,34 @@ def test_manifest_validation():
                     limits={"max_orders_per_day": 5})
     assert m.limits["max_orders_per_day"] == 5 and m.limits["stale_quote_s"] == 90
     assert json.dumps(m.to_row())
+
+
+def test_multi_symbol_positions_and_per_symbol_duplicate(tmp_path):
+    bot, _ = mk(tmp_path, max_orders_per_day=40, max_position_usd=10_000_000, max_order_usd=10_000_000, max_order_qty=100_000)
+    bot.set_position("AAA", 100, 10.0, "2026-01-01", 0, stop_price=9.5)
+    bot.set_position("BBB", -50, 20.0, "2026-01-01", 0, stop_price=21.0)
+    ps = bot.positions()
+    assert [(p["symbol"], p["qty"], p["side"]) for p in ps] == [("AAA", 100, "LONG"), ("BBB", -50, "SHORT")]
+    bot.set_position("AAA", 0)
+    assert [p["symbol"] for p in bot.positions()] == ["BBB"]
+    with bot.run("session") as run:
+        o = Order(side="BUY", qty=10, type="STOP", symbol="AAA", ref_price=10, stop_price=10.2)
+        r = bot.risk.pre_trade(o); assert r.ok; run.order_sent(o, r, "x1")
+        o2 = Order(side="BUY", qty=10, type="STOP", symbol="CCC", ref_price=10, stop_price=10.2)
+        assert bot.risk.pre_trade(o2).ok  # same side, different symbol: allowed
+        assert not bot.risk.pre_trade(Order(side="BUY", qty=10, type="STOP", symbol="AAA", ref_price=10)).ok  # dup
+
+
+def test_old_single_key_positions_table_migrates(tmp_path):
+    import sqlite3
+    db = tmp_path / "old.db"
+    c = sqlite3.connect(db)
+    c.executescript("CREATE TABLE positions(bot_id TEXT PRIMARY KEY, symbol TEXT, qty INTEGER, avg_price REAL, entry_at TEXT, bars_held INTEGER, updated_at TEXT);"
+                    "INSERT INTO positions VALUES('spy_mr','SPY',153,651.2,'2026-09-15',2,'2026-09-17');")
+    c.commit(); c.close()
+    from cc_sdk.ledger import Ledger
+    L = Ledger(db)
+    rows = L.positions_for("spy_mr")
+    assert len(rows) == 1 and rows[0]["symbol"] == "SPY" and rows[0]["qty"] == 153
+    L.set_position("spy_mr", "QQQ", 10, 600, None, 0)
+    assert [r["symbol"] for r in L.positions_for("spy_mr")] == ["QQQ", "SPY"]

@@ -91,11 +91,37 @@ class Ledger:
                       (order_id, bot_id, now_iso(), qty, price, expected_price, slip, commission))
 
     def set_position(self, bot_id: str, symbol: str, qty: int, avg_price: float | None, entry_at: str | None,
-                     bars_held: int) -> None:
-        self.x("""INSERT INTO positions(bot_id,symbol,qty,avg_price,entry_at,bars_held,updated_at) VALUES(?,?,?,?,?,?,?)
-                  ON CONFLICT(bot_id) DO UPDATE SET symbol=excluded.symbol, qty=excluded.qty, avg_price=excluded.avg_price,
-                  entry_at=excluded.entry_at, bars_held=excluded.bars_held, updated_at=excluded.updated_at""",
-               (bot_id, symbol, qty, avg_price, entry_at, bars_held, now_iso()))
+                     bars_held: int, stop_price: float | None = None, side: str | None = None) -> None:
+        """Upsert one (bot, symbol) position. qty == 0 removes the row so flat bots show no positions."""
+        self._migrate_positions()
+        if qty == 0:
+            self.x("DELETE FROM positions WHERE bot_id=? AND symbol=?", (bot_id, symbol))
+            return
+        self.x("""INSERT INTO positions(bot_id,symbol,qty,avg_price,entry_at,bars_held,updated_at,stop_price,side) VALUES(?,?,?,?,?,?,?,?,?)
+                  ON CONFLICT(bot_id,symbol) DO UPDATE SET qty=excluded.qty, avg_price=excluded.avg_price,
+                  entry_at=excluded.entry_at, bars_held=excluded.bars_held, updated_at=excluded.updated_at,
+                  stop_price=excluded.stop_price, side=excluded.side""",
+               (bot_id, symbol, qty, avg_price, entry_at, bars_held, now_iso(), stop_price, side or ("LONG" if qty > 0 else "SHORT")))
+
+    def positions_for(self, bot_id: str) -> list[sqlite3.Row]:
+        self._migrate_positions()
+        return self.q("SELECT * FROM positions WHERE bot_id=? AND qty != 0 ORDER BY symbol", (bot_id,))
+
+    def _migrate_positions(self) -> None:
+        """Older databases keyed positions by bot_id only. Rebuild with the (bot_id, symbol) key once."""
+        if getattr(self, "_pos_ok", False):
+            return
+        cols = [r["name"] for r in self.q("PRAGMA table_info(positions)")]
+        pk_bot_only = any(r["name"] == "bot_id" and r["pk"] == 1 for r in self.q("PRAGMA table_info(positions)")) and \
+            not any(r["name"] == "symbol" and r["pk"] for r in self.q("PRAGMA table_info(positions)"))
+        if pk_bot_only or "stop_price" not in cols:
+            self.conn.executescript("""
+                CREATE TABLE positions_new(bot_id TEXT, symbol TEXT, qty INTEGER, avg_price REAL, entry_at TEXT,
+                  bars_held INTEGER, updated_at TEXT, stop_price REAL, side TEXT, PRIMARY KEY(bot_id, symbol));
+                INSERT OR REPLACE INTO positions_new(bot_id,symbol,qty,avg_price,entry_at,bars_held,updated_at)
+                  SELECT bot_id,symbol,qty,avg_price,entry_at,bars_held,updated_at FROM positions WHERE qty != 0;
+                DROP TABLE positions; ALTER TABLE positions_new RENAME TO positions;""")
+        self._pos_ok = True
 
     def equity(self, bot_id: str, value: float, source: str = "bot") -> int:
         return self.x("INSERT INTO equity(bot_id,at,equity,source) VALUES(?,?,?,?)", (bot_id, now_iso(), value, source))
@@ -138,8 +164,11 @@ class Ledger:
         rows = self.q("SELECT qty, avg_price FROM positions WHERE qty != 0")
         return float(sum(abs(r["qty"]) * (r["avg_price"] or 0.0) for r in rows))
 
-    def orders_today(self, bot_id: str, day_prefix: str) -> list[sqlite3.Row]:
-        return self.q("SELECT side, status FROM orders WHERE bot_id=? AND at LIKE ? AND status IN ('sent','filled')",
+    def orders_today(self, bot_id: str, day_prefix: str, symbol: str | None = None) -> list[sqlite3.Row]:
+        if symbol:
+            return self.q("SELECT side, status, symbol FROM orders WHERE bot_id=? AND symbol=? AND at LIKE ? AND status IN ('sent','filled')",
+                          (bot_id, symbol, day_prefix + "%"))
+        return self.q("SELECT side, status, symbol FROM orders WHERE bot_id=? AND at LIKE ? AND status IN ('sent','filled')",
                       (bot_id, day_prefix + "%"))
 
     def recent_trades(self, bot_id: str, n: int) -> list[sqlite3.Row]:

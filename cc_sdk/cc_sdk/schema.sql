@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY, bot_id TEXT, at TEXT, 
 CREATE INDEX IF NOT EXISTS ix_ord ON orders(bot_id, at);
 CREATE TABLE IF NOT EXISTS fills(id INTEGER PRIMARY KEY, order_id INTEGER, bot_id TEXT, at TEXT, qty INTEGER, price REAL,
   expected_price REAL, slippage REAL, commission REAL);
-CREATE TABLE IF NOT EXISTS positions(bot_id TEXT PRIMARY KEY, symbol TEXT, qty INTEGER, avg_price REAL, entry_at TEXT,
-  bars_held INTEGER, updated_at TEXT);
+CREATE TABLE IF NOT EXISTS positions(bot_id TEXT, symbol TEXT, qty INTEGER, avg_price REAL, entry_at TEXT,
+  bars_held INTEGER, updated_at TEXT, stop_price REAL, side TEXT, PRIMARY KEY(bot_id, symbol));
 CREATE TABLE IF NOT EXISTS equity(id INTEGER PRIMARY KEY, bot_id TEXT, at TEXT, equity REAL, source TEXT CHECK(source IN('bot','broker')));
 CREATE INDEX IF NOT EXISTS ix_eq ON equity(bot_id, at);
 CREATE TABLE IF NOT EXISTS trades(id INTEGER PRIMARY KEY, bot_id TEXT, entry_at TEXT, exit_at TEXT, qty INTEGER, entry_px REAL,

@@ -17,12 +17,89 @@ git clone <this repo> command-center ; cd command-center
 python -m venv .venv ; .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 cd cc_web ; npm ci ; npm run build ; cd ..
-python scripts\seed_demo.py --reset          # optional: demo data to see the screens
+# Demo seeding requires an external sandbox; see Safe demo data below.
 python -m cc_server.main                     # http://127.0.0.1:8585
 ```
 
 Run the tests any time: `python -m pytest -q` (Python) and `cd cc_web && npm test` (web).
 Linux/macOS dev: `make dev`, `make test`, `make seed`, `make drill`.
+
+## Closed-loop sandbox test
+
+Run from the repository root, on the `test/closed-loop` branch:
+
+```powershell
+.venv\Scripts\python.exe scripts\closed_loop.py
+```
+
+Linux/macOS: `.venv/bin/python scripts/closed_loop.py`.
+Install development dependencies with `pip install -e ".[dev]"`; install
+`pyarrow` for parquet replay and `tzdata` on Windows if needed. In `cc_web`,
+run `npm ci`, `npm test`, and `npm run build`. Browser checks use Playwright;
+run `npx playwright install chromium` in `cc_web`, or set
+`CC_PLAYWRIGHT_EXECUTABLE` to an existing Chromium executable. On Linux the
+harness detects `chromium` on PATH. Dependency/TLS verification stays enabled.
+
+The launcher creates `%TEMP%\cc-closed-loop-<unique-id>\var` (the system temp
+directory on other platforms), then gives every worker an explicit `CC_VAR`
+and paper mode. It refuses inherited live mode and unsafe CC_VAR paths. It
+never uses the running server on 8585, reuses a listener on 8586, runs scheduled
+bot commands, sends live orders, or copies alert/credential files. It refuses
+a sandbox with a sibling `bots` folder that server controls could spawn.
+
+The loop exercises the actual five bot manifests and rules, risk checks,
+paper fills, SQLite ledger, built dashboard, confirmation controls, and bot
+responses. Scripted prices/chains/calendars are labeled **SYNTHETIC**. API and
+UI behavior have separate assertions: an API flatten can work while its
+operator button is broken, and the report preserves that distinction.
+
+Each check reports **PASS**, **FAIL**, or **NOT COVERED**. Exit 0 means no
+failures; it does not mean complete coverage. Exit 1 means a failed assertion
+or execution/cleanup failure; exit 2 means a safety refusal. The report's
+function inventory records observed calls and unexercised functions, not a
+claim that every branch of a called function was tested.
+
+Reports (`report.md` and `report.json`) and fleet/spread screenshots remain
+in the temporary run folder printed by the command. Sandbox databases,
+controls, logs, and isolated daily-bot source/state are removed after owned
+processes and SQLite handles close. If cleanup fails, the command exits
+nonzero and reports the retained sandbox. An interrupted/crashed worker also
+gets a failure report; its server is stopped only after matching its recorded
+run identity.
+
+On the trading PC, local `var/data/*_1m_rth.parquet` enables a bounded replay
+search of at most 250 trading days. Source data is read only; needed bars are
+prepared under the sandbox. The live `var/cc.db` is fingerprinted through a
+read-only connection before/after: table counts, maximum IDs where available,
+logical row hashes, and control-file metadata/hashes. Heartbeats and kv are
+excluded. A changed fingerprint fails, even if concurrent live activity is a
+possible cause. A source-only clone/bundle has neither history nor live state,
+so those checks are **NOT COVERED** rather than claims about the Windows host.
+
+Real-feed checks use only already injected variables; they do not load `.env`
+or token files. Missing authentication is **NOT COVERED**. Shared-state Schwab
+authentication can rotate a token and write Supabase, so it is excluded from
+this isolated test. The supported token-broker path can use injected
+`CC_TOKEN_BROKER_URL`/`CC_TOKEN_BROKER_SECRET`; Polygon uses injected
+`POLYGON_API_KEY`. Never enter credentials in a report or Git. A failed actual
+data request is a failure, not silently converted to missing coverage.
+
+### Safe demo data
+
+`seed_demo.py` now refuses unset or checkout-contained CC_VAR before opening
+or resetting a database. To seed a disposable demo:
+
+```powershell
+$previousVar = $env:CC_VAR
+$env:CC_VAR = Join-Path $env:TEMP 'cc-demo\var'
+python scripts\seed_demo.py --reset
+$env:CC_VAR = $previousVar
+```
+
+An explicit `--live-ledger` override permits intentional repository-ledger
+seeding. It can replace the paper record when combined with `--reset`; it is
+not needed for the closed-loop harness. `kill_drill.py` retains its operational
+behavior against the running server/live ledger and is not this sandbox test.
 
 ## Daily operation
 

@@ -54,11 +54,11 @@
 - `fingerprint(live_var: Path) -> dict`: read-only counts/max IDs and logical digests, control listing/hashes; explicit absent status, no Ledger construction.
 - `Report.add(name: str, outcome: str, evidence: str, synthetic: bool = False) -> None`; `Report.exit_code -> int`; `Report.write(path: Path) -> None`.
 
-- [ ] Prepare test prerequisites in the existing checkout, never a worktree: create a local virtualenv, install `.[dev]` plus the required parquet engine with verification enabled, and run `npm ci` in cc_web using its lockfile. Preserve dependencies and lockfiles; put caches/generated files in ignored paths or outside the repo. Set CC_VAR to a separate test sandbox for baseline suites that import bots during collection, and record baseline results before new behavior is added.
-- [ ] Write parameterized guard tests: unset/empty CC_VAR, repo root, repo/var, nested checkout path, relative traversal and symlink into checkout all raise before creating any files. A safe external runtime succeeds. A sibling `bots/x/bot.py` causes refusal.
-- [ ] Write fingerprint tests against a disposable fixture DB: live connection cannot INSERT; fingerprint leaves logical rows unchanged; positions without `id` work; an UPDATE to position qty and a changed control payload alter fingerprints; absent DB is explicitly unavailable.
-- [ ] Write report tests: one FAIL gives exit 1; NOT COVERED stays distinct and is counted; synthetic rows are marked; Markdown preserves before/after evidence.
-- [ ] Run `.venv/bin/python -m pytest -q cc_sdk/tests/test_closed_loop_guard.py` on Linux (Windows equivalent uses `.venv\Scripts\python.exe`). Observe failures for the missing helpers, then implement only the interfaces above and rerun to green.
+- [x] Prepare test prerequisites in the existing checkout, never a worktree: create a local virtualenv, install `.[dev]` plus the required parquet engine with verification enabled, and run `npm ci` in cc_web using its lockfile. Preserve dependencies and lockfiles; put caches/generated files in ignored paths or outside the repo. Set CC_VAR to a separate test sandbox for baseline suites that import bots during collection, and record baseline results before new behavior is added.
+- [x] Write parameterized guard tests: unset/empty CC_VAR, repo root, repo/var, nested checkout path, relative traversal and symlink into checkout all raise before creating any files. A safe external runtime succeeds. A sibling `bots/x/bot.py` causes refusal.
+- [x] Write fingerprint tests against a disposable fixture DB: live connection cannot INSERT; fingerprint leaves logical rows unchanged; positions without `id` work; an UPDATE to position qty and a changed control payload alter fingerprints; absent DB is explicitly unavailable.
+- [x] Write report tests: one FAIL gives exit 1; NOT COVERED stays distinct and is counted; synthetic rows are marked; Markdown preserves before/after evidence.
+- [x] Run `.venv/bin/python -m pytest -q cc_sdk/tests/test_closed_loop_guard.py` on Linux (Windows equivalent uses `.venv\Scripts\python.exe`). Observe failures for the missing helpers, then implement only the interfaces above and rerun to green.
 
 ## Task 2: Actual Sources and Offline Strategy Lifecycles
 
@@ -67,11 +67,11 @@
 - `make_scenarios(repo: Path, runtime: Path) -> ScenarioContext`: holds bots, real rule objects, deterministic feeds and runners. `ScenarioContext.close() -> None` closes all owned bot ledger handles.
 - `run_offline(context: ScenarioContext, report: Report) -> None`: tests actual intraday equity, options and daily-paper lifecycles with explicit synthetic labels.
 
-- [ ] Add a test that source loading creates exactly `{gap_go, nr7, sip_orb, spy_mr, gap_go_spread}` and leaves source directories unchanged. Copy only tracked Python source needed for side-effectful daily-bot loading into sandbox `imports/`, never `<sandbox>/bots/`, dotenv files, or live state.
-- [ ] Add synthetic gap-go and NR7/SIP cases that the actual rules accept, run real SessionRunner entry and exit, and assert orders, fills, trades and flat positions. Assert a no-signal fixture makes no entry.
-- [ ] Add a spread case using actual GapGoRules and the real manifest: after entry, two signed OCC positions and optlive Greeks exist; after flatten, positions and optlive are gone and option_trades persists. Add stale-chain and excessive-premium cases that assert actual persisted refusals.
-- [ ] Adapt the existing daily-MR lifecycle fixture to valid dates and isolated imports. Call real `cmd_decide`/`cmd_reconcile` with PaperBroker and sandbox state; assert entry, protective stop, exit and SDK ledger writes. Label synthetic calendar/input adaptations; do not report a scheduled/live run as covered.
-- [ ] Run `.venv/bin/python -m pytest -q cc_sdk/tests/test_closed_loop_scenarios.py`; observe missing behavior failures, implement sources/scenarios, then verify all new cases pass without strategy edits.
+- [x] Add a test that source loading creates exactly `{gap_go, nr7, sip_orb, spy_mr, gap_go_spread}` and leaves source directories unchanged. Copy only tracked Python source needed for side-effectful daily-bot loading into sandbox `imports/`, never `<sandbox>/bots/`, dotenv files, or live state.
+- [x] Add synthetic gap-go and NR7/SIP cases that the actual rules accept, run real SessionRunner entry and exit, and assert orders, fills, trades and flat positions. Assert a no-signal fixture makes no entry.
+- [x] Add a spread case using actual GapGoRules and the real manifest: after entry, two signed OCC positions and optlive Greeks exist; after flatten, positions and optlive are gone and option_trades persists. Add stale-chain and excessive-premium cases that assert actual persisted refusals.
+- [x] Adapt the existing daily-MR lifecycle fixture to valid dates and isolated imports. Call real `cmd_decide`/`cmd_reconcile` with PaperBroker and sandbox state; assert entry, protective stop, exit and SDK ledger writes. Label synthetic calendar/input adaptations; do not report a scheduled/live run as covered.
+- [x] Run `.venv/bin/python -m pytest -q cc_sdk/tests/test_closed_loop_scenarios.py`; observe missing behavior failures, implement sources/scenarios, then verify all new cases pass without strategy edits.
 
 ## Task 3: Real-History Replay and Honest Coverage
 
@@ -79,11 +79,11 @@
 - `replay_history(context: ScenarioContext, repo: Path, report: Report, max_days: int = 250) -> None`: uses actual `run_replay` into the sandbox and preserves original source data.
 - `check_data(context: ScenarioContext, report: Report) -> None`: presence-only injected configuration check; counts/ages from allowed read-only SDK operations; otherwise precise NOT COVERED.
 
-- [ ] Test missing data, unreadable/corrupt parquet and a zero-trade window separately: missing and valid no-signal windows are NOT COVERED; invalid available data is a FAIL with a safe diagnostic. Verify the search bound is 250 trading days, not calendar days.
-- [ ] Test an available controlled parquet fixture through actual run_replay: require orders + fills + a closed trade and assert source file bytes are unchanged. This fixture is synthetic and must never produce a real-history PASS label.
-- [ ] Prepare only needed historical bars in sandbox/data, retaining 40 prior daily contexts. Bound attempts, restore ledger clock in finally, and distinguish an absent setup from a triggered signal that fails unexpectedly.
-- [ ] Test missing injected auth variables without touching dotenv/token files. Errors report exception class or fixed safe messages, never raw authenticated responses/URLs. Do not invent or request credentials to make cloud checks pass.
-- [ ] Run targeted source/replay tests, implement replay/data checks, then rerun to green. Report real-history coverage as unavailable in the current cloud bundle.
+- [x] Test missing data, unreadable/corrupt parquet and a zero-trade window separately: missing and valid no-signal windows are NOT COVERED; invalid available data is a FAIL with a safe diagnostic. Verify the search bound is 250 trading days, not calendar days.
+- [x] Test an available controlled parquet fixture through actual run_replay: require orders + fills + a closed trade and assert source file bytes are unchanged. This fixture is synthetic and must never produce a real-history PASS label.
+- [x] Prepare only needed historical bars in sandbox/data, retaining 40 prior daily contexts. Bound attempts, restore ledger clock in finally, and distinguish an absent setup from a triggered signal that fails unexpectedly.
+- [x] Test missing injected auth variables without touching dotenv/token files. Errors report exception class or fixed safe messages, never raw authenticated responses/URLs. Do not invent or request credentials to make cloud checks pass.
+- [x] Run targeted source/replay tests, implement replay/data checks, then rerun to green. Report real-history coverage as unavailable in the current cloud bundle.
 
 ## Task 4: Sandbox Dashboard and Controls
 
@@ -92,13 +92,13 @@
 - `check_dashboard(context: ScenarioContext, server: OwnedServer, report: Report) -> None`.
 - `check_controls(context: ScenarioContext, server: OwnedServer, report: Report) -> None`.
 
-- [ ] Write busy-port and wrong-identity tests: a listening unrelated server produces refusal; no control HTTP call reaches it.
-- [ ] Start the actual FastAPI application via the guarded wrapper, observe actual Control.write_flag calls, and append sandbox evidence that the matching control audit row existed before each server flag write. Do not replace the control handler, risk engine, or flag write itself.
-- [ ] Assert fleet contains exactly five actual IDs, recent fills and expected trades; spread detail/fleet have numeric delta, theta and DTE; health/risk/alerts/research respond with the expected shape.
-- [ ] Drive invalid confirmation, bot pause/resume/flatten/kill, fleet pause/resume/flatten/kill/re-arm using exact API bodies. After each control, step actual runners and assert flags, audits, fills, exits, rejected entries, and status readback. Use independent entry attempts where duplicate/day limits would otherwise obscure the intended check.
-- [ ] Assert flatten writes an option_trades row and removes optlive; kill permits exits and blocks entries; re-arm removes KILL and restores an otherwise-eligible SDK entry. Check rejection attention items using existing API guarantees.
-- [ ] Add Playwright script taking explicit local base URL and output directory. Require rendered fleet/spread content and no failed core API responses before taking the two screenshots. Missing browser is NOT COVERED; a launched browser with wrong UI behavior is FAIL.
-- [ ] Run runtime integration tests red, implement controls/server/screenshot helpers, then rerun to green. Keep production port 8585 unused.
+- [x] Write busy-port and wrong-identity tests: a listening unrelated server produces refusal; no control HTTP call reaches it.
+- [x] Start the actual FastAPI application via the guarded wrapper, observe actual Control.write_flag calls, and append sandbox evidence that the matching control audit row existed before each server flag write. Do not replace the control handler, risk engine, or flag write itself.
+- [x] Assert fleet contains exactly five actual IDs, recent fills and expected trades; spread detail/fleet have numeric delta, theta and DTE; health/risk/alerts/research respond with the expected shape.
+- [x] Drive invalid confirmation, bot pause/resume/flatten/kill, fleet pause/resume/flatten/kill/re-arm using exact API bodies. After each control, step actual runners and assert flags, audits, fills, exits, rejected entries, and status readback. Use independent entry attempts where duplicate/day limits would otherwise obscure the intended check.
+- [x] Assert flatten writes an option_trades row and removes optlive; kill permits exits and blocks entries; re-arm removes KILL and restores an otherwise-eligible SDK entry. Check rejection attention items using existing API guarantees.
+- [x] Add Playwright script taking explicit local base URL and output directory. Require rendered fleet/spread content and no failed core API responses before taking the two screenshots. Missing browser is NOT COVERED; a launched browser with wrong UI behavior is FAIL.
+- [x] Run runtime integration tests red, implement controls/server/screenshot helpers, then rerun to green. Keep production port 8585 unused.
 
 ## Task 5: Supervisor, Cleanup and Function Coverage Report
 
@@ -106,20 +106,20 @@
 - `main(argv: list[str] | None = None) -> int` in `scripts/closed_loop.py`: supervisor by default; internal worker mode validates its environment before importing side-effectful modules.
 - Function inventory: list actual SDK/server/bot callable locations; record which the harness reaches and which scenarios assert their outcomes. Distinguish an observed call from an asserted behavior; unexercised functions remain explicit gaps.
 
-- [ ] Test default launcher creation with unset CC_VAR, unsafe caller refusal, inherited MODE=live refusal and worker refusal with unset CC_VAR. Assert the supervisor passes the exact external CC_VAR and paper mode to each child.
-- [ ] Test a deliberate failed check after opening a spread: retain a FAIL row, nonzero exit, report, before/after evidence, and screenshots already produced; stop the owned server and delete sandbox runtime state after all handles close.
-- [ ] Test cleanup failure and interrupted-worker paths: never silently return success, never delete a caller directory or live source, and preserve evidence. If state cannot be safely deleted, report the remaining external sandbox path.
-- [ ] Test function inventory reports an uncalled function as unexercised rather than claiming full coverage. Preserve separate unsupported scheduled/live/authentication paths.
-- [ ] Implement coordinator, bounded worker lifecycle, per-row diagnostics, finally cleanup and Markdown summary. Run targeted runtime/guard tests to green and exercise the documented single command.
+- [x] Test default launcher creation with unset CC_VAR, unsafe caller refusal, inherited MODE=live refusal and worker refusal with unset CC_VAR. Assert the supervisor passes the exact external CC_VAR and paper mode to each child.
+- [x] Test a deliberate failed check after opening a spread: retain a FAIL row, nonzero exit, report, before/after evidence, and screenshots already produced; stop the owned server and delete sandbox runtime state after all handles close.
+- [x] Test cleanup failure and interrupted-worker paths: never silently return success, never delete a caller directory or live source, and preserve evidence. If state cannot be safely deleted, report the remaining external sandbox path.
+- [x] Test function inventory reports an uncalled function as unexercised rather than claiming full coverage. Preserve separate unsupported scheduled/live/authentication paths.
+- [x] Implement coordinator, bounded worker lifecycle, per-row diagnostics, finally cleanup and Markdown summary. Run targeted runtime/guard tests to green and exercise the documented single command.
 
 ## Task 6: Approved Demo-Seeding Guard, Separate Commit
 
 **Interfaces**
 - Preserve `main(reset: bool)` compatibility while adding `main(reset: bool, *, live_ledger: bool = False) -> None` in seed_demo. CLI accepts `--live-ledger` as an explicit override; guard runs before reset/unlink/Ledger construction.
 
-- [ ] Add tests that unset and checkout-contained CC_VAR reject before touching a sentinel live fixture DB; `--reset` cannot bypass the guard. A safe external sandbox permits seeding. Cover resolved symlinks and the explicit live override using only disposable fixture paths.
-- [ ] Run `.venv/bin/python -m pytest -q cc_sdk/tests/test_seed_demo_guard.py` and observe that current seed_demo does not refuse unsafe paths. Implement the guard, rerun to green, and document kill_drill's existing live-ledger behavior without changing its execution.
-- [ ] Commit only the safety helper if shared, `scripts/seed_demo.py`, `scripts/kill_drill.py`, and its tests under a separate message: `fix: require explicit live-ledger demo seeding`.
+- [x] Add tests that unset and checkout-contained CC_VAR reject before touching a sentinel live fixture DB; `--reset` cannot bypass the guard. A safe external sandbox permits seeding. Cover resolved symlinks and the explicit live override using only disposable fixture paths.
+- [x] Run `.venv/bin/python -m pytest -q cc_sdk/tests/test_seed_demo_guard.py` and observe that current seed_demo does not refuse unsafe paths. Implement the guard, rerun to green, and document kill_drill's existing live-ledger behavior without changing its execution.
+- [x] Commit only the safety helper if shared, `scripts/seed_demo.py`, `scripts/kill_drill.py`, and its tests under a separate message: `fix: require explicit live-ledger demo seeding`.
 
 ## Task 7: Full Verification and Portable Handoff
 

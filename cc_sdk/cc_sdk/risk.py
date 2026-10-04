@@ -8,21 +8,23 @@ from zoneinfo import ZoneInfo
 from .control import Control
 from .ledger import Ledger, now
 from .manifest import PORTFOLIO_DEFAULTS, BotManifest
+from .options import CONTRACT_MULTIPLIER, contract_multiplier
 
 ET = ZoneInfo("America/New_York")
 
 
 @dataclass
 class Order:
-    side: str                 # BUY | SELL | SELL_SHORT | BUY_TO_COVER
+    side: str                 # BUY | SELL | SELL_SHORT | BUY_TO_COVER | BUY_TO_OPEN | SELL_TO_OPEN | SELL_TO_CLOSE | BUY_TO_CLOSE
     qty: int
     type: str                 # MOC | MKT | LMT | STOP
     symbol: str
-    ref_price: float          # last quote used for sizing / collar
+    ref_price: float          # last quote used for sizing / collar (per share for options)
     quote_age_s: float = 0.0
     reduces_risk: bool = False
     limit_price: float | None = None
     stop_price: float | None = None
+    multiplier: int = 1       # 100 for an option contract; the engine also infers it from an OCC symbol
 
 
 @dataclass
@@ -84,8 +86,9 @@ class Risk:
             self._record(o, r)
             return r
 
-        # 3. size, position, exposure
-        notional = abs(o.qty) * o.ref_price
+        # 3. size, position, exposure. Options count at x100 even if the caller forgot to say so (fail closed).
+        mult = max(int(o.multiplier or 1), contract_multiplier(o.symbol))
+        notional = abs(o.qty) * o.ref_price * mult
         if o.qty <= 0:
             return fail("qty", "quantity must be positive")
         if o.qty > int(self._lim("max_order_qty")):
@@ -150,6 +153,45 @@ class Risk:
         r = RiskResult(True, checks, "ok")
         self._record(o, r)
         return r
+
+    def pre_trade_spread(self, legs: list[Order], net_debit: float) -> RiskResult:
+        """A multi-leg options order. Closing (every leg risk-reducing): each leg is audited and always allowed.
+        Opening: total debit within max_premium_usd, then EVERY leg must pass pre_trade; one failing leg rejects the
+        whole spread and the legs that had passed are recorded as rejected too, so nothing is half-sent."""
+        if not legs:
+            return RiskResult(False, [{"check": "legs", "ok": False, "detail": "no legs"}], "legs: spread has no legs")
+        if all(o.reduces_risk for o in legs):
+            closing: list[dict[str, Any]] = []
+            for o in legs:
+                closing += self.pre_trade(o).checks
+            return RiskResult(True, closing, "ok (risk-reducing)")
+
+        qty = max(abs(o.qty) for o in legs)
+
+        def reject_all(name: str, detail: str) -> RiskResult:
+            r = RiskResult(False, [{"check": name, "ok": False, "detail": detail}], f"{name}: {detail}")
+            for o in legs:
+                self._record(o, r)
+            return r
+
+        if net_debit <= 0:
+            return reject_all("net_debit", f"debit spread needs a positive debit, got {net_debit:.2f}")
+        premium = net_debit * qty * CONTRACT_MULTIPLIER
+        cap = float(self._lim("max_premium_usd"))
+        if premium > cap:
+            return reject_all("max_premium_usd", f"${premium:,.0f} > ${cap:,.0f}")
+        checks: list[dict[str, Any]] = [{"check": "max_premium_usd", "ok": True, "detail": f"${premium:,.0f}"}]
+        passed_legs: list[Order] = []
+        for o in legs:
+            r = self.pre_trade(o)                     # records its own rejection
+            checks += r.checks
+            if not r.ok:
+                why = RiskResult(False, checks, f"spread rejected: leg {o.symbol.strip()} failed — {r.reason}")
+                for p in passed_legs:
+                    self._record(p, why)
+                return RiskResult(False, checks, r.reason)
+            passed_legs.append(o)
+        return RiskResult(True, checks, "ok")
 
     def _record(self, o: Order, r: RiskResult) -> None:
         """Rejected orders are written immediately (nothing was sent). Approved ones are written by run.order_sent()."""

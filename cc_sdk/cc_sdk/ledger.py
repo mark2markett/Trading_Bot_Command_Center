@@ -185,8 +185,11 @@ class Ledger:
         return float(r["equity"]) if r else None
 
     def gross_exposure_usd(self) -> float:
-        rows = self.q("SELECT qty, avg_price FROM positions WHERE qty != 0")
-        return float(sum(abs(r["qty"]) * (r["avg_price"] or 0.0) for r in rows))
+        """Option positions are stored per share; count them at x100 (M7.2) so exposure is never understated."""
+        from .options import contract_multiplier
+
+        rows = self.q("SELECT symbol, qty, avg_price FROM positions WHERE qty != 0")
+        return float(sum(abs(r["qty"]) * (r["avg_price"] or 0.0) * contract_multiplier(r["symbol"] or "") for r in rows))
 
     def orders_today(self, bot_id: str, day_prefix: str, symbol: str | None = None) -> list[sqlite3.Row]:
         if symbol:

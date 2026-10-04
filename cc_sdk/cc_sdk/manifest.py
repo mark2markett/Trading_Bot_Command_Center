@@ -16,6 +16,7 @@ DEFAULT_LIMITS: dict[str, Any] = {
     "max_consecutive_losses": 4,
     "price_collar_pct": 0.015,
     "stale_quote_s": 90,
+    "max_premium_usd": 5_000,      # options: most one entry may pay in total debit (M7.2)
 }
 
 PORTFOLIO_DEFAULTS: dict[str, Any] = {

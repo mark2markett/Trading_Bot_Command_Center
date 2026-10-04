@@ -21,6 +21,9 @@ export function BotPage() {
   const live = b.equity_series.map(e => e[1])
   const act = (action: string, note = '') => api.control(`bot/${id}/${action}`, { note }).then(() => q.refetch())
   const limits = b.limits
+  const isOptions = /options/i.test(b.instrument || '')
+  const hasBand = b.expected.median.length > 0   // server sends no band unless the backtest has measured stats
+  const btSource = (b.backtest as Record<string, unknown> | null)?.source as string | undefined
   const posUsd = ps.reduce((a, p) => a + Math.abs(p.qty) * (p.avg_price || 0) * contractMultiplier(p.symbol), 0)
   const unreal = pos && pos.avg_price && sig.price ? (sig.price / pos.avg_price - 1) : null
   return (
@@ -74,7 +77,7 @@ export function BotPage() {
             {'rsi2' in sig && <div className="sub">{(sig.rsi2 ?? 99) < 10 ? 'Entry condition met' : 'Needs sharp down closes to reach the entry zone'}</div>}
           </>}
         </Tile>
-        <Tile label="Allocated equity" value={money(b.equity ?? limits.max_position_usd)} sub={`Max position ${money(limits.max_position_usd)} · ${limits.max_orders_per_day} orders/day · Schwab`} />
+        <Tile label="Allocated equity" value={money(b.equity ?? limits.max_position_usd)} sub={`${isOptions ? `Max premium ${money(limits.max_premium_usd)} per spread` : `Max position ${money(limits.max_position_usd)}`} · ${limits.max_orders_per_day} orders/day · Schwab`} />
         <Tile label="Health">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8, fontSize: 13 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Heartbeat {b.heartbeat?.run}</span><span className={b.heartbeat?.ok ? 'pos' : 'neg'}>{b.heartbeat ? `${b.heartbeat.ok ? '✓' : '✗'} ${agoMin(b.heartbeat.at)} min ago` : 'never'}</span></div>
@@ -89,13 +92,14 @@ export function BotPage() {
         <div className="main panel flat">
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 8 }}>
             <h2>Live vs backtest expectation</h2>
-            <div className="mut" style={{ display: 'flex', gap: 14, fontSize: 12, marginLeft: 'auto' }}>
+            {hasBand && <div className="mut" style={{ display: 'flex', gap: 14, fontSize: 12, marginLeft: 'auto' }}>
               <span><span style={{ display: 'inline-block', width: 14, height: 3, background: 'var(--fg)', verticalAlign: 'middle', marginRight: 6 }} />live / paper</span>
               <span><span style={{ display: 'inline-block', width: 14, height: 3, background: 'var(--accent)', verticalAlign: 'middle', marginRight: 6 }} />backtest median</span>
               <span><span style={{ display: 'inline-block', width: 14, height: 10, background: 'var(--band)', verticalAlign: 'middle', marginRight: 6 }} />5–95% band</span>
-            </div>
+            </div>}
           </div>
-          <EquityBand live={live} expected={b.expected} />
+          {hasBand ? <EquityBand live={live} expected={b.expected} />
+            : <div className="empty" style={{ textAlign: 'left' }}><b>No backtest of this exact trade — nothing to compare against yet.</b>{btSource && <><br /><span className="mut">{btSource}</span></>}<br /><span className="mut">Judged instead by its own paper record (≥ 20 closed trades vs the same-delta shares trade).</span></div>}
           <div className="stats">
             <div className="stat"><div className="lbl">Trades</div><div>{b.parity_detail.trades} <span className="mut">/ ~{b.backtest?.trades_per_year ?? '?'} yr</span></div></div>
             <div className="stat"><div className="lbl">Win rate</div><div className={b.parity_detail.verdict === 'drift' ? 'warn' : 'pos'}>{b.parity_detail.live.win_rate != null ? pct(b.parity_detail.live.win_rate, 0) : '—'} <span className="mut">/ {pct(b.backtest?.win_rate, 0)}</span></div></div>

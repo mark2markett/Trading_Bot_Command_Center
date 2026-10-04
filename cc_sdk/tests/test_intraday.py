@@ -208,3 +208,23 @@ def test_replay_clock_stamps_records_and_isolates_risk_counters(tmp_path):
         set_clock(None)
     assert bot.L.one("SELECT COUNT(*) n FROM trades")["n"] == 1
     assert bot.L.one("SELECT reason FROM decisions WHERE action='NONE' ORDER BY id DESC LIMIT 1")["reason"].startswith("rejected: duplicate")
+
+
+def test_cli_replay_never_writes_the_live_ledger(tmp_path, monkeypatch):
+    """`bot.py replay` runs in a throwaway ledger: its trades are reported, but never enter the live paper record
+    (a 2026-10-03 replay put a fake SPY trade into gap_go's paper history)."""
+    from cc_sdk import intraday_cli
+    from cc_sdk.ledger import Ledger
+
+    var = tmp_path / "var"
+    (var / "control").mkdir(parents=True)
+    monkeypatch.setenv("CC_VAR", str(var))
+    feed = ReplayFeed({"SPY": mk_bars(DAY, gap_up_day())}, {"SPY": daily_history(DAY)})
+    monkeypatch.setattr(intraday_cli, "replay_feed", lambda *a: feed)
+    m = BotManifest(id="t_live", name="T", version="0", strategy_line="", instrument="SPY", mode="paper",
+                    limits={"max_position_usd": 1_000_000, "max_order_qty": 100_000, "max_orders_per_day": 10})
+    out = intraday_cli.replay_isolated(m, GapGoRules(70, 30), "SPY", "X", DAY.date().isoformat())
+    assert len(out["trades"]) == 1                       # the replay itself still trades and reports
+    live = Ledger(var / "cc.db")
+    for t in ("trades", "orders", "fills", "decisions", "heartbeats"):
+        assert live.one(f"SELECT COUNT(*) n FROM {t}")["n"] == 0, t

@@ -180,19 +180,23 @@ def heartbeat_watch(L: Ledger, now: datetime | None = None) -> list[str]:
 
 
 def token_days_left(bots_dir: Path | None = None) -> dict[str, Any]:
-    """Schwab refresh tokens die after 7 days. We only look at the token file's mtime; never its contents."""
+    """Schwab refresh tokens die after 7 days. Issue time comes from the SDK's `.issued` sidecar (no secret in it);
+    since the broker design (M6.8) there is normally NO token file on this machine, only the sidecar. A legacy
+    token file without a sidecar falls back to its mtime; its contents are never read."""
     bots_dir = bots_dir or (var_dir().parent / "bots")
     newest = None
     for p in [var_dir() / "schwab_token.json", *bots_dir.glob("*/schwab_token.json")]:
-        if not p.exists():
-            continue
         side = Path(str(p) + ".issued")   # written by the SDK: issue time only, no secret
+        if not p.exists() and not side.exists():
+            continue
         try:
             import json
 
             m = datetime.fromtimestamp(int(json.loads(side.read_text())["creation_timestamp"]), tz=timezone.utc) if side.exists() \
                 else datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
         except Exception:  # noqa: BLE001
+            if not p.exists():
+                continue   # corrupt sidecar and no legacy token file: nothing trustworthy to date it from
             m = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
         newest = m if newest is None or m > newest else newest
     if newest is None:

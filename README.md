@@ -37,17 +37,21 @@ Then open http://127.0.0.1:8585. The Fleet page answers three questions in five 
 (degraded rows, missed heartbeats), is anything bleeding (day P&L, drawdown), can I stop it (KILL ALL, always
 top right).
 
-### Weekly: Schwab re-auth
-Schwab refresh tokens expire after 7 days. The header chip shows days left (from the token file's modification
-time; the server never reads the token). Under 2 days triggers a page alert. **One token serves the whole fleet**
-(`var\schwab_token.json`): run `python bot.py auth` in any one bot folder, log in once, done. Every bot and
-`research\schwab_dump.py` read the same file. (A bot that uses a different Schwab app can set `TOKEN_PATH` in its
-`.env` to keep its own.) `python bot.py check` proves the token works with one quote and today's minute-bar count.
+### Weekly: Schwab re-auth (done in M2M, not here)
+Schwab refresh tokens expire after 7 days. **This fleet never logs into Schwab and never holds a refresh token or the
+app's Client Secret.** M2M (`mark2markets.com`) owns the one Schwab login and its weekly re-authorization at
+`/trades/schwab-reauth`; the fleet asks M2M's broker (`GET /api/internal/schwab/access-token`) for a 30-minute access
+token whenever it needs one. Each bot's `.env.local` holds only `CC_TOKEN_BROKER_URL` and `CC_TOKEN_BROKER_SECRET`
+(gitignored). Revoking the fleet is one env-var change in Vercel; it never touches Schwab.
 
-**Reusing an existing login.** If another system already holds a valid Schwab refresh token for the same app, the fleet
-can run on it: same Client ID / Client Secret in each bot's `.env`, then `python bot.py auth --from-token` in any bot
-folder and paste the refresh token at the hidden prompt (`--issued <ISO time>` records when it was minted so the days-left
-chip is right). Repeat when that system re-authenticates. A browser `auth` here instead mints a second token for the app.
+The header chip shows days left for M2M's refresh token, taken from the non-secret sidecar `var\schwab_token.json.issued`
+that the SDK writes from the broker's `refresh_issued_at`. Under 2 days triggers a page alert — that is M2M's re-auth
+coming due. `python bot.py check` in any bot folder proves the brokered token works with one quote and today's
+minute-bar count. `python bot.py auth` no longer exists (exit 2 with an explanation).
+
+Why not share the refresh token (the M6.7 design): Schwab rotates the refresh token on refresh, so two systems
+refreshing the same token race each other and one goes dead (`invalid_grant`, 2026-10-03). Design record:
+m2m-platform `docs/SCHWAB-ACCESS-TOKEN-BROKER-SPEC-2026-10-03.md`.
 
 ### Early-close days
 On 1:00 pm closes (day after Thanksgiving, Christmas Eve, 7/3) the server posts a reminder the day before.

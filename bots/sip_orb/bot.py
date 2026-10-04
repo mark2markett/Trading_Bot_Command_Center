@@ -41,9 +41,15 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "session":
         from cc_sdk.schwab_feed import SchwabFeed
 
+        try:  # .env.local holds CC_TOKEN_BROKER_URL / CC_TOKEN_BROKER_SECRET (this branch bypasses intraday_cli.main)
+            from dotenv import load_dotenv
+
+            load_dotenv(HERE / ".env.local", override=True)
+        except ImportError:
+            pass
         bot = Bot(MANIFEST)
         with bot.run("session"):
-            SessionRunner(bot, SchwabFeed.from_env(HERE), SipOrbRules(), [], risk_pct=0.01,
+            SessionRunner(bot, SchwabFeed.from_broker(HERE), SipOrbRules(), [], risk_pct=0.01,
                           universe_fn=lambda now: universe(now, TOP_N)).loop()
     else:
         main(MANIFEST, SipOrbRules, [], HERE, replay_map={})

@@ -1,7 +1,7 @@
 """Pull 1-minute regular-hours bars from Schwab into var/data/<SYMBOL>_1m_rth.parquet, in the harness's format.
 Appends to and de-duplicates against an existing file, so running it weekly accumulates history past Schwab's lookback.
 
-Usage (from a bot folder that has Schwab credentials in .env, e.g. bots/gap_go_bot):
+Usage (from a bot folder whose .env.local has CC_TOKEN_BROKER_URL / CC_TOKEN_BROKER_SECRET, e.g. bots/gap_go_bot):
     python ..\\..\\research\\schwab_dump.py SPY QQQ IWM [--days 180]
 Then:  python -m research.run_all --symbols SPY,QQQ,IWM
 Schwab's minute history reaches back a limited number of months; the script walks backwards in 7-day windows and stops
@@ -10,7 +10,6 @@ after three consecutive empty windows. Rate limit: ~120 requests/min; this scrip
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 from datetime import datetime, timedelta
@@ -21,26 +20,25 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "cc_sdk"))
-from cc_sdk.ledger import token_path  # noqa: E402
+from cc_sdk.schwab_feed import SchwabFeed  # noqa: E402
 
 ET = ZoneInfo("America/New_York")
 OUT = ROOT / "var" / "data"
 
 
 def client():
+    """Brokered Schwab session: access tokens come from M2M, no Schwab credentials on this machine."""
     try:
         from dotenv import load_dotenv
 
         load_dotenv(Path.cwd() / ".env")
+        load_dotenv(Path.cwd() / ".env.local", override=True)
     except ImportError:
         pass
-    from schwab.auth import easy_client
-
-    missing = [k for k in ("SCHWAB_API_KEY", "SCHWAB_APP_SECRET", "SCHWAB_CALLBACK_URL") if not os.getenv(k)]
-    if missing:
-        raise SystemExit(f"run from a bot folder whose .env has Schwab credentials; missing {', '.join(missing)}")
-    return easy_client(api_key=os.environ["SCHWAB_API_KEY"], app_secret=os.environ["SCHWAB_APP_SECRET"],
-                       callback_url=os.environ["SCHWAB_CALLBACK_URL"], token_path=str(token_path(Path.cwd())))
+    try:
+        return SchwabFeed.from_broker(Path.cwd()).c
+    except RuntimeError as e:
+        raise SystemExit(f"run from a bot folder with broker config in .env.local: {e}") from e
 
 
 def fetch(c, symbol: str, days: int) -> pd.DataFrame:

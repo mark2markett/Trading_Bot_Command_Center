@@ -38,3 +38,22 @@
   (file mtime was a wrong signal for days-left).
 - **All Command Center bots are paper.** No intraday code path places an order; Schwab is data only. The daily bot's live
   path stays behind MODE=live plus an explicit LIVE_CONFIRM.
+
+## M6.8 — brokered Schwab access tokens (2026-10-03)
+
+- **Premise correction.** The M6/M6.7 entry above says Schwab "does not rotate [the refresh token] when access tokens
+  are minted". M2M's own `schwabService.ts` documents the opposite (single-flight guard exists because Schwab ROTATES
+  on refresh), and the first real fleet call on the shared copy failed with `invalid_grant`. Sharing one refresh token
+  between two independent refreshers is unsafe regardless of which behaviour Schwab shows on a given day.
+- **The fleet holds no Schwab credential.** `SchwabFeed.from_broker` asks M2M's `GET /api/internal/schwab/access-token`
+  (dedicated `CC_TOKEN_BROKER_SECRET`, flag-gated on M2M) for a 30-minute access token and calls Schwab's market-data
+  API directly. `from_env`, `from_refresh_token` and `python bot.py auth` are removed; `check` and `session` use the broker.
+  `research/schwab_dump.py` uses the same session. Only M2M refreshes; Mark's existing weekly re-auth covers both systems.
+- **Data only, pinned.** `_BrokerSession` implements exactly three market-data reads and no `/trader/v1` method;
+  `cc_sdk/tests/test_schwab_feed.py` asserts the absence. Residual risk stated in the spec §5: a Schwab access token is
+  app-scoped and could reach order endpoints; the boundary is the absence of such code here plus revocability of the
+  broker secret, not a Schwab-enforced scope. The hard boundary would be a separate Schwab app; owner chose this path.
+- **Days-left from the sidecar.** No token file exists on this machine any more; `riskd.token_days_left` reads
+  `var/schwab_token.json.issued` on its own (it previously required the token file to exist).
+- Design: m2m-platform `docs/SCHWAB-ACCESS-TOKEN-BROKER-SPEC-2026-10-03.md`; PR-A (M2M route) = m2m-platform #1223.
+

@@ -60,7 +60,7 @@ def run_replay(bot: Bot, rules: Rules, symbol: str, parquet_symbol: str, date: s
 
 def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[str], bot_dir: Path, replay_map: dict[str, str],
          risk_pct: float = 0.01) -> None:
-    try:  # .env.local overrides .env and is the place for values you don't want in the main file (e.g. SCHWAB_REFRESH_TOKEN)
+    try:  # .env.local overrides .env and holds the broker secret (CC_TOKEN_BROKER_SECRET); never a Schwab credential
         from dotenv import load_dotenv
 
         load_dotenv(bot_dir / ".env.local", override=True)
@@ -68,28 +68,20 @@ def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[s
         pass
     bot = Bot(manifest)
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
-    if cmd in ("auth", "check"):
+    if cmd == "auth":
+        # The fleet no longer logs into Schwab or holds a refresh token. Access tokens come from M2M's broker
+        # (CC_TOKEN_BROKER_URL / CC_TOKEN_BROKER_SECRET in this bot's .env.local). See schwab_feed.py.
+        print(json.dumps({"ok": False, "error": "auth was removed: this fleet gets Schwab access tokens from M2M's broker; "
+                                               "set CC_TOKEN_BROKER_URL and CC_TOKEN_BROKER_SECRET in .env.local, then run check"}))
+        sys.exit(2)
+    if cmd == "check":
         from .schwab_feed import SchwabFeed
 
-        if cmd == "auth" and "--from-token" in sys.argv:
-            # Share a refresh token minted by another system (M2M). Pasted at a hidden prompt; never echoed or logged.
-            import getpass
-            import os
-
-            # Prefer an env var set in the same shell ($env:SCHWAB_REFRESH_TOKEN = Read-Host ...) — Windows consoles often
-            # swallow pastes into hidden prompts. Fall back to the hidden prompt.
-            tok = os.getenv("SCHWAB_REFRESH_TOKEN") or getpass.getpass("Paste the current Schwab refresh token (input hidden): ")
-            issued = None
-            if "--issued" in sys.argv:
-                issued = datetime.fromisoformat(sys.argv[sys.argv.index("--issued") + 1]).astimezone(ET)
-            feed = SchwabFeed.from_refresh_token(bot_dir, tok, issued)
-        else:
-            feed = SchwabFeed.from_env(bot_dir)   # no token yet -> schwab-py opens the browser login and writes the shared token
-        print(json.dumps({"ok": True, **feed.check(symbols[0] if symbols else "SPY")}, indent=2))
+        print(json.dumps({"ok": True, **SchwabFeed.from_broker(bot_dir).check(symbols[0] if symbols else "SPY")}, indent=2))
     elif cmd == "session":
         from .schwab_feed import SchwabFeed
 
-        feed = SchwabFeed.from_env(bot_dir)
+        feed = SchwabFeed.from_broker(bot_dir)
         with bot.run("session"):
             SessionRunner(bot, feed, make_rules(), symbols, risk_pct=risk_pct).loop()
     elif cmd == "replay":

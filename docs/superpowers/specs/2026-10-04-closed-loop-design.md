@@ -1,6 +1,6 @@
 # Closed-loop harness design
 
-Status: proposed for owner review. No harness implementation has begun.
+Status: approved by Mark on 2026-10-04. No harness implementation has begun.
 
 ## Purpose and source
 

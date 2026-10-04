@@ -95,3 +95,53 @@ def parse_schwab_chain(payload: dict[str, Any]) -> list[OptionQuote]:
 
 def now_epoch() -> float:
     return datetime.now(timezone.utc).timestamp()
+
+
+# ---- paper fills (M7.3) -------------------------------------------------------------------------------------------
+SLIP_FRAC = 0.25          # fill at mid +/- 25% of the bid-ask spread, always against us
+MAX_SPREAD_PCT = 0.15     # refuse a leg whose bid-ask spread is wider than 15% of mid
+MAX_QUOTE_AGE_S = 90.0
+
+
+def paper_fill_price(q: OptionQuote, *, buying: bool, now: float | None = None, slip_frac: float = SLIP_FRAC,
+                     max_spread_pct: float = MAX_SPREAD_PCT, max_age_s: float = MAX_QUOTE_AGE_S) -> tuple[float | None, str | None]:
+    """(price per share, None) or (None, why it would not fill). Never fills on a zero bid, a crossed or locked
+    market, a spread too wide to price honestly, or a stale quote."""
+    now = now_epoch() if now is None else now
+    if q.bid <= 0:
+        return None, f"{q.occ.strip()}: zero bid"
+    if q.ask <= q.bid:
+        return None, f"{q.occ.strip()}: crossed or locked market ({q.bid:.2f}/{q.ask:.2f})"
+    if q.spread / q.mid > max_spread_pct:
+        return None, f"{q.occ.strip()}: spread too wide ({q.spread / q.mid:.0%} of mid > {max_spread_pct:.0%})"
+    age = now - q.quote_time
+    if age > max_age_s:
+        return None, f"{q.occ.strip()}: quote {age:.0f}s old > {max_age_s:.0f}s"
+    px = q.mid + slip_frac * q.spread if buying else q.mid - slip_frac * q.spread
+    return round(px, 4), None
+
+
+@dataclass
+class SpreadFill:
+    ok: bool
+    prices: list[float]
+    net_debit: float = 0.0
+    reason: str = ""
+
+
+def fill_spread(legs: list[tuple[OptionQuote, bool]], *, now: float | None = None, **kw: float) -> SpreadFill:
+    """All-or-none: every leg must fill or none does. legs = [(quote, buying)]. net_debit = paid minus received."""
+    prices: list[float] = []
+    for quote, buying in legs:
+        px, why = paper_fill_price(quote, buying=buying, now=now, **kw)
+        if px is None:
+            return SpreadFill(False, [], 0.0, f"spread not filled: {why}")
+        prices.append(px)
+    net = sum(px if buying else -px for px, (_, buying) in zip(prices, legs, strict=True))
+    return SpreadFill(True, prices, round(net, 4))
+
+
+def spread_pnl(*, entry: list[float], exit: list[float], signs: list[int], qty: int) -> float:  # noqa: A002
+    """Dollar P&L of `qty` spreads. signs: +1 long leg, -1 short leg. Prices are per share; x100 per contract."""
+    per_share = sum(s * (x - e) for e, x, s in zip(entry, exit, signs, strict=True))
+    return round(per_share * qty * CONTRACT_MULTIPLIER, 2)

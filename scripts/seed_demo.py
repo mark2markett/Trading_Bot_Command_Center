@@ -1,21 +1,25 @@
 """
 Seed demo data into var/cc.db so the dashboard can be reviewed before real bots have history.
 Clearly fictional: 5 bots, equity series, trades, fills, alerts, one degraded bot, one correlated pair.
-Run:  python scripts/seed_demo.py [--reset]
+Run: CC_VAR=<external sandbox> python scripts/seed_demo.py [--reset]
+Writing to the repository's ledger requires the explicit --live-ledger override.
 """
 from __future__ import annotations
 
 import json
+import os
 import random
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "cc_sdk"))
 from cc_sdk.ledger import Ledger, db_path  # noqa: E402
 
 from cc_sdk import Bot, BotManifest  # noqa: E402
+from scripts.closed_loop_guard import validate_sandbox  # noqa: E402
 
 random.seed(7)
 NOW = datetime.now(timezone.utc)
@@ -25,7 +29,9 @@ def iso(d: datetime) -> str:
     return d.isoformat(timespec="seconds")
 
 
-def main(reset: bool) -> None:
+def main(reset: bool, *, live_ledger: bool = False) -> None:
+    if not live_ledger:
+        validate_sandbox(ROOT, os.getenv("CC_VAR"))
     p = db_path()
     if reset and p.exists():
         p.unlink()
@@ -129,4 +135,4 @@ def main(reset: bool) -> None:
 
 
 if __name__ == "__main__":
-    main("--reset" in sys.argv)
+    main("--reset" in sys.argv, live_ledger="--live-ledger" in sys.argv)

@@ -5,6 +5,8 @@ Kill-switch drill. Run monthly. Exercises the real kill path against PAPER bots 
   3. assert: audit row written before the KILL flag; flatten flags exist; bots marked killed; page alert raised
   4. re-arm, record a 'drill' controls row with timing
 Requires the server running at 127.0.0.1:8585.
+This is an operational live-ledger drill: by default it writes var/cc.db and
+controls on the running server. Do not use it as the closed-loop sandbox test.
 """
 from __future__ import annotations
 

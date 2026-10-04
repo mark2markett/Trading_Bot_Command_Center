@@ -63,6 +63,8 @@ def _bot_summary(b: dict[str, Any], par: dict[str, Any]) -> dict[str, Any]:
         "parity": {"verdict": par.get("verdict", "n/a"), "sentence": par.get("sentence", "")},
         "heartbeat": hb, "flags": {"killed": c.killed(), "paused": c.entries_paused(), "flatten": c.flatten_requested()},
         "rejected_24h": db.rejected_orders_24h(L(), b["id"]),
+        # Live Greeks of open option spreads, written by the bot (M7.4). The server reads; it never calls a vendor.
+        "options": db.kv_prefix(L(), f"optlive:{b['id']}:"),
     }
 
 

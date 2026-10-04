@@ -108,6 +108,12 @@ def kv_get(L: Ledger, key: str, default: Any = None) -> Any:
     return json.loads(r["value_json"]) if r else default
 
 
+def kv_prefix(L: Ledger, prefix: str) -> list[Any]:
+    """All kv values whose key starts with `prefix` (exact prefix match, not LIKE: `_` in bot ids is literal)."""
+    return [json.loads(r["value_json"]) for r in L.q("SELECT key, value_json FROM kv ORDER BY key")
+            if str(r["key"]).startswith(prefix)]
+
+
 def kv_set(L: Ledger, key: str, value: Any) -> None:
     L.x("INSERT INTO kv(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
         (key, json.dumps(value, default=str), now_iso()))

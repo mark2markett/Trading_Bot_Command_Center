@@ -20,6 +20,8 @@ from .intraday import CLOSE_MIN, ET, Feed, OpenPos, SessionRunner, Signal
 from .ledger import now_iso
 from .options import CONTRACT_MULTIPLIER, OptionQuote, fill_spread, intrinsic, paper_fill_price, spread_pnl
 
+LIVE_EVERY_S = 60.0       # refresh the dashboard's live Greeks at most once a minute per open spread
+
 
 class ChainFeed(Feed, Protocol):
     def chain(self, symbol: str, from_date: date, to_date: date, strike_count: int | None = 40) -> list[OptionQuote]: ...
@@ -62,10 +64,47 @@ class SpreadSessionRunner(SessionRunner):
         super().__init__(bot, feed, rules, symbols, **kw)
         self.cfeed = feed
         self.dte_min, self.dte_max, self.width_atr = dte_min, dte_max, width_atr
+        self._live_at: dict[str, float] = {}
 
     # ---- crash recovery: open spreads are remembered in kv, not reconstructed from leg rows ----
     def _kv_key(self, underlying: str) -> str:
         return f"spread:{self.bot.m.id}:{underlying}"
+
+    # ---- live Greeks for the dashboard (M7.4). The server never calls a vendor; it reads these kv rows. ----
+    def _live_key(self, underlying: str) -> str:
+        return f"optlive:{self.bot.m.id}:{underlying}"
+
+    def _record_live(self, pos: OpenSpread, long_q: OptionQuote | None, short_q: OptionQuote | None, now: datetime) -> None:
+        if long_q is None or short_q is None:
+            return
+        mult = CONTRACT_MULTIPLIER * pos.qty
+        value = long_q.mid - short_q.mid
+        rec = {"underlying": pos.symbol, "right": pos.right, "expiry": pos.expiry, "qty": pos.qty,
+               "legs": [o.strip() for o in pos.legs], "strikes": [long_q.strike, short_q.strike],
+               "dte": (date.fromisoformat(pos.expiry) - now.date()).days,
+               "delta_shares": round(((long_q.delta or 0.0) - (short_q.delta or 0.0)) * mult, 1),
+               "theta_usd_day": round(((long_q.theta or 0.0) - (short_q.theta or 0.0)) * mult, 2),
+               "value_usd": round(value * mult, 2), "cost_usd": round(pos.net_debit * mult, 2),
+               "unrealized_usd": round((value - pos.net_debit) * mult, 2), "updated_at": now_iso()}
+        self.bot.L.x("INSERT INTO kv(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET "
+                     "value_json=excluded.value_json, updated_at=excluded.updated_at",
+                     (self._live_key(pos.symbol), json.dumps(rec), now_iso()))
+        self._live_at[pos.symbol] = now.timestamp()
+
+    def _refresh_live(self, now: datetime) -> None:
+        for s, pos in list(self.open.items()):
+            if not isinstance(pos, OpenSpread) or now.timestamp() - self._live_at.get(s, 0.0) < LIVE_EVERY_S:
+                continue
+            try:
+                exp = date.fromisoformat(pos.expiry)
+                by_occ = {q.occ: q for q in self.cfeed.chain(s, exp, exp)}
+                self._record_live(pos, by_occ.get(pos.legs[0]), by_occ.get(pos.legs[1]), now)
+            except Exception:  # noqa: BLE001 — display data only; never let it disturb the session
+                self._live_at[s] = now.timestamp()
+
+    def step(self, now: datetime) -> None:
+        super().step(now)
+        self._refresh_live(now)
 
     def prepare(self, day: datetime) -> None:
         adopt, self.adopt_positions = self.adopt_positions, False     # the equity adopter would misread OCC legs
@@ -136,6 +175,7 @@ class SpreadSessionRunner(SessionRunner):
         self.bot.L.decision(self.bot.m.id, "session", {
             "symbol": s, "px": px, "stop": stop, "legs": [q.occ.strip() for q in (long_q, short_q)], "qty": qty,
             "net_debit": fill.net_debit, "net_delta": round(pos.net_delta, 3), "dte": (long_q.expiry - today).days}, "ENTER", sig.reason)
+        self._record_live(pos, long_q, short_q, now)
 
     # ---- exit ----
     def _exit(self, pos: OpenPos, px: float, age: float, reason: str) -> None:
@@ -187,6 +227,8 @@ class SpreadSessionRunner(SessionRunner):
                      (tid, self.bot.m.id, pos.symbol, pos.expiry, pos.right, json.dumps(pos.legs), pos.qty, pos.net_debit, net_credit,
                       pos.und_entry, px, pos.net_delta, pnl, share_equiv, "; ".join(how), now_iso()))
         self.bot.L.x("DELETE FROM kv WHERE key=?", (self._kv_key(pos.symbol),))
+        self.bot.L.x("DELETE FROM kv WHERE key=?", (self._live_key(pos.symbol),))
+        self._live_at.pop(pos.symbol, None)
         self.bot.L.decision(self.bot.m.id, "session", {"symbol": pos.symbol, "px": px, "pnl": pnl, "share_equiv": share_equiv,
                                                        "close": how}, "EXIT", reason)
         del self.open[pos.symbol]

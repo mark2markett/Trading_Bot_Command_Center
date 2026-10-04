@@ -1,4 +1,5 @@
 // Typed client over /api. Shapes mirror cc_server/api.py; kept hand-written and small on purpose.
+import type { SpreadLive } from './format'
 export type Verdict = 'within' | 'drift' | 'n/a'
 export type Status = 'running' | 'degraded' | 'paused' | 'killed'
 
@@ -9,6 +10,7 @@ export interface BotSummary {
   cadence: Record<string, string>; position: Position | null; positions: Position[]; day_pnl: number; drawdown: number; equity: number | null
   parity: { verdict: Verdict; sentence: string }; heartbeat: Heartbeat | null
   flags: { killed: boolean; paused: boolean; flatten: boolean }; rejected_24h: number
+  options?: SpreadLive[]   // live Greeks of open option spreads (M7.4)
 }
 export interface Alert { id: number; at: string; severity: 'page' | 'digest' | 'info'; bot_id: string | null; bot_name: string | null; kind: string; message: string; acknowledged_at: string | null }
 export interface Fill { id: number; at: string; qty: number; price: number; expected_price: number; slippage: number; side: string | null; type: string | null; symbol: string | null; bot_name: string | null }

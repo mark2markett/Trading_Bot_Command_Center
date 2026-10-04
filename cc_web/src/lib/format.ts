@@ -15,3 +15,20 @@ export const dtET = (iso: string | null | undefined) => (iso ? `${dateET(iso)} $
 export const agoMin = (iso: string | null | undefined) => (iso ? Math.round((Date.now() - new Date(iso).getTime()) / 60000) : null)
 export const tone = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'mut')
 export const usageTone = (ratio: number) => (ratio > 0.85 ? 'var(--neg)' : ratio > 0.6 ? 'var(--warn)' : 'var(--accent)')
+
+// ---- options (M7.4) ----
+const OCC = /^[A-Z.]{1,6} *\d{6}[CP]\d{8}$/
+/** True for an OCC option symbol (positions store option legs by OCC symbol, price per share). */
+export const isOcc = (symbol: string | null | undefined) => OCC.test(symbol ?? '')
+/** 100 for an option contract, 1 for shares. */
+export const contractMultiplier = (symbol: string | null | undefined) => (isOcc(symbol) ? 100 : 1)
+
+export interface SpreadLive {
+  underlying: string; right: 'C' | 'P'; expiry: string; qty: number; legs: string[]; strikes: number[]; dte: number
+  delta_shares: number; theta_usd_day: number; value_usd: number; cost_usd: number; unrealized_usd: number; updated_at: string
+}
+const signedInt = (v: number) => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v)).toLocaleString('en-US')
+/** One plain line a trader would say: "SPY call spread 570/575 ×19 · Δ +380 sh · θ −$13/day · 2 DTE". */
+export const spreadLine = (o: SpreadLive) =>
+  `${o.underlying} ${o.right === 'C' ? 'call' : 'put'} spread ${o.strikes.map(k => (Number.isInteger(k) ? k : k.toFixed(1))).join('/')} ×${o.qty}` +
+  ` · Δ ${signedInt(o.delta_shares)} sh · θ ${signedMoney(o.theta_usd_day)}/day · ${o.dte} DTE`

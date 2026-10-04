@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { BotSummary, Fleet } from '../lib/api'
 import { api } from '../lib/api'
-import { cents, dateET, money, pct, px, signedMoney, timeET, tone } from '../lib/format'
+import { cents, dateET, money, pct, px, signedMoney, spreadLine, timeET, tone } from '../lib/format'
 import { Dot, LimitBar, ModeBadge, Panel, Sparkline, Tile, statusTone } from '../components/ui'
 
 type Filter = 'all' | 'live' | 'paper' | 'pos'
@@ -112,6 +112,8 @@ function Heart({ b }: { b: BotSummary }) {
 
 function Pos({ b }: { b: BotSummary }) {
   const ps = (b.positions || []).filter(p => p.qty)
+  // Open option spreads: one plain line each (live delta, theta, days left), instead of raw OCC legs.
+  if (b.options?.length) return <>{b.options.map(o => <div key={o.underlying}>{spreadLine(o)}</div>)}</>
   if (ps.length > 1) return <>{ps.length} open · {ps.map(p => `${p.qty > 0 ? 'L' : 'S'} ${p.symbol}`).join(', ')}</>
   if (ps.length === 1) {
     const p = ps[0]

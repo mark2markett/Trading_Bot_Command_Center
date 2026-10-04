@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api, type BotDetail } from '../lib/api'
-import { agoMin, cents, dateET, dtET, money, pct, px, signedMoney, timeET, tone } from '../lib/format'
+import { agoMin, cents, contractMultiplier, dateET, dtET, money, pct, px, signedMoney, spreadLine, timeET, tone } from '../lib/format'
 import { ConfirmModal, Dot, LimitBar, ModeBadge, Panel, Tile, statusTone } from '../components/ui'
 import { EquityBand } from '../components/EquityBand'
 
@@ -21,7 +21,7 @@ export function BotPage() {
   const live = b.equity_series.map(e => e[1])
   const act = (action: string, note = '') => api.control(`bot/${id}/${action}`, { note }).then(() => q.refetch())
   const limits = b.limits
-  const posUsd = ps.reduce((a, p) => a + Math.abs(p.qty) * (p.avg_price || 0), 0)
+  const posUsd = ps.reduce((a, p) => a + Math.abs(p.qty) * (p.avg_price || 0) * contractMultiplier(p.symbol), 0)
   const unreal = pos && pos.avg_price && sig.price ? (sig.price / pos.avg_price - 1) : null
   return (
     <main>
@@ -52,6 +52,12 @@ export function BotPage() {
             <b>Crash stop</b><span className="mono">{px(b.stop_price)}</span></>}
             <b>Unrealized</b><span className={`mono ${unreal != null ? tone(unreal) : ''}`}>{pct(unreal, 2, true)}</span>
           </div>}
+          {(b.options || []).map(o => <div key={o.underlying} className="kv" style={{ marginTop: 8 }}>
+            <b>Spread</b><span>{spreadLine(o)}</span>
+            <b>Value</b><span className="mono">{money(o.value_usd)} · cost {money(o.cost_usd)}</span>
+            <b>Unrealized</b><span className={`mono ${tone(o.unrealized_usd)}`}>{signedMoney(o.unrealized_usd)}</span>
+            <b>Greeks as of</b><span className="mono mut">{timeET(o.updated_at)} ET</span>
+          </div>)}
           {b.flags.flatten && <div className="warn" style={{ fontSize: 12, marginTop: 8 }}>Flatten requested · executes on next run</div>}
         </Tile>
         <Tile label={`Signal · last ${intraday ? 'session event' : 'decide'} ${lastDecide ? timeET(lastDecide.at) + ' ET' : ''}`}>

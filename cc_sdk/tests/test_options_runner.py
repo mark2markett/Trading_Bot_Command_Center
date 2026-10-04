@@ -169,3 +169,26 @@ def test_report_says_when_the_spread_is_just_leverage():
     assert options_report(rows[:5])["verdict"].startswith("Too few trades")
     good = [{"spread_pnl": 90.0, "share_equiv_pnl": 50.0, "und_entry": 570, "und_exit": 572}] * 20
     assert options_report(good)["verdict"].startswith("Beating")
+
+
+def test_live_greeks_recorded_refreshed_and_removed(tmp_path):
+    import json as _json
+    bot, _ = mk(tmp_path)
+    feed = Feed()
+    r = SpreadSessionRunner(bot, feed, Rules(+1), ["SPY"], adopt_positions=False)
+    r.prepare(DAY)
+    run_to(r, feed, 10, 1)
+    key = "optlive:spread_t:SPY"
+    live = _json.loads(bot.L.one("SELECT value_json FROM kv WHERE key=?", (key,))["value_json"])
+    # 19 spreads, long 570C (delta 0.5, mid 1.00) / short 575C (delta 0.3, mid 0.50), paid 0.52
+    assert live["right"] == "C" and live["strikes"] == [570.0, 575.0] and live["qty"] == 19 and live["dte"] == 2
+    assert live["delta_shares"] == pytest.approx(0.2 * 100 * 19)
+    assert live["theta_usd_day"] == pytest.approx(0.0)          # fixture gives both legs the same theta
+    assert live["value_usd"] == pytest.approx(0.50 * 1900) and live["cost_usd"] == pytest.approx(0.52 * 1900)
+    assert live["unrealized_usd"] == pytest.approx(-0.02 * 1900)
+    feed.spot = 572.0
+    run_to(r, feed, 10, 3)                                        # > 60 s later: refreshed from a new chain
+    live2 = _json.loads(bot.L.one("SELECT value_json FROM kv WHERE key=?", (key,))["value_json"])
+    assert live2["value_usd"] == pytest.approx((2.80 - 0.70) * 1900)
+    run_to(r, feed, 15, 58)
+    assert bot.L.one("SELECT COUNT(*) n FROM kv WHERE key=?", (key,))["n"] == 0

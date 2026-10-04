@@ -46,6 +46,12 @@ and paper mode. It refuses inherited live mode and unsafe CC_VAR paths. It
 never uses the running server on 8585, reuses a listener on 8586, runs scheduled
 bot commands, sends live orders, or copies alert/credential files. It refuses
 a sandbox with a sibling `bots` folder that server controls could spawn.
+Internal worker/server entrypoints also require launcher-created ownership
+metadata and a matching run token; they cannot adopt or delete caller folders.
+Database/control aliases are refused. Python write/SQLite audit hooks run
+before bot/server imports, block supported writes outside the owned run, and
+retain operation-only evidence. Bytecode writes are disabled. This observes
+supported Python operations; it is not an OS-wide trace of native libraries.
 
 The loop exercises the actual five bot manifests and rules, risk checks,
 paper fills, SQLite ledger, built dashboard, confirmation controls, and bot
@@ -79,15 +85,17 @@ so those checks are **NOT COVERED** rather than claims about the Windows host.
 Real-feed checks use only already injected variables; they do not load `.env`
 or token files. Missing authentication is **NOT COVERED**. Shared-state Schwab
 authentication can rotate a token and write Supabase, so it is excluded from
-this isolated test. The supported token-broker path can use injected
-`CC_TOKEN_BROKER_URL`/`CC_TOKEN_BROKER_SECRET`; Polygon uses injected
-`POLYGON_API_KEY`. Never enter credentials in a report or Git. A failed actual
+this isolated test. The token-broker GET can also refresh remote authentication,
+so Schwab checks remain **NOT COVERED** even when broker variables are injected;
+the harness never contacts it. Polygon can use an injected `POLYGON_API_KEY`.
+Never enter credentials in a report or Git. A failed actual
 data request is a failure, not silently converted to missing coverage.
 
 ### Safe demo data
 
 `seed_demo.py` now refuses unset or checkout-contained CC_VAR before opening
-or resetting a database. To seed a disposable demo:
+or resetting a database, including database/control symlinks and junctions.
+To seed a disposable demo:
 
 ```powershell
 $previousVar = $env:CC_VAR

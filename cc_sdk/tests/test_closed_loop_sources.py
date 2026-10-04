@@ -53,6 +53,14 @@ def test_zero_signal_window_does_not_pass(context):
     assert not context.bots["gap_go"].L.one("SELECT 1 FROM trades WHERE bot_id='gap_go'")
 
 
+def test_empty_parquet_is_not_covered_even_without_datetime_index(context):
+    path = context.repo / "var/data/SPX500_USD_1m_rth.parquet"
+    path.parent.mkdir(parents=True)
+    pd.DataFrame(columns=["open", "high", "low", "close", "volume"]).to_parquet(path)
+    with pytest.raises(NotCovered, match="no dates available or searched"):
+        replay_one(context, "gap_go", "SPY", "SPX500_USD")
+
+
 def test_actual_replay_records_orders_fills_trades_without_changing_source(context):
     path = history(context, signal=True)
     before = path.read_bytes()

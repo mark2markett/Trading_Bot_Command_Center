@@ -13,7 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from scripts.closed_loop_guard import SandboxError, fingerprint, sandbox_env, validate_sandbox  # noqa: E402
+sys.dont_write_bytecode = True
+from scripts.closed_loop_guard import SandboxError, claim_run, fingerprint, owned_run, sandbox_env, validate_sandbox  # noqa: E402
 from scripts.closed_loop_report import FunctionInventory, NotCovered, Report  # noqa: E402
 
 
@@ -88,6 +89,7 @@ def run_worker(repo: Path, runtime: Path) -> int:
     runtime = validate_sandbox(repo, os.getenv("CC_VAR"))
     if runtime != expected or os.getenv("MODE") != "paper":
         raise SandboxError("Worker requires an explicit matching paper sandbox")
+    owned_run(repo, runtime)
     report = Report()
     context, server = None, None
     inventory = FunctionInventory(repo, runtime.parent / "imports")
@@ -137,8 +139,9 @@ def run_worker(repo: Path, runtime: Path) -> int:
     finally:
         if server:
             checked("Owned sandbox server stopped", lambda: (server.stop() or "Owned server exited; no live process was stopped"))
+        handles_closed = context is None
         if context:
-            checked("Bot ledger handles closed", lambda: (context.close() or "All owned bot SQLite handles closed"))
+            handles_closed = checked("Bot ledger handles closed", lambda: (context.close() or "All owned bot SQLite handles closed"))
         def after():
             report.after = fingerprint(repo / "var")
             assert report.before == report.after, "Live logical fingerprint changed; concurrent live activity is a possible cause, not an accepted exception"
@@ -152,11 +155,30 @@ def run_worker(repo: Path, runtime: Path) -> int:
             extra = {row["name"]: row["scenarios"] for row in json.loads(server_functions.read_text())}
             for row in report.functions:
                 row["scenarios"] = sorted(set(row["scenarios"]) | set(extra.get(row["name"], [])))
-        checked("Runtime cleanup", lambda: (remove_runtime(runtime) or "Sandbox ledger/control/logs removed; report/screenshots retained"))
+        def cleanup():
+            owned_run(repo, runtime)
+            if not handles_closed or (runtime.parent / "owned-server.json").exists():
+                raise SandboxError("Process/handle closure unverified; runtime retained")
+            remove_runtime(runtime)
+            return "Sandbox ledger/control/logs removed; report/screenshots retained"
+        checked("Runtime cleanup", cleanup)
         # Daily source copies contain state/logs; delete them after closing their handlers too.
         imports = runtime.parent / "imports"
         if imports.exists():
-            checked("Isolated source cleanup", lambda: (shutil.rmtree(imports) or "Copied source and daily-bot state/logs removed"))
+            def clean_imports():
+                owned_run(repo, runtime)
+                if not handles_closed or (runtime.parent / "owned-server.json").exists():
+                    raise SandboxError("Process/handle closure unverified; source copy retained")
+                shutil.rmtree(imports)
+                return "Copied source and daily-bot state/logs removed"
+            checked("Isolated source cleanup", clean_imports)
+        audit_paths = list(runtime.parent.glob("write-audit-*.jsonl"))
+        if audit_paths:
+            rows = [json.loads(line) for path in audit_paths for line in path.read_text().splitlines()]
+            def write_isolation():
+                assert not any(row["outcome"] == "blocked" for row in rows), "Outside-run write attempted and blocked; see write audit"
+                return f"{len(rows)} supported Python filesystem/SQLite operations observed in worker/server; native-library writes are not an OS-wide trace"
+            checked("Filesystem write isolation", write_isolation)
         report.write(runtime.parent / "report.md")
         print(report.summary)
         print(report.table())
@@ -171,6 +193,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.worker:
             runtime = validate_sandbox(ROOT, os.getenv("CC_VAR"))
+            root = owned_run(ROOT, runtime)
+            from scripts.closed_loop_audit import WriteAudit
+            WriteAudit(root, ROOT / "var").install()
             def interrupted(signum, frame):
                 raise KeyboardInterrupt
             previous = signal.signal(signal.SIGTERM, interrupted)
@@ -186,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
         root = Path(tempfile.mkdtemp(prefix="cc-closed-loop-"))
         runtime = root / "var"
         env = sandbox_env(ROOT, runtime)
+        env["CC_CLOSED_LOOP_OWNER"] = claim_run(ROOT, root)
+        os.environ["CC_CLOSED_LOOP_OWNER"] = env["CC_CLOSED_LOOP_OWNER"]
         process = subprocess.Popen([sys.executable, str(ROOT / "scripts/closed_loop.py"), "--worker"], cwd=ROOT, env=env)
         try:
             result = process.wait()
@@ -209,14 +236,16 @@ def main(argv: list[str] | None = None) -> int:
             report.add("Worker exit", "FAIL", f"Worker exited before final report (exit {result}); sandbox preserved at {root}")
             if runtime.exists():
                 try:
+                    owned_run(ROOT, runtime)
                     remove_runtime(runtime)
-                except OSError:
+                except (OSError, SandboxError):
                     report.add("Runtime cleanup", "FAIL", "Interrupted runtime could not be removed; external sandbox retained")
             imports = root / "imports"
             if imports.exists():
                 try:
+                    owned_run(ROOT, runtime)
                     shutil.rmtree(imports)
-                except OSError:
+                except (OSError, SandboxError):
                     report.add("Isolated source cleanup", "FAIL", "Interrupted source copy could not be removed; external sandbox retained")
             report.write(root / "report.md")
             print(report.summary)

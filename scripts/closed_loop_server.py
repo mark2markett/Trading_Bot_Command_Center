@@ -17,7 +17,8 @@ import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from scripts.closed_loop_guard import SandboxError, sandbox_env, validate_sandbox  # noqa: E402
+sys.dont_write_bytecode = True
+from scripts.closed_loop_guard import SandboxError, owned_run, sandbox_env, validate_sandbox  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:8586"
 
@@ -57,7 +58,7 @@ class OwnedServer:
             self.client.close()
             self.log.close()
             owner = self.runtime.parent / "owned-server.json"
-            if owner.exists() and json.loads(owner.read_text()).get("nonce") == self.nonce:
+            if self.process.poll() is not None and owner.exists() and json.loads(owner.read_text()).get("nonce") == self.nonce:
                 owner.unlink()
 
 
@@ -74,6 +75,7 @@ def start_server(repo: Path, runtime: Path) -> OwnedServer:
             raise SandboxError("Port 8586 is occupied; refusing to reuse an existing server") from exc
     env = sandbox_env(repo, runtime)
     runtime = validate_sandbox(repo, env["CC_VAR"])
+    owned_run(repo, runtime)
     nonce = uuid4().hex
     env["CC_CLOSED_LOOP_ID"] = nonce
     log = (runtime / "server-process.log").open("w", encoding="utf-8")
@@ -108,33 +110,65 @@ def stop_orphaned_server(runtime: Path) -> None:
     if not owner.exists():
         return
     expected = json.loads(owner.read_text())
-    if expected.get("runtime") != str(runtime.resolve()) or not isinstance(expected.get("pid"), int):
+    if expected.get("runtime") != str(runtime.resolve()) or not isinstance(expected.get("pid"), int) or expected["pid"] <= 0:
         raise SandboxError("Orphan server identity metadata invalid")
     with httpx.Client(base_url=BASE_URL, trust_env=False, timeout=1) as client:
         try:
             response = client.get("/__closed_loop_identity")
-        except httpx.TransportError:
-            return
+        except httpx.TransportError as exc:
+            raise SandboxError("Orphan identity/exit unavailable; server state retained") from exc
         if response.status_code != 200 or response.json() != expected:
             raise SandboxError("Orphan server identity mismatch; no process stopped")
         os.kill(expected["pid"], signal.SIGTERM)
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
-            try:
-                response = client.get("/__closed_loop_identity")
-            except httpx.TransportError:
+            if process_exited(expected["pid"]):
                 owner.unlink(missing_ok=True)
                 return
-            if response.json() != expected:
-                raise SandboxError("Server identity changed during orphan cleanup")
             time.sleep(0.1)
         raise SandboxError("Owned orphan server did not stop; sandbox preserved")
+
+
+def process_exited(pid: int) -> bool:
+    """Prove exit without sending a signal on Windows, where kill(pid, 0) is unsafe."""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        handle = kernel.OpenProcess(0x1000, False, pid)
+        if not handle:
+            return ctypes.get_last_error() == 87  # invalid PID; access denied is not proof
+        try:
+            kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            code = wintypes.DWORD()
+            if not kernel.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value != 259  # STILL_ACTIVE
+        finally:
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    stat = Path(f"/proc/{pid}/stat")
+    try:
+        return stat.read_text().rsplit(")", 1)[1].split()[0] == "Z" if stat.exists() else False
+    except (OSError, IndexError):
+        return False
 
 
 def serve() -> None:
     runtime = validate_sandbox(ROOT, os.getenv("CC_VAR"))
     if os.getenv("MODE") != "paper" or not os.getenv("CC_CLOSED_LOOP_ID"):
         raise SandboxError("Sandbox server requires a paper worker identity")
+    owned_run(ROOT, runtime)
+    from scripts.closed_loop_audit import WriteAudit
+    WriteAudit(runtime.parent, ROOT / "var", role="server").install()
     from cc_sdk.control import Control
     from cc_server.main import app
 

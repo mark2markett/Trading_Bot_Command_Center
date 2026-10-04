@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.closed_loop_guard import SandboxError, sandbox_env
+from scripts.closed_loop_guard import SandboxError, claim_run, sandbox_env
 from scripts.closed_loop_report import Report
 from scripts.closed_loop_scenarios import make_scenarios, run_equity, run_spread
 from scripts.closed_loop_server import start_server
@@ -30,6 +30,8 @@ def test_busy_port_is_refused_without_contacting_existing_server(tmp_path):
 @pytest.fixture
 def running(tmp_path, monkeypatch):
     runtime = tmp_path / "sandbox" / "var"
+    runtime.parent.mkdir()
+    monkeypatch.setenv("CC_CLOSED_LOOP_OWNER", claim_run(ROOT, runtime.parent))
     for key, value in sandbox_env(ROOT, runtime).items():
         monkeypatch.setenv(key, value)
     context = make_scenarios(ROOT, runtime)

@@ -79,12 +79,12 @@ def replay_one(context, bot_id: str, symbol: str, parquet_symbol: str, max_days:
     from cc_sdk.intraday_cli import run_replay
 
     df = pd.read_parquet(source)
+    if df.empty:
+        raise NotCovered("Historical parquet has no bars; no dates available or searched")
     if not isinstance(df.index, pd.DatetimeIndex) or df.index.tz is None:
         raise ValueError("History needs a timezone-aware DatetimeIndex")
     if not {"open", "high", "low", "close", "volume"}.issubset(df.columns):
         raise ValueError("History is missing required OHLCV columns")
-    if df.empty:
-        raise NotCovered("Historical parquet has no bars")
     df = df.sort_index()
     df.index = df.index.tz_convert(ET)
     days = df.index.normalize().unique().sort_values()
@@ -143,14 +143,7 @@ def check_data(context, report: Report) -> None:
             raise NotCovered("Shared-state Schwab authentication can rotate/write Supabase; excluded from isolated test")
         if not all(os.getenv(key) for key in ("CC_TOKEN_BROKER_URL", "CC_TOKEN_BROKER_SECRET")):
             raise NotCovered("Injected CC_TOKEN_BROKER_URL/CC_TOKEN_BROKER_SECRET absent; no credential files read")
-        from cc_sdk.schwab_feed import SchwabFeed
-        feed = SchwabFeed.from_broker(context.runtime)
-        try:
-            result = feed.check("SPY")
-            assert result["last"] > 0 and result["minute_bars_today"] >= 0, "Schwab data response invalid"
-            return f"Quote received; age={result['quote_age_s']}s; minute bars today={result['minute_bars_today']} (market-closed staleness allowed)"
-        finally:
-            feed.c._http.close()
+        raise NotCovered("Token-broker requests can refresh remote authentication state; no guaranteed nonrefreshing Schwab path is available")
 
     def polygon():
         if not os.getenv("POLYGON_API_KEY"):
@@ -167,5 +160,14 @@ def check_data(context, report: Report) -> None:
             return f"{len(quotes)} option contracts received (freshness not asserted while market closed)"
         finally:
             feed._http.close()
-    report.check("Real Schwab data", schwab)
-    report.check("Real Polygon options", polygon)
+    # Vendor pagination URLs may contain credentials; never emit transport diagnostics.
+    loggers = [logging.getLogger(name) for name in ("httpx", "httpcore")]
+    previous = [logger.disabled for logger in loggers]
+    try:
+        for logger in loggers:
+            logger.disabled = True
+        report.check("Real Schwab data", schwab)
+        report.check("Real Polygon options", polygon)
+    finally:
+        for logger, disabled in zip(loggers, previous, strict=True):
+            logger.disabled = disabled

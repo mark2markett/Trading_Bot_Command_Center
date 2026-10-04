@@ -123,14 +123,22 @@
 
 ## Task 7: Full Verification and Portable Handoff
 
-- [ ] Reuse the validated test prerequisites from Task 1. Keep CC_VAR pointed at a separate test sandbox for the existing suites, which may import bots during collection.
-- [ ] Run full `.venv/bin/python -m pytest -q` from the repository root; record executed/pass/fail/skip counts. Investigate every failure and distinguish pre-existing defects from harness changes.
-- [ ] Run `npm test -- --run` and `npm run build` in cc_web; record results. If the selected Playwright browser is unavailable, use its supported verified installation, then run screenshot checks; otherwise report the concrete external blocker.
-- [ ] Run `ruff check` on new/changed Python helpers and tests; run `git diff --check`. Run the harness after the built dashboard exists, verifying the actual report and retained screenshot paths. Run it again to check repeatability and ensure no sandbox process remains.
-- [ ] Update README with Windows/Linux commands, safety behavior, optional-data prerequisites, report interpretation, and local follow-up. Save only tested environment installation/startup instructions if needed; do not replace environment repository membership with an origin-less bundle checkout.
-- [ ] Commit harness files, tests and docs by explicit paths. Confirm a clean test/closed-loop branch, no strategy edits, and no changes to the separate GitHub checkout.
+- [x] Reuse the validated test prerequisites from Task 1. Keep CC_VAR pointed at a separate test sandbox for the existing suites, which may import bots during collection.
+- [x] Run full `.venv/bin/python -m pytest -q` from the repository root; record executed/pass/fail/skip counts. Investigate every failure and distinguish pre-existing defects from harness changes.
+- [x] Run `npm test -- --run` and `npm run build` in cc_web; record results. If the selected Playwright browser is unavailable, use its supported verified installation, then run screenshot checks; otherwise report the concrete external blocker.
+- [x] Run `ruff check` on new/changed Python helpers and tests; run `git diff --check`. Run the harness after the built dashboard exists, verifying the actual report and retained screenshot paths. Run it again to check repeatability and ensure no sandbox process remains.
+- [x] Update README with Windows/Linux commands, safety behavior, optional-data prerequisites, report interpretation, and local follow-up. Save only tested environment installation/startup instructions if needed; do not replace environment repository membership with an origin-less bundle checkout.
+- [x] Commit harness files, tests and docs by explicit paths. Confirm a clean test/closed-loop branch, no strategy edits, and no changes to the separate GitHub checkout.
 - [ ] Produce an incremental Git bundle containing `test/closed-loop` beyond `2783f2e` and a standalone report for transfer. Document importing into Mark's local repo while preserving his current branch, intentional changes and live var data. Never claim cloud results verify the Windows live ledger.
 
 ## Execution Review
 
 This plan implements the approved design and all handoff rows, including accurate unavailable-data outcomes. It includes the five review-focus cases in their owning tasks. Native execution in this session is recommended because the source loading, scenario state, controls, and cleanup interfaces are tightly coupled; a single implementer can keep those boundaries consistent. Independent agent execution remains an owner choice.
+
+## Verification record
+
+Full Python suite: 151 passed, zero failures/skips; one existing FastAPI/TestClient dependency warning. Web: five Vitest tests passed; TypeScript/Vite build passed. Ruff and whitespace checks passed.
+
+Independent review at `66b21bd` found unowned worker cleanup, nested ledger aliases, uncertain orphan exit, remote-auth refresh, missing write observation, and empty-data classification. One fix pass addressed all six, with reproducing regressions. Ownership is required before worker/server imports and cleanup; supported Python filesystem/SQLite operations are guarded in both processes. Native-library operations are not an OS-wide trace. Unverified process/handle closure preserves sandbox state. Token brokers are never contacted, even with injected configuration.
+
+The actual browser loop continues to report the existing multi-leg spread Flatten button defect; API flatten passes. Production strategies, SDK trading behavior, server/API and web application files are unchanged. Cloud source-only state cannot verify the Windows live ledger, historical data, scheduling or authenticated feeds. Final evidence and portable bundle are exported after commits.

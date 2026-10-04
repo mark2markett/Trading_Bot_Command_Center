@@ -8,10 +8,18 @@ from pathlib import Path
 import pytest
 
 from scripts.closed_loop import main, run_worker
-from scripts.closed_loop_guard import sandbox_env
+from scripts.closed_loop_guard import claim_run, sandbox_env
 from scripts.closed_loop_report import FunctionInventory, Report
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def worker_env(monkeypatch, runtime):
+    runtime.parent.mkdir(parents=True)
+    env = sandbox_env(ROOT, runtime)
+    env["CC_CLOSED_LOOP_OWNER"] = claim_run(ROOT, runtime.parent)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
 
 
 def test_worker_refuses_unset_cc_var_without_side_effects(monkeypatch):
@@ -47,8 +55,7 @@ def test_function_inventory_keeps_uncalled_functions_as_gaps(tmp_path):
 
 def test_failed_scenario_still_reports_and_cleans_up(tmp_path, monkeypatch):
     runtime = tmp_path / "sandbox" / "var"
-    for key, value in sandbox_env(ROOT, runtime).items():
-        monkeypatch.setenv(key, value)
+    worker_env(monkeypatch, runtime)
     from scripts import closed_loop
     def fail(context, server, report):
         report.add("Deliberate regression", "FAIL", "Injected test assertion", synthetic=True)
@@ -63,8 +70,7 @@ def test_failed_scenario_still_reports_and_cleans_up(tmp_path, monkeypatch):
 
 def test_cleanup_failure_is_reported_and_cannot_return_success(tmp_path, monkeypatch):
     runtime = tmp_path / "sandbox" / "var"
-    for key, value in sandbox_env(ROOT, runtime).items():
-        monkeypatch.setenv(key, value)
+    worker_env(monkeypatch, runtime)
     from scripts import closed_loop
     monkeypatch.setattr(closed_loop, "capture_web", lambda *args: None)
     def locked(*args, **kwargs):
@@ -77,8 +83,7 @@ def test_cleanup_failure_is_reported_and_cannot_return_success(tmp_path, monkeyp
 
 def test_interruption_still_closes_server_and_records_failure(tmp_path, monkeypatch):
     runtime = tmp_path / "sandbox" / "var"
-    for key, value in sandbox_env(ROOT, runtime).items():
-        monkeypatch.setenv(key, value)
+    worker_env(monkeypatch, runtime)
     from scripts import closed_loop
     def interrupt(*args):
         raise KeyboardInterrupt
@@ -91,3 +96,20 @@ def test_interruption_still_closes_server_and_records_failure(tmp_path, monkeypa
     assert result == 1
     assert not runtime.exists()
     assert "KeyboardInterrupt" in (runtime.parent / "report.md").read_text()
+
+
+def test_failed_handle_close_preserves_runtime_and_source_copy(tmp_path, monkeypatch):
+    runtime = tmp_path / "sandbox" / "var"
+    worker_env(monkeypatch, runtime)
+    from scripts import closed_loop
+    from scripts.closed_loop_scenarios import ScenarioContext
+    original = ScenarioContext.close
+    def failed_close(context):
+        original(context)  # Never leak test fixture handles.
+        raise PermissionError("fixture close uncertainty")
+    monkeypatch.setattr(ScenarioContext, "close", failed_close)
+    monkeypatch.setattr(closed_loop, "capture_web", lambda *args: None)
+    assert run_worker(ROOT, runtime) == 1
+    assert runtime.exists()
+    assert (runtime.parent / "imports").exists()
+    assert "Runtime cleanup" in (runtime.parent / "report.md").read_text()

@@ -27,6 +27,9 @@ RES-222, found it break-even at best), the daily-MR vertical (next, same plumbin
 
 ## 3. Milestones (each: tests first, verify output pasted, commit `M7.n: …`)
 
+**Data source (owner decision 2026-10-04): option quotes from Polygon real-time; Schwab for everything else.**
+`cc_sdk/polygon_options.py` + `MixedFeed`; the Schwab chain call below exists but bots do not use it.
+
 **M7.1 Chains.** `SchwabFeed.chain(symbol, from_date, to_date)` → `/marketdata/v1/chains`, a fourth read-only call.
 Returns `OptionQuote(occ, underlying, expiry, strike, right, bid, ask, mark, delta, theta, iv, oi, volume, quote_time)`.
 The no-trading-surface test is extended to allow exactly this one addition.
@@ -58,7 +61,7 @@ theta and days to expiry.
 - Expiry: nearest with **2–7 days** left (avoids same-day pin risk). Long leg nearest the money; short leg one ATR
   further in the signal direction, rounded to a listed strike.
 - Size: `floor(risk_usd / (net_debit × 100))`, within `max_premium_usd`.
-- Exit: close the spread at the gap_go stop, or at 15:55 ET, the same day — the same exits gap_go uses.
+- Exit: close the spread at the gap_go stop, or at 15:58 ET, the same day — the same exits gap_go uses.
 - These are starting values, labelled as such in the manifest; changing them is a research decision, not a tweak.
 
 **M7.6 Backtest (research harness only, never in the order path).** Prices from the ORATS archive, downloaded only

@@ -31,6 +31,21 @@ def occ_symbol(root: str, expiry: date, right: str, strike: float) -> str:
     return f"{root.upper():<6}{expiry:%y%m%d}{right}{round(strike * 1000):08d}"
 
 
+def parse_occ(symbol: str) -> tuple[str, date, str, float]:
+    """(root, expiry, right, strike) from an OCC symbol."""
+    m = _OCC.match(symbol or "")
+    if not m:
+        raise ValueError(f"not an OCC option symbol: {symbol!r}")
+    ymd = m["ymd"]
+    return m["root"], date(2000 + int(ymd[:2]), int(ymd[2:4]), int(ymd[4:])), m["right"], int(m["strike"]) / 1000.0
+
+
+def intrinsic(symbol: str, underlying_px: float) -> float:
+    """Per-share intrinsic value at a given underlying price (the floor value of an option)."""
+    _, _, right, strike = parse_occ(symbol)
+    return max(0.0, underlying_px - strike) if right == "C" else max(0.0, strike - underlying_px)
+
+
 @dataclass(frozen=True)
 class OptionQuote:
     occ: str

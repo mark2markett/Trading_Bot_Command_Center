@@ -57,3 +57,20 @@
   `var/schwab_token.json.issued` on its own (it previously required the token file to exist).
 - Design: m2m-platform `docs/SCHWAB-ACCESS-TOKEN-BROKER-SPEC-2026-10-03.md`; PR-A (M2M route) = m2m-platform #1223.
 
+## M7 — options paper trading (2026-10-04)
+
+- **Owner decision: option quotes come from Polygon, real-time; Schwab supplies everything else.** Mark, 2026-10-04:
+  "use Polygon's real time options data not Schwab options data - use schwab for all else." This is a deliberate
+  exception to CLAUDE.md hard rule 1 ("Schwab is the only … data vendor in the order path"), recorded here rather than
+  left implicit. Scope of the exception: option chain quotes only (`cc_sdk/polygon_options.py`, read-only snapshot
+  endpoint). Underlying quotes, minute and daily bars stay on Schwab; orders stay paper. Checked live 2026-10-04: the
+  account's option quotes are `REAL-TIME`; Polygon's underlying price in the same response is `DELAYED` and is not used.
+- **Fail closed on stale option quotes.** A leg whose quote is older than 90 s is not filled, so a delayed or weekend
+  feed cannot produce a paper fill (verified 2026-10-04: weekend quotes ~32 h old were refused).
+- **Risk engine:** contract multiplier (x100, inferred from OCC symbols even if a caller forgets), per-bot
+  `max_premium_usd` cap, spreads all-legs-or-nothing, closing a spread is risk-reducing, gross exposure counts options at
+  x100. No existing check was loosened.
+- **Honesty report:** every closed spread records the P&L of shares holding the same delta; `python bot.py report` says
+  in words whether the spread beat the shares. Until it does, the bot is the gap_go signal with leverage.
+- Spec: `docs/06_OPTIONS_M7_SPEC.md`.
+

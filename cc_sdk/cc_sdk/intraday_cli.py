@@ -59,7 +59,8 @@ def run_replay(bot: Bot, rules: Rules, symbol: str, parquet_symbol: str, date: s
 
 
 def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[str], bot_dir: Path, replay_map: dict[str, str],
-         risk_pct: float = 0.01) -> None:
+         risk_pct: float = 0.01, make_runner: Callable[..., SessionRunner] = SessionRunner) -> None:
+    """make_runner: the session runner class/factory; options bots pass SpreadSessionRunner (M7.5). Equity bots omit it."""
     try:  # .env.local overrides .env and holds the broker secret (CC_TOKEN_BROKER_SECRET); never a Schwab credential
         from dotenv import load_dotenv
 
@@ -83,7 +84,12 @@ def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[s
 
         feed = SchwabFeed.connect(bot_dir)
         with bot.run("session"):
-            SessionRunner(bot, feed, make_rules(), symbols, risk_pct=risk_pct).loop()
+            make_runner(bot, feed, make_rules(), symbols, risk_pct=risk_pct).loop()
+    elif cmd == "report":
+        from .options_report import options_report
+
+        rows = [dict(r) for r in bot.L.q("SELECT * FROM option_trades WHERE bot_id=? ORDER BY at", (manifest.id,))]
+        print(json.dumps(options_report(rows), indent=2))
     elif cmd == "replay":
         date = sys.argv[2] if len(sys.argv) > 2 else "2020-03-16"
         sym = sys.argv[3] if len(sys.argv) > 3 else symbols[0]

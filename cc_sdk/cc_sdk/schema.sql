@@ -26,3 +26,7 @@ CREATE TABLE IF NOT EXISTS controls(id INTEGER PRIMARY KEY, at TEXT, actor TEXT,
 CREATE TABLE IF NOT EXISTS limits(scope TEXT, key TEXT, value_json TEXT, updated_at TEXT, PRIMARY KEY(scope, key));
 CREATE TABLE IF NOT EXISTS journal(id INTEGER PRIMARY KEY, trade_id INTEGER, at TEXT, tags TEXT, note TEXT, attachment_path TEXT);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value_json TEXT, updated_at TEXT);
+CREATE TABLE IF NOT EXISTS option_trades(id INTEGER PRIMARY KEY, trade_id INTEGER, bot_id TEXT, underlying TEXT, expiry TEXT,
+  right TEXT, legs_json TEXT, qty INTEGER, net_debit REAL, net_credit REAL, und_entry REAL, und_exit REAL, net_delta REAL,
+  spread_pnl REAL, share_equiv_pnl REAL, close_method TEXT, at TEXT);
+CREATE INDEX IF NOT EXISTS ix_opt ON option_trades(bot_id, at);

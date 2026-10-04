@@ -1,6 +1,6 @@
 # M7 — Options paper trading: design (for owner approval)
 
-Status: DRAFT, 2026-10-04. Nothing built. Paper only. Schwab remains the only broker and the only market data in the
+Status: APPROVED by Mark 2026-10-04 ("approved"): M7.1–M7.5 forward paper; backtest entries from prior-day IV; backtest window 2016-01 → 2020-05 first. Gross-exposure fix added to M7.2 (see below). Paper only. Schwab remains the only broker and the only market data in the
 order path (hard rule 1). Risk checks stay in `cc_sdk`, in the bot process, fail closed (hard rule 2). No existing
 risk check is loosened; equity behaviour is unchanged and every existing test must stay green.
 
@@ -34,6 +34,7 @@ The no-trading-surface test is extended to allow exactly this one addition.
 **M7.2 Risk engine (tests first — the part that loses money if wrong).**
 - `Order` gains `multiplier: int = 1`; notional = `qty × ref_price × multiplier`. Equity orders keep multiplier 1, so
   every existing check computes exactly what it does today.
+- `Ledger.gross_exposure_usd` applies ×100 to option positions (today it would understate them 100×). Tightening only.
 - New per-bot limit `max_premium_usd` (default $5,000): the most a single options entry may pay in total debit.
 - A spread is approved only if **every leg** passes; one leg failing rejects the whole spread.
 - Closing a spread is risk-reducing: it bypasses pause and kill, as already defined.

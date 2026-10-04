@@ -38,7 +38,9 @@ def test_broker_session_has_no_trading_surface():
     for banned in ("place_order", "cancel_order", "get_account", "get_accounts", "get_orders", "get_transactions",
                    "replace_order", "preview_order"):
         assert banned not in names
-    assert {"get_quote", "get_price_history_every_minute", "get_price_history_every_day"} <= names
+    # Exactly four read-only market-data calls (M7.1 added the option chain). Anything else is a new surface.
+    assert {n for n in names if n.startswith("get_")} == {"get_quote", "get_price_history_every_minute",
+                                                         "get_price_history_every_day", "get_option_chain"}
 
 
 # ---- fake client (feed-level) ----

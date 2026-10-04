@@ -19,7 +19,7 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -123,6 +123,14 @@ class _BrokerSession:
             "symbol": symbol, "periodType": "month", "frequencyType": "daily", "frequency": 1,
             "startDate": _ms(start_datetime), "endDate": _ms(end_datetime),
             "needExtendedHoursData": "true" if need_extended_hours_data else "false"})
+
+    def get_option_chain(self, symbol: str, *, from_date: str, to_date: str, strike_count: int | None = None) -> httpx.Response:
+        """Read-only market data (M7.1): calls and puts expiring between from_date and to_date (YYYY-MM-DD)."""
+        params: dict = {"symbol": symbol, "contractType": "ALL", "fromDate": from_date, "toDate": to_date,
+                        "includeUnderlyingQuote": "true"}
+        if strike_count:
+            params["strikeCount"] = strike_count
+        return self._get("/marketdata/v1/chains", params)
 
 
 class _SharedStateSession(_BrokerSession):
@@ -295,6 +303,14 @@ class SchwabFeed:
         q = r.json()[symbol]["quote"]
         age = max(0.0, time.time() - q.get("quoteTime", time.time() * 1000) / 1000)
         return float(q["lastPrice"]), age
+
+    def chain(self, symbol: str, from_date: date, to_date: date, strike_count: int | None = 40) -> list:
+        """Option quotes for `symbol` expiring in [from_date, to_date], parsed into cc_sdk.options.OptionQuote."""
+        from .options import parse_schwab_chain
+
+        r = self.c.get_option_chain(symbol, from_date=from_date.isoformat(), to_date=to_date.isoformat(), strike_count=strike_count)
+        r.raise_for_status()
+        return parse_schwab_chain(r.json())
 
     def daily_bars(self, symbol: str, n: int) -> list[Bar]:
         end = datetime.now(ET)

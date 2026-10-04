@@ -74,3 +74,24 @@ def test_actual_controls_change_runner_behavior_and_write_audits_first(running):
     assert not (context.runtime / "control" / "KILL").exists()
     audit = (context.runtime / "flag-audit.jsonl").read_text()
     assert '"audit_before_flag": true' in audit
+
+
+def test_supervisor_can_stop_only_its_orphaned_server(running):
+    from scripts.closed_loop_server import stop_orphaned_server
+    _, server = running
+    stop_orphaned_server(server.runtime)
+    assert server.process.wait(timeout=5) is not None
+    assert not (server.runtime.parent / "owned-server.json").exists()
+
+
+def test_orphan_cleanup_refuses_a_foreign_identity(running):
+    import json
+    from scripts.closed_loop_server import stop_orphaned_server
+    _, server = running
+    owner = server.runtime.parent / "owned-server.json"
+    data = json.loads(owner.read_text())
+    data["nonce"] = "foreign"
+    owner.write_text(json.dumps(data))
+    with pytest.raises(SandboxError, match="identity"):
+        stop_orphaned_server(server.runtime)
+    assert server.process.poll() is None

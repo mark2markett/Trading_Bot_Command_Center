@@ -1,11 +1,72 @@
 """Evidence and coverage output; unknown or skipped behavior never becomes a PASS."""
 from __future__ import annotations
 
+import ast
 import json
+import sys
 from collections.abc import Callable
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+
+class FunctionInventory:
+    """Trace reachability, not test adequacy, for actual source functions."""
+    def __init__(self, repo: Path, mirror: Path | None = None):
+        self.repo, self.mirror = repo.resolve(), mirror.resolve() if mirror else None
+        self.seen: dict[tuple[str, int, str], set[str]] = {}
+        self.stage = "Sandbox API/riskd"
+        self._paths: dict[str, str | None] = {}
+        for folder in ("cc_sdk/cc_sdk", "cc_server/cc_server", "bots"):
+            for path in sorted((repo / folder).rglob("*.py")):
+                if "tests" in path.parts or "_template_bot" in path.parts:
+                    continue
+                relative = path.relative_to(repo).as_posix()
+
+                def walk(node, parents=(), relative=relative):
+                    for child in ast.iter_child_nodes(node):
+                        if isinstance(child, ast.ClassDef):
+                            walk(child, (*parents, child.name))
+                        elif isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                            line = min([child.lineno] + [d.lineno for d in child.decorator_list])
+                            self.seen[(relative, line, ".".join((*parents, child.name)))] = set()
+                            walk(child, (*parents, child.name))
+                        else:
+                            walk(child, parents)
+                walk(ast.parse(path.read_text(encoding="utf-8-sig")))
+
+    def callback(self, frame, event, arg):
+        if event != "call":
+            return
+        filename = frame.f_code.co_filename
+        if filename not in self._paths:
+            path = Path(filename).resolve()
+            relative = None
+            if path.is_relative_to(self.repo):
+                relative = path.relative_to(self.repo).as_posix()
+            elif self.mirror and path.is_relative_to(self.mirror):
+                relative = path.relative_to(self.mirror).as_posix()
+            self._paths[filename] = relative
+        name = frame.f_code.co_qualname.replace("<locals>.", "")
+        key = (self._paths[filename], frame.f_code.co_firstlineno, name)
+        if key in self.seen:
+            self.seen[key].add(self.stage)
+
+    @contextmanager
+    def observe(self, stage: str):
+        previous, old_stage = sys.getprofile(), self.stage
+        self.stage = stage
+        sys.setprofile(self.callback)
+        try:
+            yield
+        finally:
+            sys.setprofile(previous)
+            self.stage = old_stage
+
+    def rows(self) -> list[dict]:
+        return [{"name": f"{path}:{line} {name}", "scenarios": sorted(stages)}
+                for (path, line, name), stages in sorted(self.seen.items())]
 
 
 class NotCovered(RuntimeError):

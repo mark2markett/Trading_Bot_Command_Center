@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 TABLES = ("trades", "orders", "fills", "option_trades", "decisions", "positions", "controls", "alerts")
@@ -47,7 +48,7 @@ def fingerprint(live_var: Path) -> dict:
     result = {"available": db.is_file(), "tables": {}, "control": [], "control_exists": (live_var / "control").is_dir(),
               "excluded_tables": ["heartbeats", "kv"]}
     if db.is_file():
-        with sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True, timeout=10) as conn:
+        with closing(sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True, timeout=10)) as conn:
             conn.execute("PRAGMA query_only=ON")
             conn.execute("BEGIN")
             existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}

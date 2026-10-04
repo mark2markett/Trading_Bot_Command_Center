@@ -17,8 +17,9 @@ try {
   if (process.env.CC_PLAYWRIGHT_EXECUTABLE) options.executablePath = process.env.CC_PLAYWRIGHT_EXECUTABLE
   try {
     browser = await chromium.launch(options)
-  } catch {
-    rows.push({ name: 'Dashboard screenshots', outcome: 'NOT COVERED', evidence: 'Playwright browser unavailable; install Chromium or set CC_PLAYWRIGHT_EXECUTABLE', synthetic: true })
+  } catch (error) {
+    const absent = /Executable doesn't exist/.test(String(error?.message))
+    rows.push({ name: 'Dashboard screenshots', outcome: absent ? 'NOT COVERED' : 'FAIL', evidence: absent ? 'Playwright browser unavailable; install Chromium or set CC_PLAYWRIGHT_EXECUTABLE' : 'Selected browser failed to launch', synthetic: true })
   }
   if (browser) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })

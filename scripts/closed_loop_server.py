@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +56,9 @@ class OwnedServer:
         finally:
             self.client.close()
             self.log.close()
+            owner = self.runtime.parent / "owned-server.json"
+            if owner.exists() and json.loads(owner.read_text()).get("nonce") == self.nonce:
+                owner.unlink()
 
 
 def start_server(repo: Path, runtime: Path) -> OwnedServer:
@@ -80,6 +85,8 @@ def start_server(repo: Path, runtime: Path) -> OwnedServer:
         raise
     server = OwnedServer(process, runtime, nonce, httpx.Client(base_url=BASE_URL, trust_env=False, timeout=3), log)
     try:
+        (runtime.parent / "owned-server.json").write_text(json.dumps({"nonce": nonce, "pid": process.pid,
+                                                                       "runtime": str(runtime)}), encoding="utf-8")
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             if process.poll() is not None:
@@ -93,6 +100,35 @@ def start_server(repo: Path, runtime: Path) -> OwnedServer:
     except BaseException:
         server.stop()
         raise
+
+
+def stop_orphaned_server(runtime: Path) -> None:
+    """After a worker crash, stop a child only after proving its persisted run identity."""
+    owner = runtime.parent / "owned-server.json"
+    if not owner.exists():
+        return
+    expected = json.loads(owner.read_text())
+    if expected.get("runtime") != str(runtime.resolve()) or not isinstance(expected.get("pid"), int):
+        raise SandboxError("Orphan server identity metadata invalid")
+    with httpx.Client(base_url=BASE_URL, trust_env=False, timeout=1) as client:
+        try:
+            response = client.get("/__closed_loop_identity")
+        except httpx.TransportError:
+            return
+        if response.status_code != 200 or response.json() != expected:
+            raise SandboxError("Orphan server identity mismatch; no process stopped")
+        os.kill(expected["pid"], signal.SIGTERM)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                response = client.get("/__closed_loop_identity")
+            except httpx.TransportError:
+                owner.unlink(missing_ok=True)
+                return
+            if response.json() != expected:
+                raise SandboxError("Server identity changed during orphan cleanup")
+            time.sleep(0.1)
+        raise SandboxError("Owned orphan server did not stop; sandbox preserved")
 
 
 def serve() -> None:
@@ -125,12 +161,23 @@ def serve() -> None:
 
     @app.get("/__closed_loop_identity", include_in_schema=False)
     def identity():
+        (runtime.parent / "server-functions.json").write_text(json.dumps(inventory.rows()), encoding="utf-8")
         return {"nonce": os.environ["CC_CLOSED_LOOP_ID"], "pid": os.getpid(), "runtime": str(runtime)}
 
     # The SPA catch-all is registered earlier; place the identity route before it.
     app.router.routes.insert(0, app.router.routes.pop())
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8586, log_level="warning")
+
+    from scripts.closed_loop_report import FunctionInventory
+    inventory = FunctionInventory(ROOT)
+    sys.setprofile(inventory.callback)
+    threading.setprofile(inventory.callback)
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=8586, log_level="warning")
+    finally:
+        sys.setprofile(None)
+        threading.setprofile(None)
+        (runtime.parent / "server-functions.json").write_text(json.dumps(inventory.rows()), encoding="utf-8")
 
 
 if __name__ == "__main__":

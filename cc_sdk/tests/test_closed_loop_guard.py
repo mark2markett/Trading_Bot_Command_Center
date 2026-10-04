@@ -86,6 +86,24 @@ def test_absent_live_state_is_unavailable_without_creating_it(tmp_path):
     assert not live.exists()
 
 
+def test_fingerprint_closes_its_read_only_connection(tmp_path, monkeypatch):
+    db = tmp_path / "cc.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE trades(id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+    original_connect = sqlite3.connect
+    opened = []
+    def connect(*args, **kwargs):
+        actual = original_connect(*args, **kwargs)
+        opened.append(actual)
+        return actual
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    fingerprint(tmp_path)
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        opened[0].execute("SELECT 1")
+
+
 def test_report_distinguishes_failures_gaps_and_synthetic(tmp_path):
     report = Report()
     report.add("options", "PASS", "2 legs", synthetic=True)

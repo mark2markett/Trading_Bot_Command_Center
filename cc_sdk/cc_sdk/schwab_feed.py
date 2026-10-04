@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -124,6 +125,87 @@ class _BrokerSession:
             "needExtendedHoursData": "true" if need_extended_hours_data else "false"})
 
 
+class _SharedStateSession(_BrokerSession):
+    """Same pattern as M2M and m2m-stock-intelligence: read the current refresh token from the shared Supabase row
+    `scan_state.schwab_token_state` (written by the weekly re-auth at mark2markets.com/trades/schwab-reauth), exchange
+    it at Schwab with the app's Client ID / Secret, and call market data directly. Nothing in M2M's deployment is used.
+
+    Read-only toward M2M except in one case: if Schwab ever returns a DIFFERENT refresh token, it is written back so
+    M2M and the other apps keep a valid login (that write is what the sister apps do too). Otherwise nothing is written.
+    Env: SCHWAB_CLIENT_ID, SCHWAB_CLIENT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (command-center root .env.local).
+    """
+
+    TOKEN_URL = SCHWAB_API + "/v1/oauth/token"
+    _SAFE_OAUTH = {"invalid_grant", "invalid_client", "unauthorized_client", "unsupported_token_type", "invalid_request"}
+
+    def __init__(self, supabase_url: str, service_key: str, client_id: str, client_secret: str, bot_dir: Path,
+                 *, transport: httpx.BaseTransport | None = None):
+        super().__init__("shared-state", "", bot_dir, transport=transport)
+        import base64
+
+        self._rest = supabase_url.rstrip("/") + "/rest/v1/scan_state"
+        self._db = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+        self._basic = {"Authorization": "Basic " + base64.b64encode(f"{client_id}:{client_secret}".encode()).decode(),
+                       "Accept": "application/json"}
+
+    def _read_state(self) -> dict:
+        r = self._http.get(self._rest, params={"id": "eq.1", "select": "schwab_token_state"}, headers=self._db)
+        if r.status_code != 200:
+            raise BrokerError(f"shared Schwab token state unreadable (Supabase HTTP {r.status_code})")
+        rows = r.json()
+        state = rows[0].get("schwab_token_state") if isinstance(rows, list) and rows else None
+        if not isinstance(state, dict) or not str(state.get("refresh_token") or "").strip():
+            raise BrokerError("shared Schwab token state has no refresh token; run the re-auth at mark2markets.com/trades/schwab-reauth")
+        return state
+
+    def _fetch_token(self) -> None:
+        state = self._read_state()
+        used = str(state["refresh_token"]).strip()
+        r = self._http.post(self.TOKEN_URL, headers=self._basic, data={"grant_type": "refresh_token", "refresh_token": used})
+        self.broker_fetches += 1
+        if r.status_code != 200:
+            code = ""
+            try:
+                err = r.json().get("error")
+                code = f", {err}" if err in self._SAFE_OAUTH else ""
+            except Exception:  # noqa: BLE001
+                pass
+            raise BrokerError(f"Schwab refused the shared refresh token (HTTP {r.status_code}{code}); "
+                              "run the re-auth at mark2markets.com/trades/schwab-reauth")
+        body = r.json()
+        tok = body.get("access_token")
+        if not isinstance(tok, str) or len(tok) < 20:
+            raise BrokerError("Schwab token response had no usable access_token")
+        try:
+            expires_in = float(body.get("expires_in") or 1800)
+        except (TypeError, ValueError):
+            expires_in = 1800.0
+        self._access, self._expires_at = tok, time.time() + expires_in
+        issued = _parse_iso(state.get("issued_at"))
+        returned = body.get("refresh_token")
+        if isinstance(returned, str) and returned.strip() and returned.strip() != used:
+            issued = time.time()
+            self._write_back(state, returned.strip())
+        if issued:
+            write_issued_sidecar(int(issued))
+
+    def _write_back(self, state: dict, new_token: str) -> None:
+        """Only on rotation, so M2M's stored login stays valid. Never fatal; never logs a value."""
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        nxt = {**state, "refresh_token": new_token, "issued_at": now, "last_refreshed_at": now}
+        try:
+            r = self._http.patch(self._rest, params={"id": "eq.1"}, json={"schwab_token_state": nxt},
+                                 headers={**self._db, "Prefer": "return=minimal"})
+            if r.status_code not in (200, 204):
+                print(f"[schwab] rotated refresh token NOT saved (Supabase HTTP {r.status_code})", file=sys.stderr)
+        except Exception as e:  # noqa: BLE001
+            print(f"[schwab] rotated refresh token NOT saved ({type(e).__name__})", file=sys.stderr)
+
+
+SHARED_VARS = ("SCHWAB_CLIENT_ID", "SCHWAB_CLIENT_SECRET", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _ms(t: datetime) -> int:
     if t.tzinfo is None:
         t = t.replace(tzinfo=ET)
@@ -157,6 +239,24 @@ class SchwabFeed:
         if len(secret) < 32:
             raise RuntimeError(f"CC_TOKEN_BROKER_SECRET is {len(secret)} chars; the broker refuses secrets under 32")
         return cls(_BrokerSession(url, secret, bot_dir, transport=transport))
+
+    @classmethod
+    def connect(cls, bot_dir: Path, *, transport: httpx.BaseTransport | None = None) -> SchwabFeed:
+        """Shared token state (like M2M's other apps) when its four variables are set; otherwise the broker.
+        Loads the command-center root .env.local without overriding values the bot already set."""
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv(REPO_ROOT / ".env.local", override=False)
+        except ImportError:
+            pass
+        vals = {k: os.getenv(k, "").strip() for k in SHARED_VARS}
+        if all(vals.values()):
+            if not vals["SUPABASE_URL"].startswith("https://"):
+                raise RuntimeError("SUPABASE_URL must be https://")
+            return cls(_SharedStateSession(vals["SUPABASE_URL"], vals["SUPABASE_SERVICE_ROLE_KEY"], vals["SCHWAB_CLIENT_ID"],
+                                           vals["SCHWAB_CLIENT_SECRET"], bot_dir, transport=transport))
+        return cls.from_broker(bot_dir, transport=transport)
 
     def check(self, symbol: str = "SPY") -> dict:
         """Prove the brokered token works: one quote, one minute-bar count. Prints nothing secret."""

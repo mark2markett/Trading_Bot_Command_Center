@@ -49,7 +49,7 @@ if __name__ == "__main__":
             pass
         bot = Bot(MANIFEST)
         with bot.run("session"):
-            SessionRunner(bot, SchwabFeed.from_broker(HERE), SipOrbRules(), [], risk_pct=0.01,
+            SessionRunner(bot, SchwabFeed.connect(HERE), SipOrbRules(), [], risk_pct=0.01,
                           universe_fn=lambda now: universe(now, TOP_N)).loop()
     else:
         main(MANIFEST, SipOrbRules, [], HERE, replay_map={})

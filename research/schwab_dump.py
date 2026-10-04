@@ -36,7 +36,7 @@ def client():
     except ImportError:
         pass
     try:
-        return SchwabFeed.from_broker(Path.cwd()).c
+        return SchwabFeed.connect(Path.cwd()).c
     except RuntimeError as e:
         raise SystemExit(f"run from a bot folder with broker config in .env.local: {e}") from e
 

@@ -77,11 +77,11 @@ def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[s
     if cmd == "check":
         from .schwab_feed import SchwabFeed
 
-        print(json.dumps({"ok": True, **SchwabFeed.from_broker(bot_dir).check(symbols[0] if symbols else "SPY")}, indent=2))
+        print(json.dumps({"ok": True, **SchwabFeed.connect(bot_dir).check(symbols[0] if symbols else "SPY")}, indent=2))
     elif cmd == "session":
         from .schwab_feed import SchwabFeed
 
-        feed = SchwabFeed.from_broker(bot_dir)
+        feed = SchwabFeed.connect(bot_dir)
         with bot.run("session"):
             SessionRunner(bot, feed, make_rules(), symbols, risk_pct=risk_pct).loop()
     elif cmd == "replay":

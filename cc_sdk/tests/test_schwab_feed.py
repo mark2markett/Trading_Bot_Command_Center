@@ -207,3 +207,76 @@ def test_from_broker_validates_config(monkeypatch, var):
     out = feed.check("SPY")
     assert out["last"] == 100.5 and out["broker_url"] == BROKER and out["broker_fetches"] == 1
     assert SECRET not in json.dumps(out)
+
+
+# ---- shared token state (M6.9): same pattern as M2M's other apps ----
+from cc_sdk.schwab_feed import _SharedStateSession  # noqa: E402
+
+SB = "https://sb.test"
+SERVICE = "k" * 40
+REFRESH = "r" * 140
+
+
+class _SharedWorld:
+    def __init__(self, *, rotate=False, token_status=200):
+        self.rotate, self.token_status = rotate, token_status
+        self.patches, self.token_posts, self.reads = [], 0, 0
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        if request.url.host == "sb.test":
+            assert request.headers.get("apikey") == SERVICE
+            if request.method == "GET":
+                self.reads += 1
+                return httpx.Response(200, json=[{"schwab_token_state": {"refresh_token": REFRESH,
+                                                                         "issued_at": "2026-10-04T02:26:41.289Z"}}])
+            self.patches.append(json.loads(request.content))
+            return httpx.Response(204)
+        if request.url.path == "/v1/oauth/token":
+            self.token_posts += 1
+            assert request.headers["authorization"].startswith("Basic ")
+            if self.token_status != 200:
+                return httpx.Response(self.token_status, json={"error": "invalid_grant", "error_description": REFRESH})
+            body = {"access_token": "A" * 40, "expires_in": 1800, "token_type": "Bearer"}
+            body["refresh_token"] = ("n" * 140) if self.rotate else REFRESH
+            return httpx.Response(200, json=body)
+        sym = request.url.path.split("/")[-2]
+        return httpx.Response(200, json={sym: {"quote": {"lastPrice": 101.25, "quoteTime": int(time.time() * 1000)}}})
+
+
+def _shared(w):
+    return _SharedStateSession(SB, SERVICE, "c" * 32, "s" * 16, Path("gap_go_bot"), transport=httpx.MockTransport(w.handler))
+
+
+def test_shared_state_reads_row_and_never_writes_without_rotation(var):
+    w = _SharedWorld()
+    s = _shared(w)
+    assert s.get_quote("SPY").json()["SPY"]["quote"]["lastPrice"] == 101.25
+    s.get_quote("QQQ")
+    assert w.reads == 1 and w.token_posts == 1 and w.patches == []
+    assert (var / "schwab_token.json.issued").exists() and not (var / "schwab_token.json").exists()
+
+
+def test_shared_state_writes_back_only_on_rotation(var):
+    w = _SharedWorld(rotate=True)
+    _shared(w).get_quote("SPY")
+    assert len(w.patches) == 1
+    st = w.patches[0]["schwab_token_state"]
+    assert st["refresh_token"] == "n" * 140 and st["issued_at"] == st["last_refreshed_at"]
+
+
+def test_shared_state_refusal_never_leaks(var):
+    s = _shared(_SharedWorld(token_status=400))
+    with pytest.raises(BrokerError) as ei:
+        s.get_quote("SPY")
+    msg = str(ei.value)
+    assert "HTTP 400, invalid_grant" in msg and REFRESH not in msg and SERVICE not in msg
+
+
+def test_connect_prefers_shared_state_when_configured(monkeypatch, var):
+    for k, v in {"SCHWAB_CLIENT_ID": "c" * 32, "SCHWAB_CLIENT_SECRET": "s" * 16, "SUPABASE_URL": SB,
+                 "SUPABASE_SERVICE_ROLE_KEY": SERVICE}.items():
+        monkeypatch.setenv(k, v)
+    w = _SharedWorld()
+    out = SchwabFeed.connect(var, transport=httpx.MockTransport(w.handler)).check("SPY")
+    assert out["last"] == 101.25 and out["broker_url"] == "shared-state"
+    assert SERVICE not in json.dumps(out)

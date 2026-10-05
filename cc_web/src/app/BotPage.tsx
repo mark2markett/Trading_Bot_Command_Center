@@ -37,7 +37,7 @@ export function BotPage() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn" onClick={() => act('rerun', 'check')}>Re-check signal</button>
           {b.flags.paused ? <button className="btn" onClick={() => act('resume')}>Resume entries</button> : <button className="btn" onClick={() => act('pause', 'pause after exit')}>Pause after exit</button>}
-          <button className="btn warn" onClick={() => setModal('flatten')} disabled={!pos}>Flatten now…</button>
+          <button className="btn warn" onClick={() => setModal('flatten')} disabled={ps.length === 0}>Flatten now…</button>
           <button className="btn danger" onClick={() => setModal('kill')}>Kill bot…</button>
         </div>
       </header>
@@ -148,7 +148,7 @@ export function BotPage() {
         </div>
       </section>
 
-      {modal === 'flatten' && <ConfirmModal action={`flatten:${id}`} title={`Flatten ${b.name}`} body="Closes the position at market on the bot's next run (immediately if the market is open and the bot is triggered). Keeps the bot enabled." cls="warn" onDone={() => { setModal(null); q.refetch() }} onClose={() => setModal(null)} />}
+      {modal === 'flatten' && <ConfirmModal action={`flatten:${id}`} title={`Flatten ${b.name}`} body="Closes all open positions at market on the bot's next run (immediately if the market is open and the bot is triggered). Keeps the bot enabled." cls="warn" onDone={() => { setModal(null); q.refetch() }} onClose={() => setModal(null)} />}
       {modal === 'kill' && <ConfirmModal action={`kill:${id}`} title={`Kill ${b.name}`} body="Flattens its position and disables this bot until a person resumes it." onDone={() => { setModal(null); q.refetch() }} onClose={() => setModal(null)} />}
     </main>
   )

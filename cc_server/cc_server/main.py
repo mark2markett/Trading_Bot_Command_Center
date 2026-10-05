@@ -33,8 +33,8 @@ async def riskd_loop(stop: asyncio.Event) -> None:
     while not stop.is_set():
         try:
             await asyncio.to_thread(riskd.tick, L, alerter)
-        except Exception as e:  # noqa: BLE001
-            logging.getLogger("riskd").error("tick failed: %s", e)
+        except Exception:  # noqa: BLE001
+            logging.getLogger("riskd").exception("tick failed")
         try:
             await asyncio.wait_for(stop.wait(), timeout=15)
         except TimeoutError:

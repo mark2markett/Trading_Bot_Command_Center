@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +59,9 @@ def db_path() -> Path:
 
 class Ledger:
     def __init__(self, path: Path | None = None):
+        # API workers and riskd share this instance. Keep execute AND result
+        # consumption under one lock; check_same_thread=False alone is unsafe.
+        self._lock = threading.RLock()
         self.path = path or db_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path, timeout=10, isolation_level=None, check_same_thread=False)
@@ -66,14 +70,28 @@ class Ledger:
 
     # ---- generic ----
     def q(self, sql: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:
-        return self.conn.execute(sql, tuple(params)).fetchall()
+        with self._lock:
+            cur = self.conn.execute(sql, tuple(params))
+            try:
+                return cur.fetchall()
+            finally:
+                cur.close()
 
     def one(self, sql: str, params: Iterable[Any] = ()) -> sqlite3.Row | None:
-        return self.conn.execute(sql, tuple(params)).fetchone()
+        with self._lock:
+            cur = self.conn.execute(sql, tuple(params))
+            try:
+                return cur.fetchone()
+            finally:
+                cur.close()
 
     def x(self, sql: str, params: Iterable[Any] = ()) -> int:
-        cur = self.conn.execute(sql, tuple(params))
-        return int(cur.lastrowid or 0)
+        with self._lock:
+            cur = self.conn.execute(sql, tuple(params))
+            try:
+                return int(cur.lastrowid or 0)
+            finally:
+                cur.close()
 
     # ---- bots ----
     def upsert_bot(self, m: dict[str, Any]) -> None:
@@ -133,19 +151,20 @@ class Ledger:
 
     def _migrate_positions(self) -> None:
         """Older databases keyed positions by bot_id only. Rebuild with the (bot_id, symbol) key once."""
-        if getattr(self, "_pos_ok", False):
-            return
-        cols = [r["name"] for r in self.q("PRAGMA table_info(positions)")]
-        pk_bot_only = any(r["name"] == "bot_id" and r["pk"] == 1 for r in self.q("PRAGMA table_info(positions)")) and \
-            not any(r["name"] == "symbol" and r["pk"] for r in self.q("PRAGMA table_info(positions)"))
-        if pk_bot_only or "stop_price" not in cols:
-            self.conn.executescript("""
-                CREATE TABLE positions_new(bot_id TEXT, symbol TEXT, qty INTEGER, avg_price REAL, entry_at TEXT,
-                  bars_held INTEGER, updated_at TEXT, stop_price REAL, side TEXT, PRIMARY KEY(bot_id, symbol));
-                INSERT OR REPLACE INTO positions_new(bot_id,symbol,qty,avg_price,entry_at,bars_held,updated_at)
-                  SELECT bot_id,symbol,qty,avg_price,entry_at,bars_held,updated_at FROM positions WHERE qty != 0;
-                DROP TABLE positions; ALTER TABLE positions_new RENAME TO positions;""")
-        self._pos_ok = True
+        with self._lock:
+            if getattr(self, "_pos_ok", False):
+                return
+            cols = [r["name"] for r in self.q("PRAGMA table_info(positions)")]
+            pk_bot_only = any(r["name"] == "bot_id" and r["pk"] == 1 for r in self.q("PRAGMA table_info(positions)")) and \
+                not any(r["name"] == "symbol" and r["pk"] for r in self.q("PRAGMA table_info(positions)"))
+            if pk_bot_only or "stop_price" not in cols:
+                self.conn.executescript("""
+                    CREATE TABLE positions_new(bot_id TEXT, symbol TEXT, qty INTEGER, avg_price REAL, entry_at TEXT,
+                      bars_held INTEGER, updated_at TEXT, stop_price REAL, side TEXT, PRIMARY KEY(bot_id, symbol));
+                    INSERT OR REPLACE INTO positions_new(bot_id,symbol,qty,avg_price,entry_at,bars_held,updated_at)
+                      SELECT bot_id,symbol,qty,avg_price,entry_at,bars_held,updated_at FROM positions WHERE qty != 0;
+                    DROP TABLE positions; ALTER TABLE positions_new RENAME TO positions;""")
+            self._pos_ok = True
 
     def equity(self, bot_id: str, value: float, source: str = "bot") -> int:
         return self.x("INSERT INTO equity(bot_id,at,equity,source) VALUES(?,?,?,?)", (bot_id, now_iso(), value, source))

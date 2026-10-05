@@ -1,12 +1,12 @@
-# Closed-loop bundle transfer
+# Command Center transfer
 
-Delivered test/closed-loop head: d89ceab8150be8ed32dcf32edf0141daebd245a7. Original required local base: feat/options-m7 at 2783f2eae2657a9d60b37f4ac5053715633ed683. GitHub main is unchanged.
+Delivered test/closed-loop head: b220dbda4f3bc58d003d5bc110f519e57cd02e5c. Required original base: feat/options-m7 at 2783f2eae2657a9d60b37f4ac5053715633ed683. GitHub main is unchanged.
 
-This update fixes the reported two-leg spread Flatten button: enabled for any nonzero open positions, disabled when flat. Existing confirmation/API flow is preserved. Five new component regressions bring the full web suite to 10 passing tests; production build and lint pass. Complete cloud browser harness: 34 PASS / 0 FAIL / 7 NOT COVERED, exit 0. Python unchanged since the verified 157-pass launcher correction.
+Latest isolated fix b220dbd addresses shared SQLite connection races that stalled the Windows server. The exact SQLite API misuse was reproduced in concurrent real endpoints/risk ticks. Ledger operations now serialize execute/fetch/lastrowid/cursor close and existing migration; riskd records tracebacks. No risk settings, trading rules or stored data are reset. 161 full Python tests pass, four focused regressions pass, lint passes, independent review has no Critical/Important production findings. Complete cloud browser harness: 34 PASS / 0 FAIL / 7 NOT COVERED. Web remains at the previously verified 10 tests/build.
 
-Mark verified the Windows launcher correction in 33281cd: browser-enabled run 38 PASS / 1 FAIL / 2 NOT COVERED. The sole failure was the spread button fixed here. Live fingerprints matched, cleanup passed and feat/options-m7 was restored. Schwab and scheduled/live/scanner integrations remain uncovered. This latest UI fix requires a local rebuild and harness rerun.
+The preceding UI fix was confirmed on Windows: 39 PASS / 0 FAIL / 2 NOT COVERED, exit 0. Schwab and scheduled/live/scanner integration gaps remain. The Monday server recovery is now pending local application/restart.
 
-Retrieve this branch into a unique temp folder and import the bundle from the original command-center repo:
+Retrieve into a unique temporary folder and verify/import from the original command-center repository:
 
 ```powershell
 $transfer = Join-Path $env:TEMP ('cc-transfer-' + [guid]::NewGuid().ToString('N'))
@@ -17,4 +17,11 @@ git bundle verify $bundle
 git -c gc.auto=0 fetch $bundle 'test/closed-loop:test/closed-loop'
 ```
 
-Fetch preserves the current branch and working files. Temporarily select test/closed-loop, run npm run build in cc_web, then run .venv\Scripts\python.exe scripts\closed_loop.py. Restore feat/options-m7 in a finally block. Disabling automatic Git housekeeping for the fetch avoids the unrelated Windows locked-pack cleanup prompts without deleting any files. The ZIP contains complete evidence, handoff and checksums.
+For the urgent server recovery, preserve logs and a consistent SQLite snapshot, verify the stalled server's process identity before stopping it, and keep feat/options-m7 checked out. Apply only this commit:
+
+```powershell
+git cherry-pick b220dbda4f3bc58d003d5bc110f519e57cd02e5c
+& .\.venv\Scripts\python.exe -u -m cc_server.main
+```
+
+Fetch and isolated cherry-pick were verified against an originless original-base fixture: production branch name, unrelated working changes and runtime sentinel preserved. Do not force conflicts or merge main. The four-file server fix is independent of harness modules and requires no web rebuild. Other bot tasks are not restarted automatically by these instructions. The ZIP contains full evidence/checksums/handoff.

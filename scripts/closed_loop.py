@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.dont_write_bytecode = True
 from scripts.closed_loop_guard import SandboxError, claim_run, fingerprint, owned_run, sandbox_env, validate_sandbox  # noqa: E402
+from scripts.closed_loop_launch import ServerStartupError, python_executable  # noqa: E402
 from scripts.closed_loop_report import FunctionInventory, NotCovered, Report  # noqa: E402
 
 
@@ -135,7 +136,11 @@ def run_worker(repo: Path, runtime: Path) -> int:
             check_controls(context, server, report)
         report.add("Scheduled/live/scanner integrations", "NOT COVERED", "Windows scheduler, live order path and external SIP scanner excluded; synthetic bot lifecycles are separately asserted")
     except BaseException as exc:
-        report.add("Harness execution", "FAIL", f"Unexpected {type(exc).__name__}; subsequent checks were not executed")
+        if isinstance(exc, ServerStartupError):
+            detail = f"Sandbox dashboard: {exc.code}; see retained server-startup.json and server-process.log; subsequent checks not executed"
+        else:
+            detail = f"Unexpected {type(exc).__name__}; subsequent checks were not executed"
+        report.add("Harness execution", "FAIL", detail)
     finally:
         if server:
             checked("Owned sandbox server stopped", lambda: (server.stop() or "Owned server exited; no live process was stopped"))
@@ -213,7 +218,8 @@ def main(argv: list[str] | None = None) -> int:
         env = sandbox_env(ROOT, runtime)
         env["CC_CLOSED_LOOP_OWNER"] = claim_run(ROOT, root)
         os.environ["CC_CLOSED_LOOP_OWNER"] = env["CC_CLOSED_LOOP_OWNER"]
-        process = subprocess.Popen([sys.executable, str(ROOT / "scripts/closed_loop.py"), "--worker"], cwd=ROOT, env=env)
+        executable = python_executable(env)
+        process = subprocess.Popen([executable, str(ROOT / "scripts/closed_loop.py"), "--worker"], cwd=ROOT, env=env)
         try:
             result = process.wait()
         except KeyboardInterrupt:

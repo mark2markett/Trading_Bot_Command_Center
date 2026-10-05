@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.dont_write_bytecode = True
 from scripts.closed_loop_guard import SandboxError, owned_run, sandbox_env, validate_sandbox  # noqa: E402
+from scripts.closed_loop_launch import ServerStartupError, python_executable  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:8586"
 
@@ -31,13 +32,36 @@ class OwnedServer:
     client: httpx.Client
     log: object
 
+    def diagnostic(self, failure_code=None, **fields) -> None:
+        path = self.runtime.parent / "server-startup.json"
+        data = {"launcher_pid": self.process.pid, "failure_code": failure_code, **fields}
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def refuse(self, code, **fields) -> None:
+        self.diagnostic(code, **fields)
+        raise ServerStartupError(code)
+
     def verify(self) -> None:
-        if self.process.poll() is not None:
-            raise SandboxError("Owned sandbox server exited")
+        exit_code = self.process.poll()
+        if exit_code is not None:
+            self.refuse("CHILD_EXITED", exit_code=exit_code)
         response = self.client.get("/__closed_loop_identity")
-        expected = {"nonce": self.nonce, "pid": self.process.pid, "runtime": str(self.runtime)}
-        if response.status_code != 200 or response.json() != expected:
-            raise SandboxError("Server identity mismatch; controls refused")
+        if response.status_code != 200:
+            self.refuse("IDENTITY_HTTP_STATUS", http_status=response.status_code)
+        try:
+            payload = response.json()
+        except ValueError:
+            self.refuse("IDENTITY_INVALID_JSON")
+        if not isinstance(payload, dict) or set(payload) != {"nonce", "pid", "runtime"}:
+            self.refuse("IDENTITY_INVALID_SHAPE")
+        reported_pid = payload["pid"] if type(payload["pid"]) is int and payload["pid"] > 0 else None
+        fields = {"reported_pid": reported_pid, "nonce_matches": payload["nonce"] == self.nonce,
+                  "runtime_matches": payload["runtime"] == str(self.runtime), "pid_matches": reported_pid == self.process.pid}
+        for field, code in (("nonce_matches", "IDENTITY_NONCE_MISMATCH"), ("runtime_matches", "IDENTITY_RUNTIME_MISMATCH"),
+                            ("pid_matches", "IDENTITY_PID_MISMATCH")):
+            if not fields[field]:
+                self.refuse(code, **fields)
+        self.diagnostic(**fields)
 
     def request(self, method: str, path: str, **kwargs) -> httpx.Response:
         if not path.startswith("/api/"):
@@ -78,27 +102,29 @@ def start_server(repo: Path, runtime: Path) -> OwnedServer:
     owned_run(repo, runtime)
     nonce = uuid4().hex
     env["CC_CLOSED_LOOP_ID"] = nonce
-    log = (runtime / "server-process.log").open("w", encoding="utf-8")
+    executable = python_executable(env)
+    log = (runtime.parent / "server-process.log").open("w", encoding="utf-8")
     try:
-        process = subprocess.Popen([sys.executable, str(repo / "scripts" / "closed_loop_server.py"), "--serve"],
+        process = subprocess.Popen([executable, str(repo / "scripts" / "closed_loop_server.py"), "--serve"],
                                    cwd=repo, env=env, stdout=log, stderr=subprocess.STDOUT)
     except BaseException:
         log.close()
         raise
     server = OwnedServer(process, runtime, nonce, httpx.Client(base_url=BASE_URL, trust_env=False, timeout=3), log)
     try:
+        server.diagnostic()
         (runtime.parent / "owned-server.json").write_text(json.dumps({"nonce": nonce, "pid": process.pid,
                                                                        "runtime": str(runtime)}), encoding="utf-8")
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             if process.poll() is not None:
-                raise SandboxError("Sandbox server failed to start; no controls sent")
+                server.refuse("CHILD_EXITED", exit_code=process.returncode)
             try:
                 server.verify()
                 return server
             except httpx.TransportError:
                 time.sleep(0.1)
-        raise SandboxError("Sandbox server readiness timed out")
+        server.refuse("READINESS_TIMEOUT")
     except BaseException:
         server.stop()
         raise

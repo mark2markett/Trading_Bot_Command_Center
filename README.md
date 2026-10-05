@@ -72,6 +72,13 @@ processes and SQLite handles close. If cleanup fails, the command exits
 nonzero and reports the retained sandbox. An interrupted/crashed worker also
 gets a failure report; its server is stopped only after matching its recorded
 run identity.
+If dashboard startup fails, its fixed diagnostic code is reported and
+`server-startup.json` plus `server-process.log` remain in the report folder
+after runtime cleanup. The identity diagnostic records PID numbers and match
+booleans, without copying raw responses or run-token values. Windows virtual
+environments launch the actual CPython interpreter with the venv-launcher
+protocol, so process ownership and the strict server PID check refer to the
+same process while retaining the selected environment's dependencies.
 
 On the trading PC, local `var/data/*_1m_rth.parquet` enables a bounded replay
 search of at most 250 trading days. Source data is read only; needed bars are

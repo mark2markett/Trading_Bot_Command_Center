@@ -144,3 +144,16 @@ Independent review at `66b21bd` found unowned worker cleanup, nested ledger alia
 The actual browser loop continues to report the existing multi-leg spread Flatten button defect; API flatten passes. Production strategies, SDK trading behavior, server/API and web application files are unchanged. Cloud source-only state cannot verify the Windows live ledger, historical data, scheduling or authenticated feeds. Final evidence and portable bundle are exported after commits.
 
 Two final runs matched: **33 PASS / 1 FAIL / 7 NOT COVERED**, exit 1 for the existing spread Flatten UI defect. Each observed 208 supported filesystem/SQLite operations, zero blocked/outside attempts, and 197 of 314 source functions reached (117 unobserved). Owned server/runtime/import cleanup passed. Bundle verification and import into an originless clone of the uploaded base preserved `feat/options-m7`, intentional tracked/untracked working files, and a disposable live-record sentinel. Final documentation commit is included in the regenerated bundle.
+
+
+## Windows startup follow-up
+
+Mark's first Windows run at b7c7055 reached 17 PASS / 1 FAIL / 1 NOT COVERED, including real Polygon contracts and both historical replays. It stopped before dashboard controls with a generic SandboxError. His read-only subprocess probe returned launch_pid=10140 and python_pid=15124, confirming the Windows venv redirector changes the interpreter PID.
+
+The harness now launches CPython's actual base executable using its venv-launcher protocol for both worker and sandbox server. Selected venv packages are retained; nonce, runtime and exact process PID identity checks remain mandatory. Startup failures retain fixed diagnostic codes, safe PID/match fields in server-startup.json, and the sandbox bootstrap log outside cleaned runtime state.
+
+Five launch/identity regressions and a failed-bootstrap cleanup regression were observed failing before their corrections, then passing. Full Python suite: 157 passed, no failures/skips, one existing dependency warning. Changed-file Ruff and whitespace checks passed. Focused independent review found no Critical or Important issues.
+
+The post-fix complete cloud browser run at /tmp/cc-closed-loop-sbpj0xw5 matched 33 PASS / 1 FAIL / 7 NOT COVERED. The existing two-leg spread Flatten button remains the sole failure; confirmed API flatten passes. It observed 238 supported write operations and 197/314 source functions, retained successful PID identity diagnostics, and removed owned runtime/imports after server/handle closure. Source var remained absent and port 8586 had no listener. Actual Windows startup with this correction still requires Mark's rerun.
+
+Mark explicitly authorized the separate transfer/closed-loop-bundle GitHub artifact branch after direct downloads proved unavailable. Updating that transfer branch does not merge main or publish changes to the production branch.

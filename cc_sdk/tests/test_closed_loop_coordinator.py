@@ -113,3 +113,19 @@ def test_failed_handle_close_preserves_runtime_and_source_copy(tmp_path, monkeyp
     assert runtime.exists()
     assert (runtime.parent / "imports").exists()
     assert "Runtime cleanup" in (runtime.parent / "report.md").read_text()
+
+
+def test_failed_server_startup_retains_log_and_safe_reason_after_cleanup(tmp_path, monkeypatch):
+    runtime = tmp_path / "sandbox" / "var"
+    worker_env(monkeypatch, runtime)
+    from scripts import closed_loop_server
+    actual_popen = subprocess.Popen
+    def failed_bootstrap(command, **kwargs):
+        # Real owned process with the same log/ownership flow; never bind a port.
+        return actual_popen([sys.executable, "-c", "print('fixture bootstrap failure', flush=True); raise SystemExit(3)"], **kwargs)
+    monkeypatch.setattr(closed_loop_server.subprocess, "Popen", failed_bootstrap)
+    assert run_worker(ROOT, runtime) == 1
+    assert not runtime.exists()
+    assert "fixture bootstrap failure" in (runtime.parent / "server-process.log").read_text()
+    assert "CHILD_EXITED" in (runtime.parent / "server-startup.json").read_text()
+    assert "Sandbox dashboard: CHILD_EXITED" in (runtime.parent / "report.md").read_text()

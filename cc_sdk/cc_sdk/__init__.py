@@ -1,6 +1,9 @@
 """cc_sdk — what every bot imports. Heartbeats, decisions, orders, fills, positions, equity, and fail-closed risk checks."""
 from __future__ import annotations
 
+import json
+import logging
+import os
 import traceback
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -47,19 +50,40 @@ class Bot:
         self.risk = Risk(manifest, self.L, self.control)
         self.L.upsert_bot(manifest.to_row())
         self.L.set_bot_status(manifest.id, self.control.status_word())
+        self._diagnostic_error_reported = False
+
+    def event(self, event: str, **fields: Any) -> None:
+        """Durable process diagnostics without a file handle that blocks Windows cleanup."""
+        try:
+            directory = self.L.path.parent / "logs"
+            directory.mkdir(parents=True, exist_ok=True)
+            row = {"at": now_iso(), "bot_id": self.m.id, "pid": os.getpid(), "event": event, **fields}
+            with (directory / f"{self.m.id}.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(row) + "\n")
+        except (OSError, TypeError, ValueError) as error:
+            # Optional diagnostics must never interrupt exits or mask the ledger's original failure.
+            if not self._diagnostic_error_reported:
+                self._diagnostic_error_reported = True
+                try:
+                    logging.getLogger(__name__).warning("diagnostic log unavailable for %s (%s)", self.m.id, type(error).__name__)
+                except Exception:  # noqa: BLE001 — only the fallback diagnostic handler
+                    pass
 
     @contextmanager
     def run(self, name: str) -> Iterator[Run]:
         r = Run(self, name)
+        self.event("run_started", run=name, mode=self.m.mode, version=self.m.version)
         try:
             yield r
         except Exception as e:  # noqa: BLE001
+            self.event("run_failed", run=name, error_type=type(e).__name__)
             self.L.heartbeat(self.m.id, name, ok=False, detail=f"{e}\n{traceback.format_exc()}")
             self.L.alert("page" if self.m.mode == "live" else "digest", "run_failed",
                          f"{self.m.name}: {name} failed — {e}", self.m.id)
             raise
         else:
             self.L.heartbeat(self.m.id, name, ok=True)
+            self.event("run_completed", run=name)
         finally:
             self.L.set_bot_status(self.m.id, self.control.status_word())
 

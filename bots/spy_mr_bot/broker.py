@@ -14,6 +14,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 
 class BrokerError(RuntimeError):
@@ -120,6 +121,27 @@ class SchwabBroker:
 # ---------------------------------------------------------------------------
 # Paper (simulated fills at the official close, real market data)
 # ---------------------------------------------------------------------------
+class SharedSchwabData:
+    """Adapt the fleet's read-only feed to PaperBroker; never access Trader/OAuth files."""
+
+    def __init__(self, feed):
+        self.feed = feed
+
+    def daily_closes(self, symbol: str, n: int = 260) -> List[dict]:
+        now = datetime.now(ZoneInfo("America/New_York"))
+        # Morning reconciliation settles at completed daily closes, never today's partial candle.
+        bars = [b for b in self.feed.daily_bars(symbol, n + 1)
+                if b.t.date() < now.date() or (b.t.date() == now.date() and now.hour >= 16)]
+        return [{"date": b.t.date().isoformat(), "open": b.o, "high": b.h, "low": b.l, "close": b.c}
+                for b in bars[-n:]]
+
+    def last_price(self, symbol: str) -> float:
+        price, age = self.feed.quote(symbol)
+        if age > 90:
+            raise BrokerError("shared Schwab quote is older than the 90-second risk limit")
+        return price
+
+
 class PaperBroker:
     """
     Uses a data source for prices (Schwab if credentials exist, else Stooq CSV)

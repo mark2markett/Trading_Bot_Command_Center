@@ -96,8 +96,8 @@ def main(manifest: BotManifest, make_rules: Callable[[], Rules], symbols: list[s
     elif cmd == "session":
         from .schwab_feed import SchwabFeed
 
-        feed = SchwabFeed.connect(bot_dir)
         with bot.run("session"):
+            feed = SchwabFeed.connect(bot_dir)
             make_runner(bot, feed, make_rules(), symbols, risk_pct=risk_pct).loop()
     elif cmd == "report":
         from .options_report import options_report

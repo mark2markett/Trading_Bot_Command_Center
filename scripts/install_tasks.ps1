@@ -7,9 +7,10 @@ if (-not (Test-Path $py)) { $py = (Get-Command python).Source }
 $set  = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 20) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 
 # 1. Server: at logon, keep alive
+$serverSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 $srvAct = New-ScheduledTaskAction -Execute $py -Argument "-m cc_server.main" -WorkingDirectory $root
 $srvTrg = New-ScheduledTaskTrigger -AtLogOn
-Register-ScheduledTask -TaskName "CC server" -Action $srvAct -Trigger $srvTrg -Settings $set -Force | Out-Null
+Register-ScheduledTask -TaskName "CC server" -Action $srvAct -Trigger $srvTrg -Settings $serverSettings -Force | Out-Null
 
 # 2. Bots: one task per command per bot folder (skips _template_bot).
 #    Daily bots (cadence decide/reconcile): 15:50 and 09:45.  Intraday bots (cadence "session"): one task at 09:25, 8 h limit.

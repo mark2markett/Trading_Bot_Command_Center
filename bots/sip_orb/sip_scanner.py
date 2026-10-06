@@ -7,7 +7,7 @@ dropped. Any wrapper object with a "candidates" or "data" key holding that list 
 Filters (paper, from the paper): price > $5, avg_vol ≥ 1M, atr14 > $0.50, then top N by rvol."""
 from __future__ import annotations
 
-import json
+import logging
 import os
 from datetime import datetime
 from typing import Any
@@ -42,14 +42,27 @@ def fetch(url: str, timeout: float = 10.0) -> list[dict[str, Any]]:
     return list(data)
 
 
-def universe(now: datetime, top_n: int = 20) -> list[str]:
-    url = os.getenv("SCANNER_URL", "")
+def universe(now: datetime, top_n: int = 20, report=None) -> list[str]:
+    url = os.getenv("SCANNER_URL", "").strip()
+    fallback = [s.strip() for s in os.getenv("SIP_SYMBOLS", "").upper().split(",") if s.strip()][:top_n]
+    log = logging.getLogger("sip_scanner")
+    def record(action, reason, **details):
+        log.info("%s: %s", action, reason)
+        if report:
+            report(details, action, reason)
     if url:
         try:
-            syms = filter_rank(fetch(url), top_n)
+            rows = fetch(url)
+            syms = filter_rank(rows, top_n)
+            record("SCANNER", f"candidates={len(rows)} selected={len(syms)}", candidates=len(rows), selected=len(syms))
             if syms:
                 return syms
         except Exception as e:  # noqa: BLE001
-            print(json.dumps({"scanner_error": str(e)[:200]}))
-    fallback = [s for s in os.getenv("SIP_SYMBOLS", "").upper().split(",") if s]
-    return fallback[:top_n]
+            record("SCANNER_ERROR", f"scanner request failed ({type(e).__name__})", error_type=type(e).__name__)
+            if not fallback:
+                raise RuntimeError(f"scanner request failed ({type(e).__name__}); no SIP_SYMBOLS fallback") from None
+    elif not fallback:
+        raise RuntimeError("SCANNER_URL and SIP_SYMBOLS are both unconfigured")
+    if fallback:
+        record("SCANNER_FALLBACK", f"fixed fallback selected={len(fallback)}", selected=len(fallback))
+    return fallback

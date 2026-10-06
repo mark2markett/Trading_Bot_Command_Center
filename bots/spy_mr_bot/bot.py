@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 import cc
 import strategy as S
-from broker import BrokerError, PaperBroker, SchwabBroker
+from broker import BrokerError, PaperBroker, SchwabBroker, SharedSchwabData
 
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE / ".env")
@@ -78,13 +78,23 @@ def make_broker():
                             os.environ["SCHWAB_CALLBACK_URL"], _token_path(),
                             int(os.getenv("ACCOUNT_INDEX", "0")))
     data = None
-    if creds_ok and os.getenv("PAPER_USE_SCHWAB_DATA", "true").lower() == "true":
-        try:
-            data = SchwabBroker(os.environ["SCHWAB_API_KEY"], os.environ["SCHWAB_APP_SECRET"],
-                                os.environ["SCHWAB_CALLBACK_URL"], _token_path())
-            log.info("paper mode: using Schwab market data, no orders will be sent")
-        except Exception as e:  # noqa: BLE001
-            log.warning("Schwab data unavailable (%s); falling back to Stooq end-of-day data", e)
+    if os.getenv("PAPER_USE_SCHWAB_DATA", "true").lower() == "true":
+        # Paper data must use the same token owner as the fleet, not refresh a retired local token.
+        load_dotenv(HERE / ".env.local", override=True)
+        load_dotenv(HERE.parents[1] / ".env.local", override=False)
+        shared_keys = ("SCHWAB_CLIENT_ID", "SCHWAB_CLIENT_SECRET", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+        broker_keys = ("CC_TOKEN_BROKER_URL", "CC_TOKEN_BROKER_SECRET")
+        configured = all(os.getenv(k) for k in shared_keys) or all(os.getenv(k) for k in broker_keys)
+        if not configured and any(os.getenv(k) for k in (*shared_keys, *broker_keys)):
+            raise RuntimeError("shared Schwab market-data configuration is incomplete")
+        if configured:
+            from cc_sdk.schwab_feed import SchwabFeed
+            data = SharedSchwabData(SchwabFeed.connect(HERE))
+            log.info("paper mode: shared Schwab market data; no local token file or Trader client")
+        else:
+            log.warning("paper mode: shared Schwab data is not configured; using Stooq/Yahoo end-of-day fallback")
+    if data is None:
+        log.info("paper data source: end-of-day fallback")
     return PaperBroker(str(HERE / "paper_ledger.json"), float(os.getenv("PAPER_CASH", "100000")), data=data)
 
 
@@ -262,12 +272,14 @@ if __name__ == "__main__":
             _token_path())
         print("Schwab token saved."); sys.exit(0)
     try:
-        broker = make_broker()
-        state = load_state()
         if cmd in ("decide", "reconcile"):
             with cc.run(cmd) as run:
+                broker = make_broker()
+                state = load_state()
                 {"decide": cmd_decide, "reconcile": cmd_reconcile}[cmd](broker, state, run)
         else:
+            broker = make_broker()
+            state = load_state()
             {"status": cmd_status, "check": cmd_check}[cmd](broker, state)
     except (BrokerError, KeyError) as e:
         log.error("run failed: %s", e); sys.exit(1)

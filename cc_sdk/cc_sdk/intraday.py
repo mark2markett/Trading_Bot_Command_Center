@@ -8,12 +8,15 @@ Nothing here touches Schwab directly; `schwab_feed.SchwabFeed` is the only Schwa
 """
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
+
+import httpx
 
 from . import Bot, Order
 from .ledger import now_iso
@@ -128,6 +131,33 @@ class SessionRunner:
         self.traded_today: set[str] = set()
         self.realized: float = 0.0
         self.log: list[str] = []
+        self._diagnostic_at: dict[str, float] = {}
+        self._poll_errors: dict[str, str] = {}
+
+    @staticmethod
+    def _error_summary(error: Exception) -> str:
+        # URLs, response bodies and exception messages can contain credentials.
+        if isinstance(error, httpx.HTTPStatusError):
+            return f"HTTP {error.response.status_code}"
+        return type(error).__name__
+
+    def _data_error(self, symbol: str, operation: str, error: Exception) -> None:
+        reason = f"{operation}: {self._error_summary(error)}; retry next poll"
+        self._poll_errors[symbol] = reason
+        self.bot.L.decision(self.bot.m.id, "session", {"symbol": symbol, "operation": operation}, "NO_DATA", reason)
+        self.bot.event("data_error", symbol=symbol, operation=operation, error=self._error_summary(error))
+
+    def _record_no_signal(self, symbol: str, bars: list[Bar], now: datetime) -> None:
+        if now.timestamp() - self._diagnostic_at.get(symbol, 0.0) < 300:
+            return
+        self._diagnostic_at[symbol] = now.timestamp()
+        signal = {"symbol": symbol, "bars": len(bars), "context": asdict(self.ctx[symbol]),
+                  "first_open": bars[0].o if bars else None,
+                  "last_bar": bars[-1].t.isoformat() if bars else None,
+                  "last_close": bars[-1].c if bars else None}
+        action = "NO_SIGNAL" if bars else "NO_BARS"
+        self.bot.L.decision(self.bot.m.id, "session", signal, action,
+                            "rules produced no signal" if bars else "no completed minute bars")
 
     # ---- session lifecycle ----
     def prepare(self, day: datetime) -> None:
@@ -149,13 +179,14 @@ class SessionRunner:
     def step(self, now: datetime) -> None:
         """One poll. Order of operations: controls → exits (stops, flatten, EOD) → entries."""
         mod = now.hour * 60 + now.minute
+        self._poll_errors = {}
         killed = self.bot.control.killed()
         flatten = killed or self.bot.control.flatten_requested() or mod >= FLATTEN_MIN
         for s in list(self.open):
             try:
                 px, age = self.feed.quote(s)
             except Exception as e:  # noqa: BLE001 — no quote: keep the position, try again next poll, leave a trace
-                self.bot.L.decision(self.bot.m.id, "session", {"symbol": s}, "NOQUOTE", f"{type(e).__name__}: {e}"[:200])
+                self._data_error(s, "quote", e)
                 continue
             pos = self.open[s]
             if flatten:
@@ -178,8 +209,17 @@ class SessionRunner:
         for s in self.symbols:
             if s in self.open or s in self.traded_today:
                 continue
-            bars = [b for b in self.feed.minute_bars(s, now) if b.mod < mod]   # completed bars only
+            try:
+                bars = [b for b in self.feed.minute_bars(s, now) if b.mod < mod]   # completed bars only
+            except httpx.HTTPError as e:
+                if not isinstance(e, httpx.RequestError) and not (
+                    isinstance(e, httpx.HTTPStatusError) and (e.response.status_code == 429 or e.response.status_code >= 500)
+                ):
+                    raise
+                self._data_error(s, "minute_bars", e)
+                continue
             if not bars:
+                self._record_no_signal(s, bars, now)
                 continue
             sig = self.rules.decide(bars, self.ctx[s])
             if sig:
@@ -188,6 +228,8 @@ class SessionRunner:
                 except Exception as e:  # noqa: BLE001 — a failed entry must not kill the session for the other symbols
                     self.bot.L.decision(self.bot.m.id, "session", {"symbol": s, "signal": sig.reason}, "NONE", f"entry failed: {e}"[:200])
                     self.traded_today.add(s)
+            else:
+                self._record_no_signal(s, bars, now)
 
     def loop(self, day: datetime | None = None) -> None:
         day = day or datetime.now(ET)
@@ -199,7 +241,11 @@ class SessionRunner:
                 break
             self.step(now)
             if time.time() - last_hb > 300:
-                self.bot.L.heartbeat(self.bot.m.id, "session", ok=True, detail=f"open={list(self.open)} realized={self.realized:.2f}")
+                detail = {"open": list(self.open), "realized": round(self.realized, 2), "symbols": self.symbols,
+                          "universe_ready": self.universe_done, "data_errors": self._poll_errors}
+                ok = not self._poll_errors
+                self.bot.L.heartbeat(self.bot.m.id, "session", ok=ok, detail=json.dumps(detail))
+                self.bot.event("heartbeat", ok=ok, **detail)
                 last_hb = time.time()
             time.sleep(self.poll_s)
         self.bot.record_equity(self.equity + self.realized, source="bot")

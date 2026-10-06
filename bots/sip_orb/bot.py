@@ -50,6 +50,7 @@ if __name__ == "__main__":
         bot = Bot(MANIFEST)
         with bot.run("session"):
             SessionRunner(bot, SchwabFeed.connect(HERE), SipOrbRules(), [], risk_pct=0.01,
-                          universe_fn=lambda now: universe(now, TOP_N)).loop()
+                          universe_fn=lambda now: universe(now, TOP_N, report=lambda signal, action, reason:
+                              bot.L.decision(bot.m.id, "session", signal, action, reason))).loop()
     else:
         main(MANIFEST, SipOrbRules, [], HERE, replay_map={})

@@ -1,0 +1,123 @@
+From d7ab90b44f6a630e704cb53c26a7412287db0ce7 Mon Sep 17 00:00:00 2001
+From: Mark Watson <markwatson2@comcast.net>
+Date: Tue, 6 Oct 2026 15:53:32 +0000
+Subject: [PATCH] fix: preserve interruptions and record failed session health
+
+---
+ cc_sdk/cc_sdk/__init__.py             | 23 ++++++++++-
+ cc_sdk/tests/test_session_recovery.py | 55 +++++++++++++++++++++++++++
+ 2 files changed, 77 insertions(+), 1 deletion(-)
+
+diff --git a/cc_sdk/cc_sdk/__init__.py b/cc_sdk/cc_sdk/__init__.py
+index d0fb207..f904637 100644
+--- a/cc_sdk/cc_sdk/__init__.py
++++ b/cc_sdk/cc_sdk/__init__.py
+@@ -72,9 +72,25 @@ class Bot:
+     @contextmanager
+     def run(self, name: str) -> Iterator[Run]:
+         r = Run(self, name)
++        interrupted = False
+         self.event("run_started", run=name, mode=self.m.mode, version=self.m.version)
+         try:
+             yield r
++        except KeyboardInterrupt:
++            interrupted = True
++            # Ctrl+C is a BaseException: the ordinary failure handler below
++            # never saw it. Record failed health, preserve positions, and
++            # re-raise so the process still exits as interrupted. Forced
++            # termination can bypass Python; Task Scheduler history is needed
++            # to distinguish that case from a handled interrupt.
++            self.event("run_interrupted", run=name, error_type="KeyboardInterrupt")
++            try:
++                self.L.heartbeat(self.m.id, name, ok=False, detail="KeyboardInterrupt: command interrupted; positions preserved")
++                self.L.alert("page" if self.m.mode == "live" else "digest", "run_interrupted",
++                             f"{self.m.name}: {name} interrupted; positions preserved", self.m.id)
++            except Exception as error:  # noqa: BLE001 — preserve the original interruption
++                self.event("interruption_audit_failed", run=name, error_type=type(error).__name__)
++            raise
+         except Exception as e:  # noqa: BLE001
+             self.event("run_failed", run=name, error_type=type(e).__name__)
+             self.L.heartbeat(self.m.id, name, ok=False, detail=f"{e}\n{traceback.format_exc()}")
+@@ -85,7 +101,12 @@ class Bot:
+             self.L.heartbeat(self.m.id, name, ok=True)
+             self.event("run_completed", run=name)
+         finally:
+-            self.L.set_bot_status(self.m.id, self.control.status_word())
++            try:
++                self.L.set_bot_status(self.m.id, self.control.status_word())
++            except Exception as error:  # noqa: BLE001 — only protect an active interruption
++                if not interrupted:
++                    raise
++                self.event("interruption_cleanup_failed", run=name, error_type=type(error).__name__)
+ 
+     # ---- convenience writes ----
+     def record_fill(self, order_id: int | None, qty: int, price: float, expected_price: float, commission: float = 0.0) -> int:
+diff --git a/cc_sdk/tests/test_session_recovery.py b/cc_sdk/tests/test_session_recovery.py
+index 20a917c..0951b8e 100644
+--- a/cc_sdk/tests/test_session_recovery.py
++++ b/cc_sdk/tests/test_session_recovery.py
+@@ -110,6 +110,61 @@ def test_lifecycle_log_survives_failure_without_open_file_handles(tmp_path):
+     path.unlink()  # Windows cleanup must not encounter a lingering logging handle.
+ 
+ 
++def test_interrupted_run_records_failed_health_and_preserves_positions(tmp_path):
++    bot = make_bot(tmp_path)
++    bot.set_position("SPY", 3, avg_price=100.0)
++    with pytest.raises(KeyboardInterrupt):
++        with bot.run("session"):
++            raise KeyboardInterrupt
++    rows = [json.loads(line) for line in (tmp_path / "logs/t_gap.jsonl").read_text().splitlines()]
++    assert rows[-1]["event"] == "run_interrupted"
++    assert rows[-1]["error_type"] == "KeyboardInterrupt"
++    assert bot.L.one("SELECT ok FROM heartbeats ORDER BY id DESC LIMIT 1")["ok"] == 0
++    assert bot.L.one("SELECT kind FROM alerts ORDER BY id DESC LIMIT 1")["kind"] == "run_interrupted"
++    assert bot.positions()[0]["qty"] == 3
++    assert not bot.L.q("SELECT id FROM orders")
++
++
++def test_interruption_is_not_masked_when_optional_log_directory_is_unwritable(tmp_path):
++    bot = make_bot(tmp_path)
++    (tmp_path / "logs").write_text("occupied")
++    with pytest.raises(KeyboardInterrupt):
++        with bot.run("session"):
++            raise KeyboardInterrupt
++    assert bot.L.one("SELECT ok FROM heartbeats ORDER BY id DESC LIMIT 1")["ok"] == 0
++
++
++def test_interruption_is_not_masked_when_ledger_audit_write_fails(tmp_path, monkeypatch):
++    bot = make_bot(tmp_path)
++
++    def unavailable(*args, **kwargs):
++        raise OSError("fixture ledger audit unavailable")
++
++    monkeypatch.setattr(bot.L, "heartbeat", unavailable)
++    with pytest.raises(KeyboardInterrupt):
++        with bot.run("session"):
++            raise KeyboardInterrupt
++    rows = [json.loads(line) for line in (tmp_path / "logs/t_gap.jsonl").read_text().splitlines()]
++    assert any(row["event"] == "run_interrupted" for row in rows)
++    assert rows[-1]["event"] == "interruption_audit_failed"
++
++
++@pytest.mark.parametrize("owner,method", [("L", "set_bot_status"), ("control", "status_word")])
++def test_interruption_is_not_masked_by_final_status_failure(tmp_path, monkeypatch, owner, method):
++    bot = make_bot(tmp_path)
++
++    def unavailable(*args, **kwargs):
++        raise OSError("fixture final status unavailable")
++
++    monkeypatch.setattr(getattr(bot, owner), method, unavailable)
++    with pytest.raises(KeyboardInterrupt):
++        with bot.run("session"):
++            raise KeyboardInterrupt
++    rows = [json.loads(line) for line in (tmp_path / "logs/t_gap.jsonl").read_text().splitlines()]
++    assert any(row["event"] == "run_interrupted" for row in rows)
++    assert rows[-1]["event"] == "interruption_cleanup_failed"
++
++
+ def test_unwritable_diagnostics_do_not_mask_failure_or_prevent_recovery(tmp_path, caplog):
+     bot = make_bot(tmp_path)
+     (tmp_path / "logs").write_text("occupied")
+-- 
+2.52.0
+

@@ -44,3 +44,19 @@ Review/deploy the platform branch through the normal pipeline, set the dedicated
 - Portfolio capital basis remains unanswered; no equity is seeded and full portfolio risk readiness is not claimed.
 
 Bundles contain source only; no live databases, logs, backups, credential files or review ZIPs are published. SHA256.txt covers the transfer payload.
+
+## October 6 log-review update
+
+See LOG-FIXES.md for latest results and native steps. The earlier build/font and
+platform timeout blockers above are superseded: production build passed on f6b9413;
+new test-only repair e8146e8 passes all935activefiles,9050tests, with1expected
+failure,13skips,11todo. The updated platform bundle targets e8146e8. Native
+publication is still required; platform main and deployment were not changed.
+
+Separate CommandCenter interruption repair d7ab90b passes206Python tests and
+14backport regressions on the pre-open-only base, preserving native branch and
+unrelated changes. APPLY-LOG-FIXES.ps1 imports only this repair, not the scanner
+client. COLLECT-CC-REVIEW.ps1 captures current Windows evidence without parity
+recomputation; its Python path was functionally verified, WindowsPowerShell is
+unexecuted here. Capital basis, scanneractivation, and forced-stop cause remain
+open prerequisites. No capital amount or live control was changed.

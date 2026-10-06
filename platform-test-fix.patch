@@ -1,0 +1,56 @@
+From e8146e881f41959218baf6bc4442a40a1e30cd15 Mon Sep 17 00:00:00 2001
+From: Mark Watson <markwatson2@comcast.net>
+Date: Tue, 6 Oct 2026 15:50:14 +0000
+Subject: [PATCH] test: fail unavailable dummy database requests without DNS
+ delays
+
+---
+ tests/acceptance/autotrader/AT00.test.ts |  9 +++++++++
+ tests/setup/productionBoundary.ts        | 11 +++++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/tests/acceptance/autotrader/AT00.test.ts b/tests/acceptance/autotrader/AT00.test.ts
+index 738f01f1..b971a734 100644
+--- a/tests/acceptance/autotrader/AT00.test.ts
++++ b/tests/acceptance/autotrader/AT00.test.ts
+@@ -155,6 +155,15 @@ describe('AT00 section 1 — production boundary refuses egress', () => {
+     ).rejects.toThrow(ProductionBoundaryViolation);
+   });
+ 
++  it.each(['GET', 'POST', 'PATCH'])(
++    'rejects an unmocked sentinel database %s without waiting for DNS',
++    async (method) => {
++      await expect(
++        fetch('http://supabase-test.invalid/rest/v1/trader_config', { method }),
++      ).rejects.toThrow('Unmocked test database request');
++    },
++  );
++
+   it('closes the double-default hole: real transport with neither baseUrl nor fetchImpl', () => {
+     // Measured at baseline 36098111: this exact construction issued a live
+     // request to https://api.schwabapi.com/trader/v1/accounts/dummy-hash/orders.
+diff --git a/tests/setup/productionBoundary.ts b/tests/setup/productionBoundary.ts
+index 6dbb4bbb..fc14850b 100644
+--- a/tests/setup/productionBoundary.ts
++++ b/tests/setup/productionBoundary.ts
+@@ -350,6 +350,17 @@ globalThis.fetch = (async (input: unknown, init?: unknown) => {
+       parsed = null; // relative/opaque URL: cannot be an outbound production call
+     }
+     if (parsed && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
++      // This exact host is our absent-database sentinel, never a running fake.
++      // Delegating it to DNS added resolver/proxy delays and could hang tests
++      // whose fake timers froze a transport timeout. Keep unmocked DB reads
++      // and writes unavailable, but fail immediately and deterministically.
++      // Other reserved hosts and localhost still reach injected test services.
++      if (parsed.hostname === new URL(INVALID_SUPABASE_URL).hostname) {
++        throw new TypeError(
++          'Unmocked test database request: supabase-test.invalid is an unavailable ' +
++            'database sentinel. Inject a database or fetch double for successful reads/writes.',
++        );
++      }
+       if (!isAllowedTestHost(parsed.hostname)) {
+         boundaryReport.blockedRequests.push(parsed.href);
+         throw new ProductionBoundaryViolation(
+-- 
+2.52.0
+

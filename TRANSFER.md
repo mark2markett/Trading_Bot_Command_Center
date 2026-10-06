@@ -1,27 +1,13 @@
-# Command Center transfer
+# Command Center pre-open repair
 
-Delivered test/closed-loop head: b220dbda4f3bc58d003d5bc110f519e57cd02e5c. Required original base: feat/options-m7 at 2783f2eae2657a9d60b37f4ac5053715633ed683. GitHub main is unchanged.
+Delivered test/closed-loop head: 2f7bef397505bacc1b78c402a4cba47de2cc7b15. Required original base: 2783f2eae2657a9d60b37f4ac5053715633ed683. GitHub main is unchanged.
 
-Latest isolated fix b220dbd addresses shared SQLite connection races that stalled the Windows server. The exact SQLite API misuse was reproduced in concurrent real endpoints/risk ticks. Ledger operations now serialize execute/fetch/lastrowid/cursor close and existing migration; riskd records tracebacks. No risk settings, trading rules or stored data are reset. 161 full Python tests pass, four focused regressions pass, lint passes, independent review has no Critical/Important production findings. Complete cloud browser harness: 34 PASS / 0 FAIL / 7 NOT COVERED. Web remains at the previously verified 10 tests/build.
+The new isolated repair recovers transient minute-bar HTTP 429/5xx and transport errors on the next poll, keeps per-symbol entries blocked during the error, and preserves exits and permanent authentication failures. SDK process start/end/failure and heartbeat events go to var/logs/<bot_id>.jsonl; optional log I/O cannot stop position management. Periodic NO_SIGNAL/NO_BARS decisions preserve input context. SIP scanner configuration/errors/fallback/counts are explicit and durable; valid zero qualifiers remain distinct. Daily SPY paper uses the existing shared data-only feed instead of refreshing a retired local OAuth token or creating a Trader client. Configured connection failures surface; absent configuration retains standalone EOD compatibility. Morning paper reconciliation excludes unfinished daily candles. New server installs have no 20-hour execution limit.
 
-The preceding UI fix was confirmed on Windows: 39 PASS / 0 FAIL / 2 NOT COVERED, exit 0. Schwab and scheduled/live/scanner integration gaps remain. The Monday server recovery is now pending local application/restart.
+179 full Python tests,18 focused regressions,lint,independent review and cloud browser harness (34 PASS/0 FAIL/7 NOT COVERED) pass. Original-base+SQLite-fix backport fixture applies only this11-file repair, passes18 tests, and preserves production branch name, unrelated modifications, untracked prompts and ignored runtime. Tests and browser checks that both use port8586 must run sequentially. Windows task changes and real integrations need native verification.
 
-Retrieve into a unique temporary folder and verify/import from the original command-center repository:
+Retrieve the transfer branch into a new temporary directory, then execute APPLY-PREOPEN-FIX.ps1 from that directory. The script requires feat/options-m7 and no active bot command; verifies the bundle; disables Git automatic maintenance for fetch/cherry-pick; verifies listener identity; saves server task XML; stops only the matching server; creates a consistent read-only-source SQLite backup; cherry-picks only this repair (idempotent patch check); removes the existing server's execution time limit while preserving other settings; starts CC server via Task Scheduler; and runs configuration-presence/API checks. It preserves all bot schedules and does not start a trading session. Do not reinstall all tasks, switch to main, reset the working tree, or force conflicts.
 
-```powershell
-$transfer = Join-Path $env:TEMP ('cc-transfer-' + [guid]::NewGuid().ToString('N'))
-git clone --depth 1 --single-branch --branch transfer/closed-loop-bundle https://github.com/mark2markett/Trading_Bot_Command_Center.git $transfer
-Set-Location C:\Users\Administrator\trading_bots\command-center
-$bundle = Join-Path $transfer 'command-center-closed-loop.bundle'
-git bundle verify $bundle
-git -c gc.auto=0 fetch $bundle 'test/closed-loop:test/closed-loop'
-```
+PREOPEN-CHECK.py prints credential presence booleans, never values; it calls only local API endpoints and does not authenticate to a broker. An unconfigured SIP scanner requires the real SCANNER_URL or an intentional SIP_SYMBOLS fallback. Native fresh-data/scanner checks remain required. No raw uploaded ledger or production log is contained in the transfer.
 
-For the urgent server recovery, preserve logs and a consistent SQLite snapshot, verify the stalled server's process identity before stopping it, and keep feat/options-m7 checked out. Apply only this commit:
-
-```powershell
-git cherry-pick b220dbda4f3bc58d003d5bc110f519e57cd02e5c
-& .\.venv\Scripts\python.exe -u -m cc_server.main
-```
-
-Fetch and isolated cherry-pick were verified against an originless original-base fixture: production branch name, unrelated working changes and runtime sentinel preserved. Do not force conflicts or merge main. The four-file server fix is independent of harness modules and requires no web rebuild. Other bot tasks are not restarted automatically by these instructions. The ZIP contains full evidence/checksums/handoff.
+Monday's portfolio has no broker-equity capital basis. Portfolio risk configuration requires an explicit user decision; this repair does not manufacture a capital balance or modify risk limits.

@@ -21,14 +21,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $transfer 'AP
 
 The helper validates `feat/options-m7` and the prior repair, backs up the ledger read-only, imports the new branch, applies the single scanner commit idempotently, and runs native regressions. It leaves the server and existing task schedules running and preserves unrelated changes. No sessions are started and no credentials/capital are changed. PowerShell itself still requires native validation; the patch was independently backported against the original native base plus the two production repairs in cloud, preserving the branch, log/dev changes and untracked handoff.
 
-For an existing local m2m-platform checkout, publish the prepared review branch:
+Publish the prepared platform review branch using your native GitHub access:
 
 ```powershell
-# Set this to the actual m2m-platform checkout path on your machine.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $transfer 'PUBLISH-PLATFORM-SCANNER.ps1') -Repo 'C:\your-m2m-platform-checkout'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $transfer 'PUBLISH-PLATFORM-SCANNER.ps1')
 ```
 
-The publisher validates the origin, fetches the bundle, and pushes only `feat/cc-sip-scanner`; it does not switch the current checkout or merge main. If no local platform checkout exists, clone its main branch into a new folder first using your normal GitHub access. The platform bundle requires base `1e32fd9`; fetching main provides it.
+The publisher creates an isolated temporary platform checkout, validates the origin, imports the bundle, and pushes only `feat/cc-sip-scanner`. It does not merge main or change the production deployment. If you already have a local m2m-platform checkout, an optional `-Repo` parameter uses it and preserves its checked-out branch.
 
 Review/deploy the platform branch through the normal pipeline, set the dedicated secret securely on both sides, and enable the scanner before 09:00 Eastern on a trading day. See `CC-SIP-SCANNER.md` for the exact schedule, v1 contract, defaults, safe failure behavior and logs. Keep SIP_SYMBOLS blank for scanner-only mode. A fixed list is an explicit operator fallback, not a scanner.
 

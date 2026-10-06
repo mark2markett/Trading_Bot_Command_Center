@@ -1,6 +1,11 @@
 param([string]$Repo)
 $ErrorActionPreference = 'Stop'
-if (!$Repo) { throw 'Pass -Repo with your local m2m-platform checkout path.' }
+if (!$Repo) {
+    $Repo = Join-Path $env:TEMP ('m2m-sip-publish-' + [guid]::NewGuid().ToString('N'))
+    git clone --single-branch --branch main 'https://github.com/mark2markett/m2m-platform.git' $Repo
+    if ($LASTEXITCODE -ne 0) { throw 'Platform retrieval failed; use your normal authorized GitHub access.' }
+    Write-Host "Isolated platform checkout: $Repo"
+}
 Set-Location -LiteralPath $Repo
 $origin = (git remote get-url origin).Trim()
 if ($LASTEXITCODE -ne 0 -or $origin -notmatch 'github\.com[:/]mark2markett/m2m-platform(?:\.git)?$') { throw 'Expected the mark2markett/m2m-platform origin.' }

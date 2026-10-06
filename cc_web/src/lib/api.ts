@@ -18,7 +18,7 @@ export interface Order { id: number; at: string; side: string; qty: number; type
 export interface Fleet {
   as_of: string; equity: number | null; equity_series: [string, number][]; day: { pnl: number; pct: number }; daily_loss_limit_pct: number
   exposure: { usd: number; ratio: number; cap: number }
-  drawdown: { dd: number; equity: number | null; peak: number | null; pause: number; flatten: number; kill: number }
+  drawdown: { source?: 'paper' | 'broker' | 'none'; dd: number; equity: number | null; peak: number | null; pause: number; flatten: number; kill: number }
   counts: Record<string, number>; bots: BotSummary[]; attention: Alert[]
   correlation: { ids: string[]; matrix: Record<string, Record<string, number>>; flags: string[] }
   schedule: { time: string; bot: string; run: string; done: boolean }[]; open_orders: Order[]; fills: Fill[]
@@ -35,7 +35,7 @@ export interface BotDetail extends BotSummary {
 export interface Control { id: number; at: string; actor: string; action: string; target: string; before: unknown; after: unknown; note: string }
 export interface Risk {
   killed: boolean; entries_paused: boolean; kill_flag: Record<string, string> | null
-  drawdown: { dd: number; equity: number | null; peak: number | null }; limits: Record<string, number>; exposure: { usd: number; ratio: number; cap: number }
+  drawdown: { source?: 'paper' | 'broker' | 'none'; dd: number; equity: number | null; peak: number | null }; limits: Record<string, number>; exposure: { usd: number; ratio: number; cap: number }
   checks: { check: string; limit: string; peak: string; on_breach: string }[]
   dependencies: { riskd_last: { at: string } | null; token: { present: boolean; days_left: number | null }; calendar_loaded: boolean; host: { disk_free_gb: number }; alert_test: Record<string, string> | null; bots: number }
   audit: Control[]; last_drill: Control | null

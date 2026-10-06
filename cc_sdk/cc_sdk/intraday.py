@@ -279,35 +279,37 @@ class SessionRunner:
             self.traded_today.add(s)
             return
         o = Order(side="BUY" if sig.side > 0 else "SELL_SHORT", qty=qty, type="MKT", symbol=s, ref_price=px, quote_age_s=age, stop_price=stop)
-        r = self.bot.risk.pre_trade(o)
-        if not r.ok:
-            self.bot.L.decision(self.bot.m.id, "session", {"symbol": s, "signal": sig.reason}, "NONE", f"rejected: {r.reason}")
+        with self.bot.L.transaction():
+            r = self.bot.risk.pre_trade(o)
+            if not r.ok:
+                self.bot.L.decision(self.bot.m.id, "session", {"symbol": s, "signal": sig.reason}, "NONE", f"rejected: {r.reason}")
+                self.traded_today.add(s)
+                return
+            oid = self.bot.L.order(self.bot.m.id, side=o.side, qty=qty, type_="MKT", symbol=s, status="sent", reason=sig.reason,
+                                   risk_result=r.to_dict(), broker_order_id=f"paper-{now_iso()}", stop_price=stop, ref_price=px)
+            fill = px * (1 + sig.side * SLIPPAGE_BPS / 1e4)
+            self.bot.record_fill(oid, qty, fill, px)
+            self.bot.set_position(s, qty * sig.side, fill, now_iso(), 0, stop, "LONG" if sig.side > 0 else "SHORT")
+            self.bot.L.decision(self.bot.m.id, "session", {"symbol": s, "px": px, "stop": stop, "target": target, "qty": qty}, "ENTER", sig.reason)
+            self.open[s] = OpenPos(s, sig.side, qty, fill, stop, target, now_iso(), oid)
             self.traded_today.add(s)
-            return
-        oid = self.bot.L.order(self.bot.m.id, side=o.side, qty=qty, type_="MKT", symbol=s, status="sent", reason=sig.reason,
-                               risk_result=r.to_dict(), broker_order_id=f"paper-{now_iso()}", stop_price=stop, ref_price=px)
-        fill = px * (1 + sig.side * SLIPPAGE_BPS / 1e4)
-        self.bot.record_fill(oid, qty, fill, px)
-        self.bot.set_position(s, qty * sig.side, fill, now_iso(), 0, stop, "LONG" if sig.side > 0 else "SHORT")
-        self.bot.L.decision(self.bot.m.id, "session", {"symbol": s, "px": px, "stop": stop, "target": target, "qty": qty}, "ENTER", sig.reason)
-        self.open[s] = OpenPos(s, sig.side, qty, fill, stop, target, now_iso(), oid)
-        self.traded_today.add(s)
 
     def _exit(self, pos: OpenPos, px: float, age: float, reason: str) -> None:
         side = "SELL" if pos.side > 0 else "BUY_TO_COVER"
         o = Order(side=side, qty=pos.qty, type="MKT", symbol=pos.symbol, ref_price=px, quote_age_s=age, reduces_risk=True)
-        r = self.bot.risk.pre_trade(o)          # risk-reducing: never blocked by pause/kill, still audited
-        oid = self.bot.L.order(self.bot.m.id, side=side, qty=pos.qty, type_="MKT", symbol=pos.symbol, status="sent", reason=reason,
-                               risk_result=r.to_dict(), broker_order_id=f"paper-{now_iso()}", ref_price=px)
-        fill = px * (1 - pos.side * SLIPPAGE_BPS / 1e4)
-        self.bot.record_fill(oid, pos.qty, fill, px)
-        pnl = pos.side * (fill - pos.entry_px) * pos.qty
-        self.realized += pnl
-        self.bot.record_trade(entry_at=pos.entry_at, exit_at=now_iso(), qty=pos.qty * pos.side, entry_px=pos.entry_px, exit_px=fill, bars=0,
-                              exit_reason=reason, pnl=round(pnl, 2), slippage=abs(fill - px))
-        self.bot.set_position(pos.symbol, 0)
-        self.bot.L.decision(self.bot.m.id, "session", {"symbol": pos.symbol, "px": px, "pnl": round(pnl, 2)}, "EXIT", reason)
-        del self.open[pos.symbol]
+        with self.bot.L.transaction():
+            r = self.bot.risk.pre_trade(o)          # risk-reducing: never blocked by pause/kill, still audited
+            oid = self.bot.L.order(self.bot.m.id, side=side, qty=pos.qty, type_="MKT", symbol=pos.symbol, status="sent", reason=reason,
+                                   risk_result=r.to_dict(), broker_order_id=f"paper-{now_iso()}", ref_price=px)
+            fill = px * (1 - pos.side * SLIPPAGE_BPS / 1e4)
+            self.bot.record_fill(oid, pos.qty, fill, px)
+            pnl = pos.side * (fill - pos.entry_px) * pos.qty
+            self.realized += pnl
+            self.bot.record_trade(entry_at=pos.entry_at, exit_at=now_iso(), qty=pos.qty * pos.side, entry_px=pos.entry_px, exit_px=fill, bars=0,
+                                  exit_reason=reason, pnl=round(pnl, 2), slippage=abs(fill - px))
+            self.bot.set_position(pos.symbol, 0)
+            self.bot.L.decision(self.bot.m.id, "session", {"symbol": pos.symbol, "px": px, "pnl": round(pnl, 2)}, "EXIT", reason)
+            del self.open[pos.symbol]
 
 
 class ReplayFeed:

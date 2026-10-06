@@ -55,7 +55,7 @@ export function RiskPage() {
           <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Drawdown ladder · portfolio</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr auto', gap: 10, alignItems: 'center' }}>
-              <span className={`mono ${dd >= lim.dd_pause_pct ? 'neg' : 'pos'}`}>now −{(dd * 100).toFixed(1)}%</span>
+              <span className={`mono ${dd >= lim.dd_pause_pct ? 'neg' : 'pos'}`}>{r.drawdown.equity == null ? 'unavailable' : `now −${(dd * 100).toFixed(1)}%`}</span>
               <div className="bar" style={{ marginTop: 0, height: 8 }}><b style={{ width: `${Math.min(100, (dd / lim.dd_kill_pct) * 100)}%`, background: dd >= lim.dd_pause_pct ? 'var(--neg)' : 'var(--pos)' }} />
                 <i style={{ left: `${(lim.dd_pause_pct / lim.dd_kill_pct) * 100}%`, background: 'var(--warn)' }} /><i style={{ left: `${(lim.dd_flatten_pct / lim.dd_kill_pct) * 100}%`, background: 'var(--neg)' }} /></div>
               <span className="mut">of −{(lim.dd_kill_pct * 100).toFixed(0)}%</span>
@@ -66,7 +66,7 @@ export function RiskPage() {
             {limitRow('daily_loss_limit_pct', 'Daily loss limit (shown on the Fleet tile).', v => `−${(v * 100).toFixed(1)}%`)}
             {limitRow('max_gross_exposure', 'Max gross exposure as a multiple of equity.', v => `${v.toFixed(2)}×`)}
           </div>
-          <div className="mut" style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line)', fontSize: 12 }}>Measured on broker liquidation value ({r.drawdown.equity ? money(r.drawdown.equity) : 'none recorded yet'}), not bot-reported equity, so a reporting bug cannot hide a loss.</div>
+          <div className="mut" style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line)', fontSize: 12 }}>Measured on {r.drawdown.source === 'paper' ? 'the shared paper account: starting capital plus realized and freshly marked unrealized P&L' : 'broker liquidation value'} ({r.drawdown.equity ? money(r.drawdown.equity) : 'none recorded yet'}). Per-bot starting balances are never added together. Missing or stale account valuation blocks new entries.</div>
         </div>
       </section>
 

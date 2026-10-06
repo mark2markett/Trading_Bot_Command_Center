@@ -46,9 +46,11 @@ def equity_series(L: Ledger, bot_id: str, days: int = 400) -> list[tuple[str, fl
 
 
 def broker_equity_series(L: Ledger, days: int = 400) -> list[tuple[str, float]]:
+    from cc_sdk.paper_account import config
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    return [(r["at"], float(r["equity"])) for r in L.q(
-        "SELECT at, equity FROM equity WHERE source='broker' AND at>=? ORDER BY at", (since,))]
+    if config(L):
+        return [(r["at"],float(r["equity"])) for r in L.q("SELECT at,equity FROM paper_equity WHERE at>=? ORDER BY id",(since,))]
+    return [(r["at"],float(r["equity"])) for r in L.q("SELECT at,equity FROM equity WHERE source='broker' AND at>=? ORDER BY id",(since,))]
 
 
 def trades(L: Ledger, bot_id: str, limit: int = 200) -> list[dict[str, Any]]:

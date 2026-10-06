@@ -98,15 +98,22 @@ class Risk:
         if notional > float(self._lim("max_position_usd")):
             return fail("max_position_usd", f"${notional:,.0f} > ${float(self._lim('max_position_usd')):,.0f}")
         passed("size", f"${notional:,.0f}")
+        from .paper_account import config, snapshot
+        paper = snapshot(self.L) if config(self.L) else None
+        if paper and paper['ready']:
+            if paper['day_pct'] <= -float(self._plim('daily_loss_limit_pct')):
+                return fail('daily_loss', 'shared paper account daily loss limit reached; exits remain allowed')
+            if paper['drawdown'] >= float(self._plim('dd_pause_pct')):
+                return fail('portfolio_drawdown', 'shared paper account pause threshold reached; exits remain allowed')
         eq = self.L.latest_broker_equity_total()
         if eq:
-            gross = self.L.gross_exposure_usd() + notional
+            gross = (paper["gross"] if paper and paper["ready"] else self.L.gross_exposure_usd()) + notional
             cap = float(self._plim("max_gross_exposure"))
             if gross / eq > cap:
                 return fail("max_gross_exposure", f"{gross/eq:.2f}x > {cap:.2f}x")
             passed("max_gross_exposure", f"{gross/eq:.2f}x")
         else:
-            passed("max_gross_exposure", "no broker equity recorded yet; skipped")
+            return fail("account_equity", "account equity unavailable; configure paper capital and fresh marks or connect broker equity")
 
         # 4. collar and staleness
         if o.quote_age_s > float(self._lim("stale_quote_s")):
@@ -180,6 +187,16 @@ class Risk:
         cap = float(self._lim("max_premium_usd"))
         if premium > cap:
             return reject_all("max_premium_usd", f"${premium:,.0f} > ${cap:,.0f}")
+        # Gross exposure is the whole spread, rather than checking each leg in isolation.
+        eq = self.L.latest_broker_equity_total()
+        if eq:
+            from .paper_account import config, snapshot
+            paper = snapshot(self.L) if config(self.L) else None
+            gross = (paper['gross'] if paper and paper['ready'] else self.L.gross_exposure_usd())
+            gross += sum(abs(o.qty)*o.ref_price*max(int(o.multiplier or 1),contract_multiplier(o.symbol)) for o in legs)
+            exposure_cap = float(self._plim('max_gross_exposure'))
+            if gross/eq > exposure_cap:
+                return reject_all('max_gross_exposure',f'{gross/eq:.2f}x > {exposure_cap:.2f}x for entire spread')
         checks: list[dict[str, Any]] = [{"check": "max_premium_usd", "ok": True, "detail": f"${premium:,.0f}"}]
         passed_legs: list[Order] = []
         for o in legs:

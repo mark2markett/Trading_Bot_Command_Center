@@ -77,6 +77,7 @@ class ScenarioContext:
 
 def make_scenarios(repo: Path, runtime: Path) -> ScenarioContext:
     bots, modules = load_fleet(repo, runtime)
+    next(iter(bots.values())).record_equity(100_000, source="broker")  # SYNTHETIC shared account in disposable ledger
     return ScenarioContext(repo, runtime, bots, modules)
 
 

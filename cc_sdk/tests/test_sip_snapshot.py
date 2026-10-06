@@ -145,7 +145,7 @@ def test_actual_platform_snapshot_runs_sip_signal_risk_paper_fill_and_eod_exit(t
     feed.minute_bars = minutes
     feed.quote = lambda symbol: (101.9, 0)
     bot = make_bot(tmp_path)
-    runner = SessionRunner(bot, feed, rules_module.SipOrbRules(), [], universe_fn=scanner.universe, adopt_positions=False)
+    runner = SessionRunner(bot, feed, rules_module.SipOrbRules(), [], universe_fn=scanner.universe, adopt_positions=False, risk_pct=0.001)
     runner.prepare(NOW)
     runner.step(NOW + timedelta(minutes=1))
     assert set(runner.open) == {"AMD", "NVDA"}

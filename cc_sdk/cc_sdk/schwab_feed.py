@@ -15,11 +15,13 @@ NOTHING on /trader/v1 (accounts, orders, transactions). That absence is pinned b
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import httpx
@@ -35,6 +37,10 @@ SCHWAB_TIMEOUT_S = 20.0
 
 class BrokerError(RuntimeError):
     """The broker refused or could not mint a token. The message never contains a credential."""
+
+
+class QuoteDataError(ValueError, httpx.RequestError):
+    """Invalid provider quote: refuse it, keep the session alive, retry on the next poll."""
 
 
 class _BrokerSession:
@@ -56,6 +62,7 @@ class _BrokerSession:
         self._lock = threading.Lock()
         self._access: str | None = None
         self._expires_at = 0.0
+        self._cooldowns: dict[str, float] = {}
         self.broker_fetches = 0   # observability for tests and `check`
 
     # ---- token ----
@@ -100,11 +107,29 @@ class _BrokerSession:
 
     # ---- transport ----
     def _get(self, path: str, params: dict) -> httpx.Response:
+        # Per endpoint cooldown: a history throttle must not block protective quote reads.
+        current = time.time()
+        until = self._cooldowns.get(path, 0.)
+        if until > current:
+            return httpx.Response(429, headers={"Retry-After": str(math.ceil(until-current))},
+                                  request=httpx.Request("GET", SCHWAB_API + path))
         r = self._http.get(SCHWAB_API + path, params=params, headers={"Authorization": f"Bearer {self.access_token()}"})
-        if r.status_code != 401:
-            return r
-        self._invalidate()   # Schwab revoked or expired it early: one re-fetch, then surface whatever comes back
-        return self._http.get(SCHWAB_API + path, params=params, headers={"Authorization": f"Bearer {self.access_token()}"})
+        if r.status_code == 401:
+            self._invalidate()
+            r = self._http.get(SCHWAB_API + path, params=params, headers={"Authorization": f"Bearer {self.access_token()}"})
+        if r.status_code == 429:
+            value = r.headers.get("Retry-After", "60")
+            try:
+                delay = float(value)
+            except ValueError:
+                try:
+                    delay = parsedate_to_datetime(value).timestamp()-time.time()
+                except (ValueError, TypeError, OverflowError):
+                    delay = 60.
+            if not math.isfinite(delay):
+                delay = 60.
+            self._cooldowns[path] = time.time()+max(1.,delay)
+        return r
 
     # ---- the three market-data reads (schwab-py-compatible signatures) ----
     def get_quote(self, symbol: str) -> httpx.Response:
@@ -255,6 +280,8 @@ class SchwabFeed:
         try:
             from dotenv import load_dotenv
 
+            load_dotenv(bot_dir / ".env", override=False)
+            load_dotenv(bot_dir / ".env.local", override=True)
             load_dotenv(REPO_ROOT / ".env.local", override=False)
         except ImportError:
             pass
@@ -287,7 +314,7 @@ class SchwabFeed:
     def minute_bars(self, symbol: str, day: datetime) -> list[Bar]:
         key = (symbol, day.strftime("%Y-%m-%d"))
         hit = self._cache.get(key)
-        if hit and time.time() - hit[0] < 10:          # the runner polls every 15 s; don't hammer the API per symbol
+        if hit and int(time.time() // 60) == int(hit[0] // 60):  # reuse only within the same minute
             return hit[1]
         start = day.replace(hour=9, minute=30, second=0, microsecond=0)
         r = self.c.get_price_history_every_minute(symbol, start_datetime=start, end_datetime=start + timedelta(hours=7),
@@ -297,12 +324,35 @@ class SchwabFeed:
         self._cache[key] = (time.time(), bars)
         return bars
 
-    def quote(self, symbol: str) -> tuple[float, float]:
+    def _quote_data(self, symbol: str) -> tuple[dict, float]:
         r = self.c.get_quote(symbol)
         r.raise_for_status()
         q = r.json()[symbol]["quote"]
-        age = max(0.0, time.time() - q.get("quoteTime", time.time() * 1000) / 1000)
-        return float(q["lastPrice"]), age
+        stamp = q.get('quoteTime')
+        if type(stamp) not in (int, float) or not math.isfinite(stamp) or stamp <= 0:
+            raise QuoteDataError('Quote timestamp missing or invalid')
+        age = time.time()-stamp/1000
+        if age < -30:
+            raise QuoteDataError('Quote timestamp materially in the future')
+        return q, max(0.,age)
+
+    def quote(self, symbol: str) -> tuple[float, float]:
+        q, age = self._quote_data(symbol)
+        price = float(q['lastPrice'])
+        if not math.isfinite(price) or price <= 0:
+            raise QuoteDataError('Quote price invalid')
+        return price, age
+
+    def account_quote(self, symbol: str) -> tuple[float, float]:
+        """For options, value the current book; a recent quoteTime does not date lastPrice."""
+        from .options import contract_multiplier
+        if contract_multiplier(symbol) == 1:
+            return self.quote(symbol)
+        q, age = self._quote_data(symbol)
+        bid, ask = float(q.get('bidPrice', -1)), float(q.get('askPrice', -1))
+        if not math.isfinite(bid) or not math.isfinite(ask) or bid < 0 or ask <= 0 or ask < bid:
+            raise QuoteDataError('Option book unavailable or invalid')
+        return (bid+ask)/2, age
 
     def chain(self, symbol: str, from_date: date, to_date: date, strike_count: int | None = 40) -> list:
         """Option quotes for `symbol` expiring in [from_date, to_date], parsed into cc_sdk.options.OptionQuote."""

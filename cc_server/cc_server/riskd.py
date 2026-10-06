@@ -22,6 +22,8 @@ from cc_sdk.control import Control, control_dir
 from cc_sdk.ledger import Ledger, var_dir
 from cc_sdk.manifest import PORTFOLIO_DEFAULTS
 
+from cc_sdk import paper_account
+
 from . import calendar as cal
 from . import db, parity
 from .alerts import Alerter
@@ -36,15 +38,21 @@ def plim(L: Ledger, key: str) -> float:
 
 # ---------------------------------------------------------------------------
 def portfolio_drawdown(L: Ledger) -> dict[str, Any]:
+    paper = paper_account.config(L)
+    if paper and not paper_account.snapshot(L)["ready"]:
+        return {"dd": 0.0, "equity": None, "peak": None, "source": "paper"}
     series = db.broker_equity_series(L, days=400)
     if not series:
         return {"dd": 0.0, "equity": None, "peak": None, "source": "none"}
     vals = [v for _, v in series]
     peak = max(vals); last = vals[-1]
-    return {"dd": 0.0 if peak <= 0 else (peak - last) / peak, "equity": last, "peak": peak, "source": "broker"}
+    return {"dd": 0.0 if peak <= 0 else (peak - last) / peak, "equity": last, "peak": peak, "source": "paper" if paper else "broker"}
 
 
 def day_pnl(L: Ledger) -> dict[str, Any]:
+    if paper_account.config(L):
+        value = paper_account.snapshot(L)
+        return {"pnl": value.get("day_pnl", 0.), "pct": value.get("day_pct", 0.)}
     series = db.broker_equity_series(L, days=5)
     if len(series) < 2:
         return {"pnl": 0.0, "pct": 0.0}
@@ -57,7 +65,8 @@ def day_pnl(L: Ledger) -> dict[str, Any]:
 
 def gross_exposure(L: Ledger) -> dict[str, Any]:
     eq = L.latest_broker_equity_total()
-    gross = L.gross_exposure_usd()
+    paper = paper_account.snapshot(L) if paper_account.config(L) else None
+    gross = paper["gross"] if paper and paper["ready"] else L.gross_exposure_usd()
     return {"usd": gross, "ratio": 0.0 if not eq else gross / eq, "cap": plim(L, "max_gross_exposure")}
 
 
@@ -249,8 +258,35 @@ def bot_status(L: Ledger, b: dict[str, Any], flagged_hb: list[str], par: dict[st
     return "running"
 
 
+_paper_feed = None
+
+
+def paper_feed():
+    global _paper_feed
+    if _paper_feed is None:
+        from cc_sdk.schwab_feed import SchwabFeed
+        _paper_feed = SchwabFeed.connect(Path(__file__).resolve().parents[2] / "bots" / "spy_mr_bot")
+    return _paper_feed
+
+
+def refresh_paper_account(L: Ledger) -> dict | None:
+    if not paper_account.config(L):
+        return None
+    for row in L.q("SELECT DISTINCT symbol FROM positions WHERE qty != 0"):
+        try:
+            price, age = paper_feed().account_quote(row["symbol"])
+            if not 0 <= age <= 90:
+                raise ValueError("Quote is stale")
+            paper_account.mark(L,row["symbol"],price,datetime.now(timezone.utc)-timedelta(seconds=age))
+        except Exception as error:
+            # Preserve previous quote's timestamp: a failed refresh cannot manufacture a fresh mark.
+            log.warning("paper mark refresh failed: symbol=%s error=%s",row["symbol"],type(error).__name__)
+    return paper_account.record(L)
+
+
 def tick(L: Ledger, alerter: Alerter | None = None) -> dict[str, Any]:
     """One riskd pass. Returns a summary for /api/health."""
+    account = refresh_paper_account(L)
     actions = apply_ladder(L)
     flagged = heartbeat_watch(L)
     token_watch(L)
@@ -264,7 +300,7 @@ def tick(L: Ledger, alerter: Alerter | None = None) -> dict[str, Any]:
         now_et = datetime.now(ET)
         if now_et.hour == int(alerter.cfg.get("digest", {}).get("hour_et", 6)) and not db.kv_get(L, f"digest:{now_et.date()}"):
             alerter.send_digest(); db.kv_set(L, f"digest:{now_et.date()}", True)
-    summary = {"at": datetime.now(timezone.utc).isoformat(), "ladder_actions": actions, "degraded": flagged, "pages_delivered": delivered}
+    summary = {"at": datetime.now(timezone.utc).isoformat(), "ladder_actions": actions, "degraded": flagged, "pages_delivered": delivered, "paper_account": account}
     db.kv_set(L, "riskd_last", summary)
     return summary
 

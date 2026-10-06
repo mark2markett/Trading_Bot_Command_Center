@@ -364,3 +364,15 @@ def set_limit(scope: str, key: str, req: LimitReq) -> dict[str, Any]:
     L().control(req.actor, "limit", f"{scope}.{key}", before, req.value, req.note)  # audit first
     L().set_limit(scope, key, req.value)
     return {"ok": True, "before": before, "after": req.value}
+
+
+@router.get("/readiness")
+def readiness():
+    """Read-only deployment evidence; no parity recomputation or control writes."""
+    from cc_sdk.paper_account import snapshot
+    ledger = L()
+    modes = ledger.q("SELECT mode FROM bots")
+    cdir = control_dir()
+    return {"paper_account": snapshot(ledger), "paper_fleet": bool(modes) and all(b["mode"] == "paper" for b in modes),
+            "bot_count": len(modes), "bot_ids": [r["id"] for r in ledger.q("SELECT id FROM bots")], "killed": (cdir / "KILL").exists(),
+            "entries_paused": (cdir / "PAUSE_ENTRIES").exists()}

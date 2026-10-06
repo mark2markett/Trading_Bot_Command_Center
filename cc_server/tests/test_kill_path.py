@@ -39,6 +39,7 @@ def run_template(var: Path, cmd: str) -> None:
 
 def test_kill_path_end_to_end(env):
     var, c, L = env["var"], env["client"], env["L"]
+    L.equity("synthetic_account",100000,source="broker")
     run_template(var, "decide")                       # opens a paper position of 10 SPY
     assert L.one("SELECT qty FROM positions WHERE bot_id='template'")["qty"] == 10
     t0 = time.time()

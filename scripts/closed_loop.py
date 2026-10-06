@@ -193,8 +193,15 @@ def run_worker(repo: Path, runtime: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--require-ready", action="store_true", help="Require native live readiness before sandbox tests")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.require_ready:
+        from scripts.native_readiness import main as native_readiness
+        if native_readiness([]):
+            return 1
+    if not args.worker:
+        print("Synthetic closed-loop checks do not certify deployment. Use --require-ready during 09:35–09:39 ET for native readiness.")
     try:
         if args.worker:
             runtime = validate_sandbox(ROOT, os.getenv("CC_VAR"))

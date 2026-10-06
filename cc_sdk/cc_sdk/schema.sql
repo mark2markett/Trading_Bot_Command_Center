@@ -30,3 +30,6 @@ CREATE TABLE IF NOT EXISTS option_trades(id INTEGER PRIMARY KEY, trade_id INTEGE
   right TEXT, legs_json TEXT, qty INTEGER, net_debit REAL, net_credit REAL, und_entry REAL, und_exit REAL, net_delta REAL,
   spread_pnl REAL, share_equiv_pnl REAL, close_method TEXT, at TEXT);
 CREATE INDEX IF NOT EXISTS ix_opt ON option_trades(bot_id, at);
+CREATE TABLE IF NOT EXISTS paper_marks(symbol TEXT PRIMARY KEY, price REAL NOT NULL, at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS paper_equity(id INTEGER PRIMARY KEY, at TEXT NOT NULL, equity REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS ix_paper_equity_at ON paper_equity(at);

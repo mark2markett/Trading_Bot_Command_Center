@@ -41,7 +41,9 @@ def make_bot(tmp_path: Path, bot_id: str = "t_gap") -> Bot:
     (var / "control").mkdir(parents=True)
     m = BotManifest(id=bot_id, name="T", version="0", strategy_line="", instrument="SPY", mode="paper",
                     limits={"max_position_usd": 1_000_000, "max_order_qty": 100_000, "max_orders_per_day": 10})
-    return Bot(m, db_path=var / "cc.db", control_dir=var / "control")
+    bot = Bot(m, db_path=var / "cc.db", control_dir=var / "control")
+    bot.record_equity(100_000, source="broker")  # explicit synthetic account equity
+    return bot
 
 
 def replay(bot: Bot, feed: ReplayFeed, rules, symbols: list[str], **kw) -> SessionRunner:

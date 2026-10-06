@@ -6,6 +6,7 @@ import os
 import sqlite3
 import threading
 from collections.abc import Iterable
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,27 @@ class Ledger:
         self.conn = sqlite3.connect(self.path, timeout=10, isolation_level=None, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+
+    @contextmanager
+    def transaction(self, *, write: bool = True):
+        """Atomic lifecycle writes or a consistent valuation read across processes.
+
+        No provider calls belong inside this scope. Nested SDK helpers use savepoints.
+        """
+        with self._lock:
+            nested = self.conn.in_transaction
+            self._transaction_seq = getattr(self, '_transaction_seq', 0) + 1
+            savepoint = f'sdk_tx_{self._transaction_seq}'
+            self.conn.execute(f'SAVEPOINT {savepoint}' if nested else ('BEGIN IMMEDIATE' if write else 'BEGIN'))
+            try:
+                yield
+            except BaseException:
+                self.conn.execute(f'ROLLBACK TO {savepoint}' if nested else 'ROLLBACK')
+                if nested:
+                    self.conn.execute(f'RELEASE {savepoint}')
+                raise
+            else:
+                self.conn.execute(f'RELEASE {savepoint}' if nested else 'COMMIT')
 
     # ---- generic ----
     def q(self, sql: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:
@@ -194,6 +216,10 @@ class Ledger:
                (scope, key, json.dumps(value), now_iso()))
 
     def latest_broker_equity_total(self) -> float | None:
+        # Compatibility name: explicit paper configuration takes precedence over broker history.
+        from .paper_account import config, snapshot
+        if config(self):
+            return snapshot(self)["equity"]
         rows = self.q("""SELECT e.bot_id, e.equity FROM equity e
                          JOIN (SELECT bot_id, MAX(at) at FROM equity WHERE source='broker' GROUP BY bot_id) m
                            ON m.bot_id=e.bot_id AND m.at=e.at WHERE e.source='broker'""")

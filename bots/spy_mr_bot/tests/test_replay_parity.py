@@ -65,6 +65,7 @@ def wrapped_actions(tmp_path, monkeypatch):
     import cc
     import bot
     importlib.reload(cc); importlib.reload(bot)
+    cc.bot.record_equity(100000, source="broker")  # synthetic account fixture
     assert cc.SDK, "cc_sdk must be importable for this test"
     bot.STATE_PATH = tmp_path / "state.json"; bot.LOG_PATH = tmp_path / "bot.log"
     monkeypatch.setattr(bot, "trading_day_today", lambda: True)

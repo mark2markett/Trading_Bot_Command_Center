@@ -31,6 +31,7 @@ def run(tmp_path, monkeypatch):
     from broker import PaperBroker
     feed = Feed()
     b = PaperBroker(str(tmp_path / "ledger.json"), 100_000, data=feed)
+    bot.cc.bot.record_equity(100000, source="broker")  # synthetic account fixture
     st = bot.load_state()
     # Day 1: two sharp down days -> RSI2 < 10 while still above SMA200 -> BUY queued
     feed.step(feed.live * 0.985); feed.live = feed.bars[-1]["close"] * 0.985

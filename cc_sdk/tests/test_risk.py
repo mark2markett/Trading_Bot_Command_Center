@@ -11,7 +11,9 @@ def mk(tmp_path: Path, mode="paper", **limits):
     cdir.mkdir()
     m = BotManifest(id="t_bot", name="Template", version="0.1", strategy_line="x", instrument="SPY", mode=mode,
                     cadence={"decide": "15:50"}, limits=limits)
-    return Bot(m, db_path=tmp_path / "cc.db", control_dir=cdir), cdir
+    bot = Bot(m, db_path=tmp_path / "cc.db", control_dir=cdir)
+    bot.record_equity(100_000, source="broker")  # explicit synthetic account equity
+    return bot, cdir
 
 
 def entry(qty=100, px=500.0, age=1.0, **kw):

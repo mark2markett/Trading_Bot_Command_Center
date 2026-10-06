@@ -14,17 +14,18 @@ export function FleetPage({ f, refetch }: { f: Fleet; refetch: () => void }) {
   const dayRatio = Math.abs(Math.min(0, f.day.pct)) / (f.daily_loss_limit_pct || 0.02)
   return (
     <main>
+      {f.equity == null && <div className="warn" role="alert">Fleet risk unavailable: account equity or current prices are missing. New entries are blocked.</div>}
       <section className="tiles">
-        <Tile label="Portfolio equity" span2 value={<span>{money(f.equity)} <span style={{ fontSize: 14, fontWeight: 400 }} className={tone(f.day.pnl)}>{signedMoney(f.day.pnl)} today</span></span>} cls="xl">
+        <Tile label="Portfolio equity" span2 value={<span>{money(f.equity)} <span style={{ fontSize: 14, fontWeight: 400 }} className={tone(f.day.pnl)}>{f.equity == null ? 'P&L unavailable' : signedMoney(f.day.pnl) + ' today'}</span></span>} cls="xl">
           <Sparkline series={f.equity_series.map(e => e[1])} color={f.day.pnl >= 0 ? 'var(--pos)' : 'var(--neg)'} />
         </Tile>
-        <Tile label="Day P&L vs limit" value={<span className={tone(f.day.pct)}>{pct(f.day.pct, 2, true)}</span>} sub={`Daily loss limit −${(f.daily_loss_limit_pct * 100).toFixed(1)}%`}>
+        <Tile label="Day P&L vs limit" value={<span className={tone(f.day.pct)}>{f.equity == null ? '—' : pct(f.day.pct, 2, true)}</span>} sub={`Daily loss limit −${(f.daily_loss_limit_pct * 100).toFixed(1)}%`}>
           <LimitBar ratio={dayRatio} color={f.day.pct >= 0 ? 'var(--pos)' : undefined} />
         </Tile>
-        <Tile label="Gross exposure" value={`${f.exposure.ratio.toFixed(2)}×`} sub={`Cap ${f.exposure.cap.toFixed(2)}× equity`}>
+        <Tile label="Gross exposure" value={f.equity == null ? '—' : `${f.exposure.ratio.toFixed(2)}×`} sub={`Cap ${f.exposure.cap.toFixed(2)}× equity`}>
           <LimitBar ratio={f.exposure.ratio / f.exposure.cap} color="var(--accent)" />
         </Tile>
-        <Tile label="Portfolio drawdown" value={<span className={dd.dd > dd.pause ? 'neg' : dd.dd > dd.pause / 2 ? 'warn' : ''}>−{(dd.dd * 100).toFixed(1)}%</span>} sub={`Pause at −${(dd.pause * 100).toFixed(0)}% · Kill at −${(dd.kill * 100).toFixed(0)}%`}>
+        <Tile label="Portfolio drawdown" value={<span className={dd.dd > dd.pause ? 'neg' : dd.dd > dd.pause / 2 ? 'warn' : ''}>{f.equity == null ? '—' : `−${(dd.dd * 100).toFixed(1)}%`}</span>} sub={`Pause at −${(dd.pause * 100).toFixed(0)}% · Kill at −${(dd.kill * 100).toFixed(0)}%`}>
           <LimitBar ratio={dd.dd / dd.kill} ticks={[{ at: dd.pause / dd.kill, color: 'var(--warn)' }, { at: dd.flatten / dd.kill, color: 'var(--neg)' }]} />
         </Tile>
         <Tile label="Fleet health">

@@ -8,7 +8,7 @@ to a no-op EXCEPT risk checks, which then fail closed for new entries. That is d
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from typing import Any
 
 MODE = os.getenv("MODE", "paper").lower()
@@ -70,11 +70,13 @@ def guarded(run_: Any, *, side: str, qty: int, type_: str, symbol: str, ref_pric
         return send()
     o = Order(side=side, qty=qty, type=type_, symbol=symbol, ref_price=ref_price, quote_age_s=quote_age_s,
               reduces_risk=reduces_risk, stop_price=stop_price)
-    r = bot.risk.pre_trade(o)
+    with bot.L.transaction() if bot.m.mode == "paper" else nullcontext():
+        r = bot.risk.pre_trade(o)
+        if r.ok:
+            oid = send()
+            run_.order_sent(o, r, broker_order_id=oid)
     if not r.ok:
-        raise Rejected(r.reason)
-    oid = send()
-    run_.order_sent(o, r, broker_order_id=oid)
+        raise Rejected(r.reason)  # retain committed rejection order and alert
     return oid
 
 
@@ -89,7 +91,10 @@ def clear_flatten() -> None:
 
 def record_fill(side: str, qty: int, price: float, expected: float, commission: float = 0.0) -> None:
     if bot:
-        bot.record_fill(bot.last_sent_order_id(side), qty, price, expected, commission)
+        with bot.L.transaction():
+            bot.record_fill(bot.last_sent_order_id(side), qty, price, expected, commission)
+            if side == "BUY" and bot.m.mode == "paper":
+                bot.set_position(bot.m.instrument, qty, price, bot.now, 0)
 
 
 def set_position(symbol: str, qty: int, avg_price: float | None, entry_at: str | None, bars_held: int) -> None:
@@ -104,4 +109,6 @@ def record_equity(value: float, source: str) -> None:
 
 def record_trade(**kw: Any) -> None:
     if bot:
-        bot.record_trade(**kw)
+        with bot.L.transaction():
+            bot.record_trade(**kw)
+            bot.set_position(bot.m.instrument, 0)  # this strategy records whole-position exits only

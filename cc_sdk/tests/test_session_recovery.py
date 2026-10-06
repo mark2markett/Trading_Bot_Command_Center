@@ -13,9 +13,11 @@ DAY = datetime(2026, 10, 5, tzinfo=ET)
 
 def make_bot(tmp_path):
     (tmp_path / "control").mkdir()
-    return Bot(BotManifest("t_gap", "fixture", "0", "fixture", "SPY", "paper",
+    bot = Bot(BotManifest("t_gap", "fixture", "0", "fixture", "SPY", "paper",
                            limits={"max_orders_per_day": 10}),
                db_path=tmp_path / "cc.db", control_dir=tmp_path / "control")
+    bot.record_equity(100_000, source="broker")  # explicit synthetic account equity
+    return bot
 
 
 def daily_history(day):
@@ -60,7 +62,7 @@ def http_error(status):
 def test_transient_bar_error_skips_symbol_and_recovers_on_next_poll(tmp_path, error):
     bot = make_bot(tmp_path)
     feed = Feed(error)
-    runner = SessionRunner(bot, feed, Rules(), ["SPY", "QQQ"])
+    runner = SessionRunner(bot, feed, Rules(), ["SPY", "QQQ"], risk_pct=0.005)  # two entries within shared synthetic capital
     runner.prepare(DAY)
     now = DAY.replace(hour=10, minute=15)
     runner.step(now)

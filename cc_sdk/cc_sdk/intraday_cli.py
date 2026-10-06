@@ -67,6 +67,7 @@ def replay_isolated(manifest: BotManifest, rules: Rules, symbol: str, parquet_sy
         (Path(d) / "control").mkdir()
         bot = Bot(manifest, db_path=Path(d) / "replay.db", control_dir=Path(d) / "control")
         try:
+            bot.record_equity(float(kw.get("paper_equity", 100_000)), source="broker")  # isolated replay account only
             return {**run_replay(bot, rules, symbol, parquet_symbol, date, **kw), "ledger": "throwaway (not recorded)"}
         finally:
             bot.L.conn.close()   # Windows cannot delete an open SQLite file

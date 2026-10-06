@@ -6,6 +6,7 @@ No network: every HTTP call goes through httpx.MockTransport. Covers
 - the broker session: refresh-before-expiry, ONE in-flight fetch under concurrency, 401 → one re-fetch then raise,
   broker error mapping, sidecar written without any secret, and the absence of any trading method.
 """
+
 import json
 import threading
 import time
@@ -26,7 +27,9 @@ SECRET = "s" * 40
 
 def test_methods_attach_to_class():
     for name in METHODS:
-        assert callable(getattr(SchwabFeed, name, None)), f"SchwabFeed.{name} missing — a module-level def slipped into the class body"
+        assert callable(getattr(SchwabFeed, name, None)), (
+            f"SchwabFeed.{name} missing — a module-level def slipped into the class body"
+        )
     assert callable(schwab_feed.write_issued_sidecar)
     assert not hasattr(SchwabFeed, "write_issued_sidecar")
     assert not hasattr(SchwabFeed, "from_env") and not hasattr(SchwabFeed, "from_refresh_token")
@@ -35,12 +38,24 @@ def test_methods_attach_to_class():
 def test_broker_session_has_no_trading_surface():
     """Paper-only guarantee on the fleet side: no accounts / orders / transactions method exists to call."""
     names = {n for n in dir(_BrokerSession) if not n.startswith("__")}
-    for banned in ("place_order", "cancel_order", "get_account", "get_accounts", "get_orders", "get_transactions",
-                   "replace_order", "preview_order"):
+    for banned in (
+        "place_order",
+        "cancel_order",
+        "get_account",
+        "get_accounts",
+        "get_orders",
+        "get_transactions",
+        "replace_order",
+        "preview_order",
+    ):
         assert banned not in names
     # Exactly four read-only market-data calls (M7.1 added the option chain). Anything else is a new surface.
-    assert {n for n in names if n.startswith("get_")} == {"get_quote", "get_price_history_every_minute",
-                                                         "get_price_history_every_day", "get_option_chain"}
+    assert {n for n in names if n.startswith("get_")} == {
+        "get_quote",
+        "get_price_history_every_minute",
+        "get_price_history_every_day",
+        "get_option_chain",
+    }
 
 
 # ---- fake client (feed-level) ----
@@ -58,12 +73,21 @@ class _Resp:
 
 class _FakeClient:
     def get_quote(self, symbol):
-        return _Resp({symbol: {"quote": {"lastPrice": 567.89, "quoteTime": 0}}})
+        return _Resp({symbol: {"quote": {"lastPrice": 567.89, "quoteTime": time.time() * 1000}}})
 
     def get_price_history_every_minute(self, symbol, start_datetime, end_datetime, need_extended_hours_data):
         base = start_datetime.replace(hour=9, minute=30, second=0, microsecond=0)
-        candles = [{"datetime": int(base.replace(minute=30 + i).timestamp() * 1000), "open": 1, "high": 2, "low": 0.5,
-                    "close": 1.5, "volume": 100} for i in range(2)]
+        candles = [
+            {
+                "datetime": int(base.replace(minute=30 + i).timestamp() * 1000),
+                "open": 1,
+                "high": 2,
+                "low": 0.5,
+                "close": 1.5,
+                "volume": 100,
+            }
+            for i in range(2)
+        ]
         return _Resp({"candles": candles})
 
 
@@ -101,10 +125,17 @@ class _World:
                 return httpx.Response(self.broker_status, json=body, headers={"retry-after": "42"})
             self.n += 1
             exp = (datetime.now(timezone.utc) + timedelta(seconds=self.expires_in_s)).isoformat().replace("+00:00", "Z")
-            return httpx.Response(200, json={"access_token": f"ACCESS-{self.n}-{'x' * 30}", "token_type": "Bearer",
-                                             "expires_at": exp, "scope": "market-data-only",
-                                             "refresh_issued_at": self.issued.isoformat().replace("+00:00", "Z"),
-                                             "refresh_days_left": 6.0})
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": f"ACCESS-{self.n}-{'x' * 30}",
+                    "token_type": "Bearer",
+                    "expires_at": exp,
+                    "scope": "market-data-only",
+                    "refresh_issued_at": self.issued.isoformat().replace("+00:00", "Z"),
+                    "refresh_days_left": 6.0,
+                },
+            )
         assert request.url.host == "api.schwabapi.com"
         self.schwab_calls += 1
         self.auth_headers.append(request.headers.get("authorization"))
@@ -129,7 +160,8 @@ def _session(world, bot="gap_go_bot"):
 def test_fetches_once_and_injects_bearer_and_bot_header(var):
     w = _World()
     s = _session(w)
-    r1 = s.get_quote("SPY"); r2 = s.get_quote("QQQ")
+    r1 = s.get_quote("SPY")
+    r2 = s.get_quote("QQQ")
     assert r1.status_code == 200 and r2.json()["QQQ"]["quote"]["lastPrice"] == 100.5
     assert w.broker_calls == 1 and w.schwab_calls == 2
     assert w.auth_headers == [f"Bearer ACCESS-1-{'x' * 30}"] * 2
@@ -137,9 +169,10 @@ def test_fetches_once_and_injects_bearer_and_bot_header(var):
 
 
 def test_refreshes_before_expiry(var):
-    w = _World(expires_in_s=schwab_feed.REFRESH_EARLY_S - 5)   # already inside the early-refresh window
+    w = _World(expires_in_s=schwab_feed.REFRESH_EARLY_S - 5)  # already inside the early-refresh window
     s = _session(w)
-    s.get_quote("SPY"); s.get_quote("SPY")
+    s.get_quote("SPY")
+    s.get_quote("SPY")
     assert w.broker_calls == 2
 
 
@@ -155,7 +188,8 @@ def test_single_inflight_fetch_under_concurrency(var):
             errors.append(e)
 
     ts = [threading.Thread(target=go) for _ in range(8)]
-    [t.start() for t in ts]; [t.join() for t in ts]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
     assert not errors and w.broker_calls == 1 and w.schwab_calls == 8
 
 
@@ -194,13 +228,16 @@ def test_sidecar_written_without_secret_and_no_token_file(var):
 
 
 def test_from_broker_validates_config(monkeypatch, var):
-    monkeypatch.delenv("CC_TOKEN_BROKER_URL", raising=False); monkeypatch.delenv("CC_TOKEN_BROKER_SECRET", raising=False)
+    monkeypatch.delenv("CC_TOKEN_BROKER_URL", raising=False)
+    monkeypatch.delenv("CC_TOKEN_BROKER_SECRET", raising=False)
     with pytest.raises(RuntimeError, match="CC_TOKEN_BROKER_URL, CC_TOKEN_BROKER_SECRET"):
         SchwabFeed.from_broker(var)
-    monkeypatch.setenv("CC_TOKEN_BROKER_URL", "http://insecure"); monkeypatch.setenv("CC_TOKEN_BROKER_SECRET", SECRET)
+    monkeypatch.setenv("CC_TOKEN_BROKER_URL", "http://insecure")
+    monkeypatch.setenv("CC_TOKEN_BROKER_SECRET", SECRET)
     with pytest.raises(RuntimeError, match="https"):
         SchwabFeed.from_broker(var)
-    monkeypatch.setenv("CC_TOKEN_BROKER_URL", BROKER); monkeypatch.setenv("CC_TOKEN_BROKER_SECRET", "short")
+    monkeypatch.setenv("CC_TOKEN_BROKER_URL", BROKER)
+    monkeypatch.setenv("CC_TOKEN_BROKER_SECRET", "short")
     with pytest.raises(RuntimeError, match="under 32"):
         SchwabFeed.from_broker(var)
     monkeypatch.setenv("CC_TOKEN_BROKER_SECRET", SECRET)
@@ -229,8 +266,9 @@ class _SharedWorld:
             assert request.headers.get("apikey") == SERVICE
             if request.method == "GET":
                 self.reads += 1
-                return httpx.Response(200, json=[{"schwab_token_state": {"refresh_token": REFRESH,
-                                                                         "issued_at": "2026-10-04T02:26:41.289Z"}}])
+                return httpx.Response(
+                    200, json=[{"schwab_token_state": {"refresh_token": REFRESH, "issued_at": "2026-10-04T02:26:41.289Z"}}]
+                )
             self.patches.append(json.loads(request.content))
             return httpx.Response(204)
         if request.url.path == "/v1/oauth/token":
@@ -275,10 +313,102 @@ def test_shared_state_refusal_never_leaks(var):
 
 
 def test_connect_prefers_shared_state_when_configured(monkeypatch, var):
-    for k, v in {"SCHWAB_CLIENT_ID": "c" * 32, "SCHWAB_CLIENT_SECRET": "s" * 16, "SUPABASE_URL": SB,
-                 "SUPABASE_SERVICE_ROLE_KEY": SERVICE}.items():
+    for k, v in {
+        "SCHWAB_CLIENT_ID": "c" * 32,
+        "SCHWAB_CLIENT_SECRET": "s" * 16,
+        "SUPABASE_URL": SB,
+        "SUPABASE_SERVICE_ROLE_KEY": SERVICE,
+    }.items():
         monkeypatch.setenv(k, v)
     w = _SharedWorld()
     out = SchwabFeed.connect(var, transport=httpx.MockTransport(w.handler)).check("SPY")
     assert out["last"] == 101.25 and out["broker_url"] == "shared-state"
     assert SERVICE not in json.dumps(out)
+
+
+def test_minute_history_cache_covers_polls_but_refreshes_at_minute_boundary(monkeypatch):
+    clock = [datetime(2026, 10, 6, 10, 0, 1, tzinfo=ET).timestamp()]
+    monkeypatch.setattr(schwab_feed.time, "time", lambda: clock[0])
+
+    class Counting(_FakeClient):
+        calls = 0
+
+        def get_price_history_every_minute(self, *args, **kwargs):
+            self.calls += 1
+            return super().get_price_history_every_minute(*args, **kwargs)
+
+    client = Counting()
+    feed = SchwabFeed(client)
+    day = datetime.fromtimestamp(clock[0], ET)
+    feed.minute_bars("SPY", day)
+    for elapsed in (15, 30, 45):
+        clock[0] = day.timestamp() + elapsed
+        feed.minute_bars("SPY", day)
+    assert client.calls == 1
+    clock[0] = day.timestamp() + 60
+    feed.minute_bars("SPY", day)
+    assert client.calls == 2
+
+
+def test_history_429_cooldown_honors_retry_after_without_blocking_quotes(monkeypatch, tmp_path):
+    clock = [1000000.0]
+    monkeypatch.setattr(schwab_feed.time, "time", lambda: clock[0])
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if request.url.path.endswith("pricehistory"):
+            return httpx.Response(429, headers={"Retry-After": "60"})
+        return httpx.Response(200, json={"SPY": {"quote": {"lastPrice": 500, "quoteTime": clock[0] * 1000}}})
+
+    session = _BrokerSession(BROKER, SECRET, tmp_path, transport=httpx.MockTransport(handler))
+    session._access = "a" * 40
+    session._expires_at = clock[0] + 1800
+    day = datetime(2026, 10, 6, tzinfo=ET)
+    feed = SchwabFeed(session)
+    with pytest.raises(httpx.HTTPStatusError):
+        feed.minute_bars("SPY", day)
+    clock[0] += 15
+    with pytest.raises(httpx.HTTPStatusError):
+        feed.minute_bars("SPY", day)
+    assert calls.count("/marketdata/v1/pricehistory") == 1
+    assert feed.quote("SPY") == (500, 0)
+    clock[0] += 45
+    with pytest.raises(httpx.HTTPStatusError):
+        feed.minute_bars("SPY", day)
+    assert calls.count("/marketdata/v1/pricehistory") == 2
+
+
+@pytest.mark.parametrize("timestamp", [None, float("nan"), float("inf"), (time.time() + 3600) * 1000])
+def test_missing_invalid_and_future_quote_times_are_refused(timestamp):
+    class Client:
+        def get_quote(self, symbol):
+            quote = {"lastPrice": 500}
+            if timestamp is not None:
+                quote["quoteTime"] = timestamp
+            return _Resp({symbol: {"quote": quote}})
+
+    with pytest.raises(ValueError):
+        SchwabFeed(Client()).quote("SPY")
+
+
+def test_option_account_mark_uses_current_book_instead_of_old_last_trade():
+    symbol = "SPY   261009C00500000"
+
+    class Client:
+        def get_quote(self, symbol):
+            return _Resp({symbol: {"quote": {"lastPrice": 5, "bidPrice": 0.9, "askPrice": 1.1, "quoteTime": time.time() * 1000}}})
+
+    price, age = SchwabFeed(Client()).account_quote(symbol)
+    assert price == 1 and age < 1
+
+
+def test_connect_reads_bot_local_broker_configuration(monkeypatch, tmp_path):
+    botdir = tmp_path / "spy_mr_bot"
+    botdir.mkdir()
+    (botdir / ".env.local").write_text("CC_TOKEN_BROKER_URL=" + BROKER + "\nCC_TOKEN_BROKER_SECRET=" + SECRET + "\n")
+    monkeypatch.setattr(schwab_feed, "REPO_ROOT", tmp_path)
+    for key in (*schwab_feed.SHARED_VARS, "CC_TOKEN_BROKER_URL", "CC_TOKEN_BROKER_SECRET"):
+        monkeypatch.delenv(key, raising=False)
+    feed = SchwabFeed.connect(botdir, transport=httpx.MockTransport(lambda request: httpx.Response(200)))
+    assert isinstance(feed.c, _BrokerSession)

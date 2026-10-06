@@ -155,29 +155,30 @@ class SpreadSessionRunner(SessionRunner):
                       quote_age_s=max(0.0, ts - long_q.quote_time), multiplier=CONTRACT_MULTIPLIER),
                 Order(side="SELL_TO_OPEN", qty=qty, type="LMT", symbol=short_q.occ, ref_price=short_q.mid,
                       quote_age_s=max(0.0, ts - short_q.quote_time), multiplier=CONTRACT_MULTIPLIER)]
-        r = self.bot.risk.pre_trade_spread(legs, net_debit=fill.net_debit)
-        if not r.ok:
-            return self._none(s, sig, f"rejected: {r.reason}")
-        for o, fpx, q in zip(legs, fill.prices, (long_q, short_q), strict=True):
-            oid = self.bot.L.order(self.bot.m.id, side=o.side, qty=qty, type_="LMT", symbol=o.symbol, status="sent",
-                                   reason=sig.reason, risk_result=r.to_dict(), broker_order_id=f"paper-{now_iso()}", ref_price=q.mid)
-            self.bot.record_fill(oid, qty, fpx, q.mid)
-        self.bot.set_position(long_q.occ, qty, fill.prices[0], now_iso(), 0, None, "LONG")
-        self.bot.set_position(short_q.occ, -qty, fill.prices[1], now_iso(), 0, None, "SHORT")
-        pos = OpenSpread(s, sig.side, qty, px, stop, target, now_iso(), None, expiry=long_q.expiry.isoformat(),
-                         right=long_q.right, legs=[long_q.occ, short_q.occ], entry_prices=list(fill.prices),
-                         net_debit=fill.net_debit, und_entry=px, net_delta=(long_q.delta or 0.0) - (short_q.delta or 0.0))
-        self.open[s] = pos
-        self.traded_today.add(s)
-        self.bot.L.x("INSERT INTO kv(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET "
-                     "value_json=excluded.value_json, updated_at=excluded.updated_at",
-                     (self._kv_key(s), json.dumps(asdict(pos)), now_iso()))
-        self.bot.L.decision(self.bot.m.id, "session", {
-            "symbol": s, "px": px, "stop": stop, "legs": [q.occ.strip() for q in (long_q, short_q)], "qty": qty,
-            "net_debit": fill.net_debit, "net_delta": round(pos.net_delta, 3), "dte": (long_q.expiry - today).days}, "ENTER", sig.reason)
-        self._record_live(pos, long_q, short_q, now)
+        with self.bot.L.transaction():
+            r = self.bot.risk.pre_trade_spread(legs, net_debit=fill.net_debit)
+            if not r.ok:
+                return self._none(s, sig, f"rejected: {r.reason}")
+            for o, fpx, q in zip(legs, fill.prices, (long_q, short_q), strict=True):
+                oid = self.bot.L.order(self.bot.m.id, side=o.side, qty=qty, type_="LMT", symbol=o.symbol, status="sent",
+                                       reason=sig.reason, risk_result=r.to_dict(), broker_order_id=f"paper-{now_iso()}", ref_price=q.mid)
+                self.bot.record_fill(oid, qty, fpx, q.mid)
+            self.bot.set_position(long_q.occ, qty, fill.prices[0], now_iso(), 0, None, "LONG")
+            self.bot.set_position(short_q.occ, -qty, fill.prices[1], now_iso(), 0, None, "SHORT")
+            pos = OpenSpread(s, sig.side, qty, px, stop, target, now_iso(), None, expiry=long_q.expiry.isoformat(),
+                             right=long_q.right, legs=[long_q.occ, short_q.occ], entry_prices=list(fill.prices),
+                             net_debit=fill.net_debit, und_entry=px, net_delta=(long_q.delta or 0.0) - (short_q.delta or 0.0))
+            self.open[s] = pos
+            self.traded_today.add(s)
+            self.bot.L.x("INSERT INTO kv(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET "
+                         "value_json=excluded.value_json, updated_at=excluded.updated_at",
+                         (self._kv_key(s), json.dumps(asdict(pos)), now_iso()))
+            self.bot.L.decision(self.bot.m.id, "session", {
+                "symbol": s, "px": px, "stop": stop, "legs": [q.occ.strip() for q in (long_q, short_q)], "qty": qty,
+                "net_debit": fill.net_debit, "net_delta": round(pos.net_delta, 3), "dte": (long_q.expiry - today).days}, "ENTER", sig.reason)
+            self._record_live(pos, long_q, short_q, now)
 
-    # ---- exit ----
+        # ---- exit ----
     def _exit(self, pos: OpenPos, px: float, age: float, reason: str) -> None:
         if not isinstance(pos, OpenSpread):
             return super()._exit(pos, px, age, reason)
@@ -210,25 +211,26 @@ class SpreadSessionRunner(SessionRunner):
                        quote_age_s=age, reduces_risk=True, multiplier=CONTRACT_MULTIPLIER),
                  Order(side="BUY_TO_CLOSE", qty=pos.qty, type="MKT", symbol=pos.legs[1], ref_price=prices[1],
                        quote_age_s=age, reduces_risk=True, multiplier=CONTRACT_MULTIPLIER)]
-        r = self.bot.risk.pre_trade_spread(close, net_debit=0.0)          # risk-reducing: always allowed, audited
-        for o, fpx in zip(close, prices, strict=True):
-            oid = self.bot.L.order(self.bot.m.id, side=o.side, qty=pos.qty, type_="MKT", symbol=o.symbol, status="sent",
-                                   reason=reason, risk_result=r.to_dict(), broker_order_id=f"paper-{now_iso()}", ref_price=fpx)
-            self.bot.record_fill(oid, pos.qty, fpx, fpx)
-            self.bot.set_position(o.symbol, 0)
-        pnl = spread_pnl(entry=pos.entry_prices, exit=prices, signs=[+1, -1], qty=pos.qty)
-        share_equiv = round(pos.net_delta * CONTRACT_MULTIPLIER * pos.qty * (px - pos.und_entry), 2)
-        self.realized += pnl
-        net_credit = round(prices[0] - prices[1], 4)
-        tid = self.bot.record_trade(entry_at=pos.entry_at, exit_at=now_iso(), qty=pos.qty, entry_px=pos.net_debit,
-                                    exit_px=net_credit, bars=0, exit_reason=reason, pnl=pnl, slippage=0.0)
-        self.bot.L.x("""INSERT INTO option_trades(trade_id,bot_id,underlying,expiry,right,legs_json,qty,net_debit,net_credit,
-                        und_entry,und_exit,net_delta,spread_pnl,share_equiv_pnl,close_method,at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                     (tid, self.bot.m.id, pos.symbol, pos.expiry, pos.right, json.dumps(pos.legs), pos.qty, pos.net_debit, net_credit,
-                      pos.und_entry, px, pos.net_delta, pnl, share_equiv, "; ".join(how), now_iso()))
-        self.bot.L.x("DELETE FROM kv WHERE key=?", (self._kv_key(pos.symbol),))
-        self.bot.L.x("DELETE FROM kv WHERE key=?", (self._live_key(pos.symbol),))
-        self._live_at.pop(pos.symbol, None)
-        self.bot.L.decision(self.bot.m.id, "session", {"symbol": pos.symbol, "px": px, "pnl": pnl, "share_equiv": share_equiv,
-                                                       "close": how}, "EXIT", reason)
-        del self.open[pos.symbol]
+        with self.bot.L.transaction():
+            r = self.bot.risk.pre_trade_spread(close, net_debit=0.0)          # risk-reducing: always allowed, audited
+            for o, fpx in zip(close, prices, strict=True):
+                oid = self.bot.L.order(self.bot.m.id, side=o.side, qty=pos.qty, type_="MKT", symbol=o.symbol, status="sent",
+                                       reason=reason, risk_result=r.to_dict(), broker_order_id=f"paper-{now_iso()}", ref_price=fpx)
+                self.bot.record_fill(oid, pos.qty, fpx, fpx)
+                self.bot.set_position(o.symbol, 0)
+            pnl = spread_pnl(entry=pos.entry_prices, exit=prices, signs=[+1, -1], qty=pos.qty)
+            share_equiv = round(pos.net_delta * CONTRACT_MULTIPLIER * pos.qty * (px - pos.und_entry), 2)
+            self.realized += pnl
+            net_credit = round(prices[0] - prices[1], 4)
+            tid = self.bot.record_trade(entry_at=pos.entry_at, exit_at=now_iso(), qty=pos.qty, entry_px=pos.net_debit,
+                                        exit_px=net_credit, bars=0, exit_reason=reason, pnl=pnl, slippage=0.0)
+            self.bot.L.x("""INSERT INTO option_trades(trade_id,bot_id,underlying,expiry,right,legs_json,qty,net_debit,net_credit,
+                            und_entry,und_exit,net_delta,spread_pnl,share_equiv_pnl,close_method,at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                         (tid, self.bot.m.id, pos.symbol, pos.expiry, pos.right, json.dumps(pos.legs), pos.qty, pos.net_debit, net_credit,
+                          pos.und_entry, px, pos.net_delta, pnl, share_equiv, "; ".join(how), now_iso()))
+            self.bot.L.x("DELETE FROM kv WHERE key=?", (self._kv_key(pos.symbol),))
+            self.bot.L.x("DELETE FROM kv WHERE key=?", (self._live_key(pos.symbol),))
+            self._live_at.pop(pos.symbol, None)
+            self.bot.L.decision(self.bot.m.id, "session", {"symbol": pos.symbol, "px": px, "pnl": pnl, "share_equiv": share_equiv,
+                                                           "close": how}, "EXIT", reason)
+            del self.open[pos.symbol]

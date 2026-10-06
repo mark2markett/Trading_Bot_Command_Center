@@ -61,7 +61,9 @@ def mk(tmp_path: Path, **limits):
     cdir.mkdir(exist_ok=True)
     m = BotManifest(id="spread_t", name="Spread test", version="0.1", strategy_line="x", instrument="SPY options", mode="paper",
                     cadence={"session": "09:25"}, limits={"max_orders_per_day": 8, **limits})
-    return Bot(m, db_path=tmp_path / "cc.db", control_dir=cdir), cdir
+    bot = Bot(m, db_path=tmp_path / "cc.db", control_dir=cdir)
+    bot.record_equity(100_000, source="broker")  # explicit synthetic account equity
+    return bot, cdir
 
 
 def run_to(runner, feed, hh, mm):

@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $Repo
 $Repo = (Resolve-Path -LiteralPath $Repo).Path
 $python = Join-Path $Repo '.venv\Scripts\python.exe'
-$tip = '3e8b5888cb474038cc3f8240e855cc84e12392d5'
+$tip = 'db9b50744fc2c10af7b18b32b939da75f8c5bd6a'
 $base = '2783f2eae2657a9d60b37f4ac5053715633ed683'
 if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Repository Python is missing.' }
 if ((git branch --show-current).Trim() -ne 'feat/options-m7') { throw 'Expected feat/options-m7; no branch was switched.' }

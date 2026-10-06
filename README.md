@@ -48,3 +48,8 @@ Review/deploy the platform branch through the normal pipeline, set the dedicated
 - Portfolio capital basis remains unanswered; no equity is seeded and full portfolio risk readiness is not claimed.
 
 Bundles contain source only; no live databases, logs, backups, credential files or review ZIPs are published. SHA256.txt covers the transfer payload.
+## Scanner review handoff — October 6, 2026
+
+The native runtime installation has now passed 235 tests and initialized the approved shared $100,000 paper account. Its remaining configuration failure is the scanner URL/secret. Do not repeat the runtime installer for this handoff.
+
+The updated platform bundle advances the published producer e8146e8 to 1543232 with its required acceptance plan. Run PUBLISH-PLATFORM-SCANNER.ps1 from a fresh transfer checkout. It publishes only the feature branch and, when an authorized GitHub CLI is available, opens its review PR. Otherwise use the printed compare URL with SCANNER-PULL-REQUEST.md as the description. The separate current-head GitHub review/checks, owner merge, production deployment and secure scanner configuration are still required. The cloud environment has no platform push/API authorization or Vercel connection; it has not deployed the scanner.

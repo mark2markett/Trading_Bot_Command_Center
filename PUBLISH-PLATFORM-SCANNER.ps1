@@ -20,3 +20,20 @@ git push origin 'feat/cc-sip-scanner:feat/cc-sip-scanner'
 if ($LASTEXITCODE -ne 0) { throw 'Feature branch publication failed. No main merge or deployment was requested.' }
 Write-Host 'Published the review branch; the current checkout was preserved.'
 Write-Host 'Review: https://github.com/mark2markett/m2m-platform/compare/main...feat/cc-sip-scanner'
+$bodyFile = Join-Path $PSScriptRoot 'SCANNER-PULL-REQUEST.md'
+if ((Test-Path -LiteralPath $bodyFile) -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+    $existing = & gh pr list --repo mark2markett/m2m-platform --head feat/cc-sip-scanner --base main --state open --json url --jq '.[0].url' 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        if ($existing) {
+            Write-Host "Existing pull request: $existing"
+            Write-Host "Acceptance mapping and review description: $bodyFile"
+        }
+        else {
+            & gh pr create --repo mark2markett/m2m-platform --base main --head feat/cc-sip-scanner --title 'Restore Command Center SIP ORB scanner input' --body-file $bodyFile
+            if ($LASTEXITCODE -ne 0) { Write-Warning 'Branch published; PR creation requires your normal authorized GitHub login. Use the review URL and description file.' }
+        }
+    }
+    else { Write-Warning 'Branch published; GitHub CLI API access is unavailable. Use the review URL and description file.' }
+}
+Write-Host "PR description: $bodyFile"
+Write-Host 'Do not merge until current-head GitHub review, required checks and preview pass. This command does not deploy or change secrets.'

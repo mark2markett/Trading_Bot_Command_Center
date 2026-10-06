@@ -27,6 +27,10 @@ FLATTEN_MIN = 958                        # 15:58: send market exits before the b
 SLIPPAGE_BPS = 1.0                       # paper fills: quote ± 1 bp (matches the backtest cost model)
 
 
+class UniversePending(Exception):
+    """Retryable delayed universe; the runner must continue managing open positions."""
+
+
 @dataclass
 class Bar:
     t: datetime        # bar start, ET
@@ -119,13 +123,15 @@ class SessionRunner:
     def __init__(self, bot: Bot, feed: Feed, rules: Rules, symbols: list[str], *, risk_pct: float = 0.01,
                  paper_equity: float = 100_000.0, poll_s: int = 15,
                  universe_fn: Callable[[datetime], list[str]] | None = None, universe_at_mod: int = OPEN_MIN + 5,
-                 adopt_positions: bool = True):
+                 adopt_positions: bool = True, universe_deadline_mod: int = OPEN_MIN + 10):
         """universe_fn: optional late-binding symbol list (e.g. a 09:35 stocks-in-play scan). Until it runs, no entries.
         adopt_positions: pick up positions left in the ledger by a crashed session (off for offline replays)."""
         self.adopt_positions = adopt_positions
         self.bot, self.feed, self.rules, self.symbols = bot, feed, rules, list(symbols)
         self.risk_pct, self.equity, self.poll_s = risk_pct, paper_equity, poll_s
         self.universe_fn, self.universe_at_mod, self.universe_done = universe_fn, universe_at_mod, universe_fn is None
+        self.universe_deadline_mod = universe_deadline_mod
+        self._universe_failure = False
         self.ctx: dict[str, DayContext] = {}
         self.open: dict[str, OpenPos] = {}
         self.traded_today: set[str] = set()
@@ -179,7 +185,7 @@ class SessionRunner:
     def step(self, now: datetime) -> None:
         """One poll. Order of operations: controls → exits (stops, flatten, EOD) → entries."""
         mod = now.hour * 60 + now.minute
-        self._poll_errors = {}
+        self._poll_errors = {"scanner": "scanner unavailable at deadline"} if self._universe_failure else {}
         killed = self.bot.control.killed()
         flatten = killed or self.bot.control.flatten_requested() or mod >= FLATTEN_MIN
         for s in list(self.open):
@@ -197,10 +203,22 @@ class SessionRunner:
                 self._exit(pos, px, age, "target")
         if flatten and not self.open and self.bot.control.flatten_requested():
             self.bot.control.clear_flatten()
+        if not self.universe_done and self.universe_fn is not None and mod >= self.universe_deadline_mod:
+            self.symbols = []
+            self.universe_done = True
+            self._universe_failure = True
+            self._poll_errors["scanner"] = "scanner unavailable at deadline"
+            self.bot.L.decision(self.bot.m.id, "session", {}, "SCANNER_UNAVAILABLE", "no valid universe by 09:40 ET; entries disabled, exits continue")
+            self.bot.event("scanner_unavailable", deadline_mod=self.universe_deadline_mod)
+            return
         if killed or flatten or self.bot.control.entries_paused() or mod < OPEN_MIN + 1:
             return
         if not self.universe_done and mod >= self.universe_at_mod and self.universe_fn is not None:
-            self.symbols = self.universe_fn(now)
+            try:
+                self.symbols = self.universe_fn(now)
+            except UniversePending:
+                self._poll_errors["scanner"] = "snapshot pending; retry next poll"
+                return
             self.prepare(now)
             self.universe_done = True
             self.bot.L.decision(self.bot.m.id, "session", {"universe": self.symbols}, "UNIVERSE", f"{len(self.symbols)} symbols selected")

@@ -72,9 +72,25 @@ class Bot:
     @contextmanager
     def run(self, name: str) -> Iterator[Run]:
         r = Run(self, name)
+        interrupted = False
         self.event("run_started", run=name, mode=self.m.mode, version=self.m.version)
         try:
             yield r
+        except KeyboardInterrupt:
+            interrupted = True
+            # Ctrl+C is a BaseException: the ordinary failure handler below
+            # never saw it. Record failed health, preserve positions, and
+            # re-raise so the process still exits as interrupted. Forced
+            # termination can bypass Python; Task Scheduler history is needed
+            # to distinguish that case from a handled interrupt.
+            self.event("run_interrupted", run=name, error_type="KeyboardInterrupt")
+            try:
+                self.L.heartbeat(self.m.id, name, ok=False, detail="KeyboardInterrupt: command interrupted; positions preserved")
+                self.L.alert("page" if self.m.mode == "live" else "digest", "run_interrupted",
+                             f"{self.m.name}: {name} interrupted; positions preserved", self.m.id)
+            except Exception as error:  # noqa: BLE001 — preserve the original interruption
+                self.event("interruption_audit_failed", run=name, error_type=type(error).__name__)
+            raise
         except Exception as e:  # noqa: BLE001
             self.event("run_failed", run=name, error_type=type(e).__name__)
             self.L.heartbeat(self.m.id, name, ok=False, detail=f"{e}\n{traceback.format_exc()}")
@@ -85,7 +101,12 @@ class Bot:
             self.L.heartbeat(self.m.id, name, ok=True)
             self.event("run_completed", run=name)
         finally:
-            self.L.set_bot_status(self.m.id, self.control.status_word())
+            try:
+                self.L.set_bot_status(self.m.id, self.control.status_word())
+            except Exception as error:  # noqa: BLE001 — only protect an active interruption
+                if not interrupted:
+                    raise
+                self.event("interruption_cleanup_failed", run=name, error_type=type(error).__name__)
 
     # ---- convenience writes ----
     def record_fill(self, order_id: int | None, qty: int, price: float, expected_price: float, commission: float = 0.0) -> int:

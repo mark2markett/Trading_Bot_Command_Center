@@ -110,6 +110,61 @@ def test_lifecycle_log_survives_failure_without_open_file_handles(tmp_path):
     path.unlink()  # Windows cleanup must not encounter a lingering logging handle.
 
 
+def test_interrupted_run_records_failed_health_and_preserves_positions(tmp_path):
+    bot = make_bot(tmp_path)
+    bot.set_position("SPY", 3, avg_price=100.0)
+    with pytest.raises(KeyboardInterrupt):
+        with bot.run("session"):
+            raise KeyboardInterrupt
+    rows = [json.loads(line) for line in (tmp_path / "logs/t_gap.jsonl").read_text().splitlines()]
+    assert rows[-1]["event"] == "run_interrupted"
+    assert rows[-1]["error_type"] == "KeyboardInterrupt"
+    assert bot.L.one("SELECT ok FROM heartbeats ORDER BY id DESC LIMIT 1")["ok"] == 0
+    assert bot.L.one("SELECT kind FROM alerts ORDER BY id DESC LIMIT 1")["kind"] == "run_interrupted"
+    assert bot.positions()[0]["qty"] == 3
+    assert not bot.L.q("SELECT id FROM orders")
+
+
+def test_interruption_is_not_masked_when_optional_log_directory_is_unwritable(tmp_path):
+    bot = make_bot(tmp_path)
+    (tmp_path / "logs").write_text("occupied")
+    with pytest.raises(KeyboardInterrupt):
+        with bot.run("session"):
+            raise KeyboardInterrupt
+    assert bot.L.one("SELECT ok FROM heartbeats ORDER BY id DESC LIMIT 1")["ok"] == 0
+
+
+def test_interruption_is_not_masked_when_ledger_audit_write_fails(tmp_path, monkeypatch):
+    bot = make_bot(tmp_path)
+
+    def unavailable(*args, **kwargs):
+        raise OSError("fixture ledger audit unavailable")
+
+    monkeypatch.setattr(bot.L, "heartbeat", unavailable)
+    with pytest.raises(KeyboardInterrupt):
+        with bot.run("session"):
+            raise KeyboardInterrupt
+    rows = [json.loads(line) for line in (tmp_path / "logs/t_gap.jsonl").read_text().splitlines()]
+    assert any(row["event"] == "run_interrupted" for row in rows)
+    assert rows[-1]["event"] == "interruption_audit_failed"
+
+
+@pytest.mark.parametrize("owner,method", [("L", "set_bot_status"), ("control", "status_word")])
+def test_interruption_is_not_masked_by_final_status_failure(tmp_path, monkeypatch, owner, method):
+    bot = make_bot(tmp_path)
+
+    def unavailable(*args, **kwargs):
+        raise OSError("fixture final status unavailable")
+
+    monkeypatch.setattr(getattr(bot, owner), method, unavailable)
+    with pytest.raises(KeyboardInterrupt):
+        with bot.run("session"):
+            raise KeyboardInterrupt
+    rows = [json.loads(line) for line in (tmp_path / "logs/t_gap.jsonl").read_text().splitlines()]
+    assert any(row["event"] == "run_interrupted" for row in rows)
+    assert rows[-1]["event"] == "interruption_cleanup_failed"
+
+
 def test_unwritable_diagnostics_do_not_mask_failure_or_prevent_recovery(tmp_path, caplog):
     bot = make_bot(tmp_path)
     (tmp_path / "logs").write_text("occupied")

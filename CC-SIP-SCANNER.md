@@ -26,6 +26,6 @@ The authenticated machine GET only reads stored results: disabled 404, unauthori
 
 Cloud fixtures demonstrate calculation, auth, retry/isolation, and the real SIP rules→risk→paper fills→EOD exit. They do not establish live provider history coverage, entitlement, quote freshness, or Windows scheduler readiness. Before enabling for a morning, verify deployment status, Redis health, shared Schwab connection, and preparation completeness. At 09:35 verify the authenticated v1 snapshot and native `UNIVERSE` decision. Review exclusions rather than assuming all configured stocks qualify.
 
-Portfolio equity remains a separate unresolved configuration item. This scanner does not seed it or demonstrate that portfolio exposure/drawdown protection is fully initialized. Paper execution only; operator promotion remains separate.
+The operator chose one shared $100,000 paper account. APPLY-RUNTIME-FIXES.ps1 installs that separate account repair; the scanner itself does not seed capital. Native readiness still requires current marks for open positions. Paper execution only; operator promotion remains separate.
 
 The scanner calendar fails closed outside its covered 2026–2027 years, including lookback windows that cross into an uncovered year. This avoids pretending an unlisted holiday is a trading session; extend the shared calendar and scanner guard together before using such a window.

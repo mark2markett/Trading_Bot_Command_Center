@@ -1,62 +1,11 @@
-# SIP scanner delivery — 2026-10-06
+# Current delivery — runtime repair, 2026-10-06
 
-Command Center source is published on `feat/sip-scanner`, commit `9d2cbc2ed327b76c00dd7007dbc402ac7ba42380`, based on cloud pre-open repair `2f7bef3`. The native `26ea7cb` repair is patch-equivalent. Main was not changed.
+Use [RUNTIME-FIXES.md](RUNTIME-FIXES.md) and APPLY-RUNTIME-FIXES.ps1. This is the consolidated update; previous standalone installers are retained for history.
 
-Platform scanner is prepared at `f6b9413d31102b5758016025d55326089fb3d32a` on `feat/cc-sip-scanner`, base `1e32fd94646526818593713ca3c53ad52493975d`. This cloud task can read m2m-platform but its push failed with a GitHub authentication error. The incremental platform bundle and readable patch preserve all three commits for import using an authorized platform checkout. No main merge or production deployment was performed.
+Command Center source: fix/runtime-log-review-20261006, commit 3e8b5888cb474038cc3f8240e855cc84e12392d5, based on the latest feat/options-m7 base 2783f2e. The incremental bundle requires that base, already present on Windows. It includes the entire closed-loop and runtime repair history so native imports do not depend on testing code having been merged earlier. Existing equivalent patches are skipped; the production checkout remains feat/options-m7.
 
-## Retrieve the package on Windows
+Platform source: feat/cc-sip-scanner, commit e8146e881f41959218baf6bc4442a40a1e30cd15, published successfully by the native publisher. Publishing the review branch did not merge it, deploy it, configure Redis/secrets, or enable its morning scheduler. See CC-SIP-SCANNER.md for that contract.
 
-```powershell
-$transfer = Join-Path $env:TEMP ('cc-sip-' + [guid]::NewGuid().ToString('N'))
-git clone --depth 1 --single-branch --branch transfer/sip-scanner https://github.com/mark2markett/Trading_Bot_Command_Center.git $transfer
-if ($LASTEXITCODE -ne 0) { throw 'GitHub retrieval failed.' }
-Get-Content (Join-Path $transfer 'TRANSFER.md')
-```
+Native account: operator-approved one shared $100,000 paper account; never five duplicate balances. Installer checksums cover the source bundle and the production dashboard ZIP. No live database, logs or credential files are included.
 
-After bot sessions finish, install only the native scanner client:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $transfer 'APPLY-SIP-SCANNER.ps1')
-```
-
-The helper validates `feat/options-m7` and the prior repair, backs up the ledger read-only, imports the new branch, applies the single scanner commit idempotently, and runs native regressions. It leaves the server and existing task schedules running and preserves unrelated changes. No sessions are started and no credentials/capital are changed. PowerShell itself still requires native validation; the patch was independently backported against the original native base plus the two production repairs in cloud, preserving the branch, log/dev changes and untracked handoff.
-
-Publish the prepared platform review branch using your native GitHub access:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $transfer 'PUBLISH-PLATFORM-SCANNER.ps1')
-```
-
-The publisher creates an isolated temporary platform checkout, validates the origin, imports the bundle, and pushes only `feat/cc-sip-scanner`. It does not merge main or change the production deployment. If you already have a local m2m-platform checkout, an optional `-Repo` parameter uses it and preserves its checked-out branch.
-
-Review/deploy the platform branch through the normal pipeline, set the dedicated secret securely on both sides, and enable the scanner before 09:00 Eastern on a trading day. See `CC-SIP-SCANNER.md` for the exact schedule, v1 contract, defaults, safe failure behavior and logs. Keep SIP_SYMBOLS blank for scanner-only mode. A fixed list is an explicit operator fallback, not a scanner.
-
-## Verification and outstanding checks
-
-- 30 platform scanner tests pass, production typecheck/lint/cron registry/size/any/client-server gates pass.
-- 201 Command Center Python tests pass.
-- Actual platform-produced fixture passes real SIP rules → risk → paper entry/fills → EOD exits.
-- Browser harness: 34 PASS / 0 FAIL / 7 NOT COVERED, isolated runtime and source cleaned.
-- Independent review: both Important findings fixed with RED/GREEN regressions, minor coverage/calendar findings fixed; follow-up found no remaining Critical/Important issues.
-- Broad platform suite: 9035 pass, 10 fail, 1 expected fail, 13 skipped, 11 todo. The six failing existing files also fail on unchanged main in this environment; timeout test identities vary across runs. These are not represented as a green release gate.
-- Next production build fails on existing Google Fonts egress 403 (four fonts). Required domains: fonts.googleapis.com and fonts.gstatic.com. No font bypass or product font changes were made.
-- Live Schwab completeness/entitlement/freshness, deployed Redis and machine auth, and native Windows scheduling remain unverified without deployment credentials/native results.
-- Portfolio capital basis remains unanswered; no equity is seeded and full portfolio risk readiness is not claimed.
-
-Bundles contain source only; no live databases, logs, backups, credential files or review ZIPs are published. SHA256.txt covers the transfer payload.
-
-## October 6 log-review update
-
-See LOG-FIXES.md for latest results and native steps. The earlier build/font and
-platform timeout blockers above are superseded: production build passed on f6b9413;
-new test-only repair e8146e8 passes all935activefiles,9050tests, with1expected
-failure,13skips,11todo. The updated platform bundle targets e8146e8. Native
-publication is still required; platform main and deployment were not changed.
-
-Separate CommandCenter interruption repair d7ab90b passes206Python tests and
-14backport regressions on the pre-open-only base, preserving native branch and
-unrelated changes. APPLY-LOG-FIXES.ps1 imports only this repair, not the scanner
-client. COLLECT-CC-REVIEW.ps1 captures current Windows evidence without parity
-recomputation; its Python path was functionally verified, WindowsPowerShell is
-unexecuted here. Capital basis, scanneractivation, and forced-stop cause remain
-open prerequisites. No capital amount or live control was changed.
+Cloud validation: 234 Python tests, 11 web tests, web production build; closed loop 34 PASS, 0 FAIL, 7 NOT COVERED. Import rehearsal preserved the intentional log, dev.sh and untracked handoff file, stayed on feat/options-m7, recognized all patches on rerun, and configured the shared account idempotently against a copy of the uploaded ledger. Native PowerShell execution/live scanner deployment remain to be verified.

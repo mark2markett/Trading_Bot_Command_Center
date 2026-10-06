@@ -40,7 +40,7 @@ def main(root, review):
     root, review = Path(root).resolve(), Path(review).resolve()
     # /bots and /fleet recompute parity and WRITE kv/alerts. Never request
     # those endpoints from an evidence collector; bot state comes from backup.
-    for endpoint in ("health", "risk", "alerts", "research"):
+    for endpoint in ("health", "risk", "alerts", "research", "readiness"):
         try:
             with urllib.request.urlopen("http://127.0.0.1:8585/api/" + endpoint, timeout=10) as response:
                 data = json.load(response)
@@ -59,15 +59,30 @@ def main(root, review):
             row["positions"] = [dict(p) for p in ledger.execute("SELECT symbol,qty,avg_price FROM positions WHERE bot_id=?", (row["id"],))]
             bots.append(row)
         save(review / "bots.json", {"source": "read-only backup; stored status, no watchdog/parity recomputation", "bots": bots})
-        equity = ledger.execute("SELECT at,equity FROM equity WHERE source='broker' ORDER BY at DESC,id DESC LIMIT 1").fetchone()
-        value = equity[1] if equity else None
-        save(review / "fleet-readiness.json", {
-            "account_equity_present": equity is not None,
-            "account_equity_valid": isinstance(value, (int, float)) and math.isfinite(value) and value > 0,
-            "account_equity": value,
-            "account_equity_at": equity[0] if equity else None,
-            "warning": None if equity else "Fleet gross-exposure/drawdown protection has no account equity basis.",
-        })
+        configured = ledger.execute("SELECT 1 FROM kv WHERE key='paper_account'").fetchone()
+        if configured:
+            from contextlib import nullcontext
+            sys.path.insert(0,str(root/'cc_sdk'))
+            from cc_sdk.paper_account import snapshot
+            class ReadOnlyLedger:
+                def one(self,sql,params=()): return ledger.execute(sql,params).fetchone()
+                def q(self,sql,params=()): return ledger.execute(sql,params).fetchall()
+                def transaction(self,**kwargs): return nullcontext()  # immutable completed backup, no concurrent writer
+            state=snapshot(ReadOnlyLedger())
+            last=ledger.execute('SELECT at,equity FROM paper_equity ORDER BY id DESC LIMIT 1').fetchone()
+            save(review/'fleet-readiness.json',{'account_equity_present':True,'account_equity_valid':state['ready'],
+                 'source':'paper','account':state,'last_valid_valuation':dict(last) if last else None,
+                 'warning':None if state['ready'] else state['reason']})
+        else:
+            equity = ledger.execute("SELECT at,equity FROM equity WHERE source='broker' ORDER BY at DESC,id DESC LIMIT 1").fetchone()
+            value = equity[1] if equity else None
+            save(review / "fleet-readiness.json", {
+                "account_equity_present": equity is not None,
+                "account_equity_valid": isinstance(value, (int, float)) and math.isfinite(value) and value > 0,
+                "account_equity": value,
+                "account_equity_at": equity[0] if equity else None,
+                "warning": None if equity else "Fleet gross-exposure/drawdown protection has no account equity basis.",
+            })
     # Match the SIP command's env order: existing process, .env defaults,
     # then .env.local overrides. Values remain in-process only.
     from dotenv import load_dotenv

@@ -1,3 +1,7 @@
+# Latest consolidated update
+
+Use [RUNTIME-FIXES.md](RUNTIME-FIXES.md) and APPLY-RUNTIME-FIXES.ps1 for the current repair. Older separate installers are retained for history; they are not needed for the consolidated update.
+
 # SIP scanner delivery — 2026-10-06
 
 Command Center source is published on `feat/sip-scanner`, commit `9d2cbc2ed327b76c00dd7007dbc402ac7ba42380`, based on cloud pre-open repair `2f7bef3`. The native `26ea7cb` repair is patch-equivalent. Main was not changed.

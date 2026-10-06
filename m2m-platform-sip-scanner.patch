@@ -1,0 +1,2190 @@
+From c9847a2c7e6000318fd05919aa50cf78720f8837 Mon Sep 17 00:00:00 2001
+From: Mark Watson <markwatson2@comcast.net>
+Date: Tue, 6 Oct 2026 11:15:03 +0000
+Subject: [PATCH 1/3] feat: define dedicated SIP opening-volume scanner
+ contract
+
+---
+ .../plans/2026-10-06-cc-sip-scanner.md        | 31 ++++++++++
+ .../specs/2026-10-06-cc-sip-scanner-design.md | 31 ++++++++++
+ src/lib/sip/__tests__/calculation.test.ts     | 61 +++++++++++++++++++
+ src/lib/sip/calculation.ts                    | 45 ++++++++++++++
+ src/lib/sip/calendar.ts                       | 25 ++++++++
+ src/lib/sip/contract.ts                       | 21 +++++++
+ 6 files changed, 214 insertions(+)
+ create mode 100644 docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
+ create mode 100644 docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
+ create mode 100644 src/lib/sip/__tests__/calculation.test.ts
+ create mode 100644 src/lib/sip/calculation.ts
+ create mode 100644 src/lib/sip/calendar.ts
+ create mode 100644 src/lib/sip/contract.ts
+
+diff --git a/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
+new file mode 100644
+index 0000000..27b001d
+--- /dev/null
++++ b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
+@@ -0,0 +1,31 @@
++# SIP scanner implementation plan
++
++Spec: docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md. Native execution, approved in conversation. Platform base 1e32fd9, Command Center base 2f7bef3. Constraints: Schwab stock data, Redis durability, authenticated/fresh result, unchanged trading/risk capital, isolated feature branches, no production deployment/merge.
++
++## Task 1: Pure contract and calculation
++
++Create src/lib/sip/contract.ts, calendar.ts, calculation.ts; tests in src/lib/sip/__tests__/calculation.test.ts. Interfaces: SipBar {t:number,o:number,h:number,l:number,c:number,v:number}; PreparationRow {symbol,atr14,avg_vol,opening_mean}; SipCandidate {symbol,price,rvol,atr14,avg_vol}; SipSnapshot v1 with date/window/coverage. Export previousSessions(date,count), clock(now), preparationFromBars(symbol,date,daily,minute), rankCandidates(rows), stockUniverse(). RED: precise 2x opening ratio, exclusion at thresholds, partial/missing/duplicate/nonfinite bars, 14 prior sessions, holiday/DST and ETF exclusion. Implement only after RED, run focused Vitest, commit.
++
++## Task 2: Read-only provider and durable storage
++
++Create src/lib/sip/schwab.ts, store.ts and tests. Provider exposes dailyBars, historyMinutes, openingMinutes, quotes; dependency-injected fetch and existing getAccessToken/invalidate pair. Redis store exposes prepared rows, prepare summary, immutable result and lock(callback) with unique lease ownership. RED: endpoint whitelist, one 401 retry, timeout/status-safe failure, Redis required, date keys, partial progress, SET NX and compare-delete lock. Implement, run focused tests, commit.
++
++## Task 3: Service, routes, scheduler
++
++Create src/lib/sip/service.ts, auth.ts, cron.ts; routes /api/cron/cc-sip-scanner and /api/internal/cc/sip-scanner; tests service.test.ts/routes.test.ts. Service receives explicit provider/store/clock dependencies, prepares 4 concurrent symbols with deadline, publishes after complete window and persists honest coverage/errors. Cron ET guards + existing run logger; machine reads stored snapshots only. Add two logical expressions and one policy; increment governed inventory counts (98->100, 91->92). RED: disabled/auth/not-ready/ready-empty/storage/provider failures, no live calls on read, overlapping/repeated runs, incomplete prep, DST and holidays. Implement, run focused tests plus npm run cron:check and control-plane:check, commit.
++
++## Task 4: Command Center consumer and paper loop
++
++Modify bots/sip_orb/sip_scanner.py and cc_sdk/cc_sdk/intraday.py; add/update scanner and session readiness tests. Add UniversePending type in intraday; strict authenticated v1 client with SCANNER_SECRET, 300-second age and exact ET window. Normal poll retries until 09:40; scanner failure at deadline persists and keeps health degraded while exits continue. Update env example and operator docs. RED: delayed snapshot, 202/429/500, deadline, wrong date/window/age/future/nonfinite rows, secret-safe errors, no redirects, ready empty, exits during pending, actual SipOrbRules->risk->paper fill->EOD exit. Run focused and full Python suites, commit.
++
++## Task 5: Integration, review and delivery
++
++Cross-language deterministic fixture snapshots plus actual paper-loop integration; run platform focused suite and broad appropriate checks, platform build/typecheck, cron/registry checks, Python full suite and browser harness sequentially. Request one independent read-only reviewer; fix important findings with RED/GREEN. Prepare platform review branch and Command Center incremental bundle/native helper; verify remote readback. No live scanner calls without credentials and no installed-on-Windows claim until native evidence. Save reusable cloud setup if changed. Native server/scanner credentials and portfolio capital are outstanding deployment prerequisites.
++
++## Review Focus
++
++- Stock list classification completeness and ETF exclusion.
++- Historical gaps/duplicates are not fabricated zeros or inconsistent per-minute denominators.
++- Redis lock expiry and overlapping jobs cannot corrupt prepared rows or overwrite immutable results.
++- Complete history and publication boundaries work across DST/holidays and cold starts.
++- Pending universe never bypasses risk controls or blocks adopted-position exits; healthy zero remains distinct from unavailable data.
+diff --git a/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md b/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
+new file mode 100644
+index 0000000..1f1a56a
+--- /dev/null
++++ b/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
+@@ -0,0 +1,31 @@
++# Command Center SIP scanner
++
++Approved intent: prepare history before open, rank completed opening-window volume after 09:35 Eastern, authenticate the Command Center read, and test the paper entry/exit loop. The owner said “please proceed”; implementation stays native in this session. Platform main and native production branches are not modified by development.
++
++## Contract and strategy
++
++Dedicated version-1 snapshot: version=1, status=ready, session_date, generated_at, window_start, window_end, candidates (symbol, price, rvol, atr14, avg_vol), coverage and exclusions. Window is exactly 09:30–09:35 America/New_York. Filters are price > 5, 20 completed-session average daily share volume >= 1 million, Wilder ATR14 > 0.50; rank by descending opening-share-volume / mean of 14 prior opening-window share volumes, deterministic symbol tie-break, max 20. Eligibility history and opening baseline never include today's partial data. No new minimum RVOL threshold or change to trading signals, sizing, stops or paper mode.
++
++Universe is current ALL_SYMBOLS with verified non-fund sector classifications in SYMBOL_SECTOR; missing classification is excluded visibly. ETFs/funds are excluded, not hand-maintained or inferred from ticker spelling. The configured set is not claimed to be all US stocks.
++
++## Preparation and publication
++
++A read-only Schwab adapter uses existing platform token refresh, GET marketdata pricehistory/quotes only, bounded timeouts, one 401 refresh/retry; safe codes only, no response bodies/credentials. Preparation caches daily eligibility and complete 14-session opening-window totals in Redis per trading date. Two price-history reads per stock; one multi-session minute request replaces 14 separate historical requests. Rate-limited concurrency is 4. A preparation deadline retains successful per-symbol rows for retry, not a misleading complete result. Ineligible stocks need no opening-history request. Missing/incomplete history excludes that stock with a durable reason; transport/auth/storage failures prevent a ready snapshot and are retried in the scheduled window. New data never silently overwrites a ready result for the same session.
++
++Redis keys use cc:sip:v1 prefix, seven-day retention for diagnostics. Redis availability is required: no in-process fallback. Per-session work locks have unique owners and compare-and-delete release. Prepared rows are date/version scoped; results use an atomic SET NX so an existing ready result is immutable. Preparation progress is recorded per symbol so repeated invocations only retry unfinished failures. Counts/reasons are retained in preparation and result records and JSON logs; existing cron run logging is reused. No database migration.
++
++One new logical cron job chooses phase by ET time: preparation 09:00–09:30, publication 09:35–09:40. Logical expressions 0-25/5 13,14 * * 1-5 and 35-39 13,14 * * 1-5; New York and exchange-holiday guards accept the correct DST candidate. Job policy timeout 280000 ms, lock 330 s, no money-path effects. SIP_SCANNER_ENABLED is an explicit false-by-default deployment switch. Existing physical minute dispatcher stays unchanged.
++
++## Machine interface
++
++GET /api/internal/cc/sip-scanner serves only stored results for today's ET trading date. Separate SIP_SCANNER_SECRET, minimum 32 characters, must differ from CRON_SECRET, DASHBOARD_PASSWORD, MONITOR_SECRET and SCHWAB_BROKER_SECRET. Header-only Bearer authentication, private/no-store responses, no browser-user entitlement requirement and no provider calls during reads. Disabled route=404, bad auth=401, missing config/storage=503, result not yet ready=202 with Retry-After, ready=200. Cron guard accepts CRON_SECRET only. Read errors never look like a healthy empty list.
++
++## Command Center consumer
++
++SCANNER_SECRET in the SIP bot's gitignored local environment authenticates HTTPS requests; localhost HTTP is allowed for isolated tests only. No redirects or response/URL/credential text in errors. Strict version/date/window/age/row validation rejects stale, future, malformed and cross-day snapshots. Ready snapshots must be generated no earlier than window end and no older than five minutes on first selection. Explicit ready candidates=[] is valid. No fabricated RVOL or silent legacy-response acceptance.
++
++Transient HTTP 429/5xx, 202, transport failures and readiness races yield UniversePending. SessionRunner retries on its normal polls until 09:40 without entries; existing position management runs first. At the deadline, mark the scanner unavailable, stop further entry attempts for that day, persist diagnostics, and keep heartbeat unhealthy through the session. Permanent auth/config/protocol failures retain the existing bot-run failure path. Fixed fallback symbols remain an explicitly configured existing option and are logged as fallback. No automatic fallback is inserted.
++
++## Verification and delivery
++
++TDD covers ratio/ATR/filter boundaries, completed-window coverage, holiday/DST, unknown instruments, finite numbers, auth separation, read-only endpoint paths, safe errors, Redis failure/locking/idempotence, job windows and read readiness. Command Center covers delayed readiness, retries/deadline, valid empty vs malformed, date/freshness and actual SIP paper signal/risk/fill/EOD exit. Platform focused tests, typecheck/build where available, cron/registry guards and Command Center full tests/harness run before delivery. Publish review branches/draft PR if supported; no merge or production deployment without approval. Native Windows installation remains a separate verified transfer step. Portfolio capital configuration remains pending and unchanged.
+diff --git a/src/lib/sip/__tests__/calculation.test.ts b/src/lib/sip/__tests__/calculation.test.ts
+new file mode 100644
+index 0000000..aef4629
+--- /dev/null
++++ b/src/lib/sip/__tests__/calculation.test.ts
+@@ -0,0 +1,61 @@
++import { describe, expect, it } from 'vitest';
++import { clock, previousSessions, sessionTime } from '../calendar';
++import { dailyEligibility, preparationFromBars, openingVolume, rankCandidates, stockUniverse } from '../calculation';
++import type { SipBar } from '../contract';
++
++const date = '2026-10-06';
++function daily(): SipBar[] {
++  return previousSessions(date, 40).reverse().map(day => ({t: sessionTime(day, 0).getTime(), o: 10, h: 10.5, l: 9.5, c: 10, v: 1_000_000}));
++}
++function opening(day: string, volume = 100): SipBar[] {
++  return Array.from({length: 5}, (_, i) => ({t: sessionTime(day, 570 + i).getTime(), o: 10, h: 11, l: 9, c: 10, v: volume}));
++}
++function history(): SipBar[] { return previousSessions(date, 14).flatMap(day => opening(day)); }
++
++describe('SIP completed opening-volume calculation', () => {
++  it('compares the same five minutes across exactly fourteen previous sessions', () => {
++    expect(preparationFromBars('NVDA', date, daily(), history())).toMatchObject({symbol: 'NVDA', atr14: 1, avg_vol: 1_000_000, opening_mean: 500});
++    expect(openingVolume(opening(date, 200), date)).toBe(1000);
++  });
++  it('excludes today from daily ATR and average share volume', () => {
++    const extra = {...daily()[0], t: sessionTime(date, 0).getTime(), h: 100, v: 50_000_000};
++    expect(dailyEligibility(date, [...daily(), extra])).toMatchObject({atr14: 1, avg_vol: 1_000_000});
++  });
++  it('rejects incomplete historical opening windows instead of inventing volume', () => {
++    expect(() => preparationFromBars('NVDA', date, daily(), history().slice(1))).toThrow('OPENING_HISTORY_INCOMPLETE');
++  });
++  it('rejects duplicated bars and nonfinite volume', () => {
++    expect(() => openingVolume([...opening(date), opening(date)[0]], date)).toThrow('OPENING_WINDOW_INVALID');
++    expect(() => openingVolume(opening(date).map((b,i) => i ? b : {...b,v:NaN}), date)).toThrow('OPENING_WINDOW_INVALID');
++  });
++  it('ignores premarket and the still-forming 09:35 bar', () => {
++    const extras = [569, 575].map(m => ({...opening(date)[0], t:sessionTime(date,m).getTime(),v:999_999}));
++    expect(openingVolume([...extras,...opening(date)], date)).toBe(500);
++  });
++  it('requires enough completed history and keeps the exact liquidity/ATR boundaries', () => {
++    expect(() => dailyEligibility(date,daily().slice(0,19))).toThrow('DAILY_HISTORY_INCOMPLETE');
++    expect(() => dailyEligibility(date,daily().map(b => ({...b,v:999_999})))).toThrow('DAILY_LIQUIDITY');
++    expect(() => dailyEligibility(date,daily().map(b => ({...b,h:10.25,l:9.75})))).toThrow('ATR_TOO_LOW');
++  });
++  it('does not permit a zero baseline denominator', () => {
++    expect(() => preparationFromBars('NVDA',date,daily(),history().map(b=>({...b,v:0})))).toThrow('OPENING_BASELINE_ZERO');
++  });
++  it('ranks at most twenty, price strictly above five, by RVOL then symbol', () => {
++    const row = {price:10,rvol:2,atr14:1,avg_vol:1_000_000};
++    const rows = [...Array.from({length:25},(_,i)=>({...row,symbol:'S'+String(i).padStart(2,'0')})), {...row,symbol:'FIVE',price:5}, {...row,symbol:'BAD',rvol:Infinity}];
++    const ranked = rankCandidates(rows);
++    expect(ranked).toHaveLength(20); expect(ranked[0].symbol).toBe('S00');
++    expect(ranked.some(r => r.symbol === 'FIVE' || r.symbol === 'BAD')).toBe(false);
++  });
++  it('uses verified stock classification and excludes ETFs and unknowns', () => {
++    expect(stockUniverse(['NVDA','SPY','QQQ','UNKNOWN'],{NVDA:'Technology',SPY:'ETF/Fund',QQQ:'ETF/Fund'})).toEqual(['NVDA']);
++  });
++});
++describe('Eastern exchange calendar', () => {
++  it('skips the July 3 exchange closure and weekend', () => expect(previousSessions('2026-07-06',1)).toEqual(['2026-07-02']));
++  it('handles DST without changing the opening-window identity', () => {
++    expect(sessionTime('2026-10-06',575).toISOString()).toBe('2026-10-06T13:35:00.000Z');
++    expect(sessionTime('2026-11-09',575).toISOString()).toBe('2026-11-09T14:35:00.000Z');
++    expect(clock(sessionTime('2026-11-09',575))).toMatchObject({date:'2026-11-09',minute:575,trading:true});
++  });
++});
+diff --git a/src/lib/sip/calculation.ts b/src/lib/sip/calculation.ts
+new file mode 100644
+index 0000000..f7bc498
+--- /dev/null
++++ b/src/lib/sip/calculation.ts
+@@ -0,0 +1,45 @@
++import { clock, previousSessions, sessionTime } from './calendar';
++import { SipExcluded, type PreparationRow, type SipBar, type SipCandidate } from './contract';
++
++function validBar(bar: SipBar): boolean {
++  return [bar.t,bar.o,bar.h,bar.l,bar.c,bar.v].every(Number.isFinite)
++    && bar.o > 0 && bar.c > 0 && bar.l > 0 && bar.h >= bar.l && bar.v >= 0;
++}
++export function stockUniverse(symbols: string[], sectors: Record<string, string>): string[] {
++  return [...new Set(symbols)].filter(s => Boolean(sectors[s]) && sectors[s] !== 'ETF/Fund').sort();
++}
++export function dailyEligibility(date: string, bars: SipBar[]): {atr14: number; avg_vol: number} {
++  const completed = bars.filter(b => Number.isFinite(b.t) && clock(new Date(b.t)).date < date).sort((a,b) => a.t-b.t);
++  const days = completed.map(b => clock(new Date(b.t)).date);
++  const needed = previousSessions(date,20).reverse();
++  if (completed.length < 20 || completed.some(b => !validBar(b)) || new Set(days).size !== days.length
++    || needed.some((day,i) => days.slice(-20)[i] !== day)) throw new SipExcluded('DAILY_HISTORY_INCOMPLETE');
++  const avg_vol = completed.slice(-20).reduce((s,b) => s+b.v,0)/20;
++  const ranges = completed.slice(1).map((b,i) => Math.max(b.h-b.l,Math.abs(b.h-completed[i].c),Math.abs(b.l-completed[i].c)));
++  let atr14 = ranges.slice(0,14).reduce((s,n)=>s+n,0)/14;
++  for (const range of ranges.slice(14)) atr14 = (atr14*13+range)/14;
++  if (avg_vol < 1_000_000) throw new SipExcluded('DAILY_LIQUIDITY');
++  if (!(atr14 > .50)) throw new SipExcluded('ATR_TOO_LOW');
++  return {atr14,avg_vol};
++}
++export function openingVolume(bars: SipBar[], date: string): number {
++  const start = sessionTime(date,570).getTime(), end = sessionTime(date,575).getTime();
++  const window = bars.filter(b => b.t >= start && b.t < end).sort((a,b)=>a.t-b.t);
++  if (window.length !== 5) throw new SipExcluded(window.length > 5 ? 'OPENING_WINDOW_INVALID' : 'OPENING_WINDOW_INCOMPLETE');
++  if (window.some((b,i) => !validBar(b) || b.t !== start+i*60_000)) throw new SipExcluded('OPENING_WINDOW_INVALID');
++  return window.reduce((s,b)=>s+b.v,0);
++}
++export function preparationFromBars(symbol: string, date: string, daily: SipBar[], minute: SipBar[]): PreparationRow {
++  const eligibility = dailyEligibility(date,daily);
++  let observations: number[];
++  try { observations = previousSessions(date,14).map(day => openingVolume(minute,day)); }
++  catch { throw new SipExcluded('OPENING_HISTORY_INCOMPLETE'); }
++  const opening_mean = observations.reduce((s,n)=>s+n,0)/14;
++  if (!(opening_mean > 0)) throw new SipExcluded('OPENING_BASELINE_ZERO');
++  return {symbol,...eligibility,opening_mean};
++}
++export function rankCandidates(rows: SipCandidate[]): SipCandidate[] {
++  return rows.filter(r => [r.price,r.rvol,r.atr14,r.avg_vol].every(Number.isFinite)
++    && r.price > 5 && r.rvol >= 0 && r.atr14 > .50 && r.avg_vol >= 1_000_000)
++    .sort((a,b)=>b.rvol-a.rvol || a.symbol.localeCompare(b.symbol)).slice(0,20);
++}
+diff --git a/src/lib/sip/calendar.ts b/src/lib/sip/calendar.ts
+new file mode 100644
+index 0000000..8a0fed1
+--- /dev/null
++++ b/src/lib/sip/calendar.ts
+@@ -0,0 +1,25 @@
++import { isTradingDay } from '@/lib/trading-day';
++
++const formatter = new Intl.DateTimeFormat('en-US', {
++  timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
++  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
++});
++export function clock(now: Date) {
++  const p = Object.fromEntries(formatter.formatToParts(now).map(p => [p.type, p.value]));
++  const date = `${p.year}-${p.month}-${p.day}`;
++  return { date, minute: Number(p.hour) * 60 + Number(p.minute), trading: isTradingDay(date) };
++}
++export function sessionTime(date: string, minute: number): Date {
++  const noonUtc = new Date(`${date}T12:00:00Z`);
++  return new Date(noonUtc.getTime() + (minute - clock(noonUtc).minute) * 60_000);
++}
++export function previousSessions(date: string, count: number): string[] {
++  const result: string[] = [];
++  const cursor = new Date(`${date}T12:00:00Z`);
++  while (result.length < count) {
++    cursor.setUTCDate(cursor.getUTCDate() - 1);
++    const day = cursor.toISOString().slice(0, 10);
++    if (isTradingDay(day)) result.push(day);
++  }
++  return result;
++}
+diff --git a/src/lib/sip/contract.ts b/src/lib/sip/contract.ts
+new file mode 100644
+index 0000000..a44a672
+--- /dev/null
++++ b/src/lib/sip/contract.ts
+@@ -0,0 +1,21 @@
++/** Dedicated paper-fleet scanner contract. All prices/volumes originate in Schwab data. */
++export interface SipBar { t: number; o: number; h: number; l: number; c: number; v: number }
++export interface PreparationRow { symbol: string; atr14: number; avg_vol: number; opening_mean: number }
++export interface SipCandidate { symbol: string; price: number; rvol: number; atr14: number; avg_vol: number }
++export interface Exclusion { symbol: string; reason: string }
++export interface SipSnapshot {
++  version: 1; status: 'ready'; session_date: string; generated_at: string;
++  window_start: string; window_end: string; candidates: SipCandidate[];
++  coverage: { universe: number; eligible: number; observed: number; excluded: number };
++  exclusions: Exclusion[];
++}
++export interface Preparation {
++  version: 1; session_date: string; generated_at: string; universe: string[];
++  rows: PreparationRow[]; exclusions: Exclusion[]; failures: Exclusion[]; complete: boolean;
++}
++export class SipExcluded extends Error {
++  constructor(public readonly code: string) { super(code); this.name = 'SipExcluded'; }
++}
++export class SipUnavailable extends Error {
++  constructor(public readonly code: string) { super(code); this.name = 'SipUnavailable'; }
++}
+-- 
+2.52.0
+
+
+From edf0d1a6e682582e96808ac480aa9cfcd5dcee05 Mon Sep 17 00:00:00 2001
+From: Mark Watson <markwatson2@comcast.net>
+Date: Tue, 6 Oct 2026 11:16:47 +0000
+Subject: [PATCH 2/3] feat: add read-only Schwab adapter and fenced Redis
+ scanner storage
+
+---
+ src/lib/sip/__tests__/infrastructure.test.ts | 38 +++++++++++++++++
+ src/lib/sip/schwab.ts                        | 42 +++++++++++++++++++
+ src/lib/sip/store.ts                         | 44 ++++++++++++++++++++
+ 3 files changed, 124 insertions(+)
+ create mode 100644 src/lib/sip/__tests__/infrastructure.test.ts
+ create mode 100644 src/lib/sip/schwab.ts
+ create mode 100644 src/lib/sip/store.ts
+
+diff --git a/src/lib/sip/__tests__/infrastructure.test.ts b/src/lib/sip/__tests__/infrastructure.test.ts
+new file mode 100644
+index 0000000..71ee29a
+--- /dev/null
++++ b/src/lib/sip/__tests__/infrastructure.test.ts
+@@ -0,0 +1,38 @@
++import { describe,it,expect,vi } from 'vitest';
++import { SchwabSipData } from '../schwab';
++import { SipStore } from '../store';
++
++describe('read-only Schwab boundary',()=>{
++ it('uses only pricehistory GET and retries a single 401 with token invalidation',async()=>{
++  const fetcher=vi.fn().mockResolvedValueOnce(new Response('',{status:401})).mockResolvedValue(new Response(JSON.stringify({candles:[{datetime:123,open:10,high:11,low:9,close:10,volume:100}]})));
++  const invalidate=vi.fn(); const data=new SchwabSipData(async()=> 'private-token',invalidate,fetcher);
++  expect(await data.dailyBars('NVDA','2026-10-06')).toHaveLength(1);
++  expect(invalidate).toHaveBeenCalledTimes(1); expect(fetcher).toHaveBeenCalledTimes(2);
++  const [url,options]=fetcher.mock.calls[0];expect(url.pathname).toBe('/marketdata/v1/pricehistory'); expect(options.method).toBe('GET');expect(options.redirect).toBe('error');
++ });
++ it('never exposes upstream errors or token values',async()=>{
++  const data=new SchwabSipData(async()=> 'private-token',()=>{},vi.fn().mockResolvedValue(new Response('private-token',{status:500})));
++  await expect(data.dailyBars('NVDA','2026-10-06')).rejects.toThrow('SCHWAB_HTTP_500');
++ });
++ it('rejects bad provider schemas rather than reporting empty history',async()=>{
++  const data=new SchwabSipData(async()=> 'private-token',()=>{},vi.fn().mockResolvedValue(new Response('{}')));
++  await expect(data.historyMinutes('NVDA','2026-10-06')).rejects.toThrow('SCHWAB_SCHEMA');
++ });
++});
++describe('durable ownership',()=>{
++ it('requires Redis configuration',()=>{vi.stubEnv('UPSTASH_REDIS_REST_URL','');expect(()=>SipStore.fromEnvironment()).toThrow('SIP_STORAGE_UNCONFIGURED');vi.unstubAllEnvs();});
++ it('stores an immutable result with date-scoped key and retention',async()=>{
++  const redis={set:vi.fn(),eval:vi.fn().mockResolvedValue('OK')};const store=new SipStore(redis as any);
++  await store.saveResult('2026-10-06',{} as any,'owner');
++  // Publication is fenced atomically against the owner, as well as SET NX.
++  expect(redis.set).not.toHaveBeenCalled();expect(redis.eval.mock.calls[0][0]).toContain("'NX'");expect(redis.eval.mock.calls[0][1][1]).toBe('cc:sip:v1:2026-10-06:result');expect(redis.eval.mock.calls[0][2][3]).toBe(604800);
++ });
++ it('releases only its own lock after callbacks, including failures',async()=>{
++  const redis={set:vi.fn().mockResolvedValue('OK'),eval:vi.fn().mockResolvedValue(1)};const store=new SipStore(redis as any);
++  await expect(store.withLock('2026-10-06',async()=>{throw new Error('stop');})).rejects.toThrow('stop');
++  expect(redis.set.mock.calls[0][0]).toBe('cc:sip:v1:2026-10-06:lock');expect(redis.set.mock.calls[0][2]).toEqual({nx:true,ex:330});
++  expect(redis.eval.mock.calls[0][0]).toContain("redis.call('get'");expect(redis.eval.mock.calls[0][1]).toEqual(['cc:sip:v1:2026-10-06:lock']);
++ });
++ it('does not execute overlapping work',async()=>{const redis={set:vi.fn().mockResolvedValue(null)};const work=vi.fn();expect(await new SipStore(redis as any).withLock('2026-10-06',work)).toBe(null);expect(work).not.toHaveBeenCalled();});
++ it('fences writes if the lock has expired or changed owner',async()=>{const redis={eval:vi.fn().mockResolvedValue(-1)};const store=new SipStore(redis as any);await expect(store.saveResult('2026-10-06',{} as any,'old-owner')).rejects.toThrow('SIP_LOCK_LOST');});
++});
+diff --git a/src/lib/sip/schwab.ts b/src/lib/sip/schwab.ts
+new file mode 100644
+index 0000000..2319240
+--- /dev/null
++++ b/src/lib/sip/schwab.ts
+@@ -0,0 +1,42 @@
++import { getAccessToken, invalidateSchwabAccessToken } from '@/services/schwabService';
++import { previousSessions, sessionTime } from './calendar';
++import { SipUnavailable, type SipBar } from './contract';
++
++export interface SipData {
++ dailyBars(symbol:string,date:string):Promise<SipBar[]>;
++ historyMinutes(symbol:string,date:string):Promise<SipBar[]>;
++ openingMinutes(symbol:string,date:string):Promise<SipBar[]>;
++ quotes(symbols:string[]):Promise<Record<string,{price:number;at:number}>>;
++}
++/** Only market-data GETs. OAuth remains owned by the existing platform service. */
++export class SchwabSipData implements SipData {
++ constructor(private token=getAccessToken,private invalidate:()=>void=invalidateSchwabAccessToken,private fetcher:typeof fetch=fetch){}
++ private async get(path:'pricehistory'|'quotes',params:Record<string,string>):Promise<any>{
++  const url=new URL(`https://api.schwabapi.com/marketdata/v1/${path}`);
++  for(const [key,value] of Object.entries(params))url.searchParams.set(key,value);
++  for(let attempt=0;attempt<2;attempt++){
++   let response:Response;
++   try {response=await this.fetcher(url,{method:'GET',headers:{Authorization:`Bearer ${await this.token()}`},signal:AbortSignal.timeout(20_000),redirect:'error',cache:'no-store'});}
++   catch{throw new SipUnavailable('SCHWAB_REQUEST_FAILED');}
++   if(response.status===401 && attempt===0){this.invalidate();continue;}
++   if(!response.ok)throw new SipUnavailable(`SCHWAB_HTTP_${response.status}`);
++   try{return await response.json();}catch{throw new SipUnavailable('SCHWAB_SCHEMA');}
++  }
++  throw new SipUnavailable('SCHWAB_AUTH_FAILED');
++ }
++ private async bars(symbol:string,start:number,end:number,frequencyType:'daily'|'minute'):Promise<SipBar[]>{
++  const data=await this.get('pricehistory',{symbol,periodType:frequencyType==='daily'?'month':'day',frequencyType,frequency:'1',startDate:String(start),endDate:String(end),needExtendedHoursData:'false'});
++  if(!Array.isArray(data.candles))throw new SipUnavailable('SCHWAB_SCHEMA');
++  return data.candles.map((b:any)=>({t:b.datetime,o:b.open,h:b.high,l:b.low,c:b.close,v:b.volume}));
++ }
++ dailyBars(symbol:string,date:string){const end=sessionTime(date,0).getTime();return this.bars(symbol,end-90*86_400_000,end,'daily');}
++ historyMinutes(symbol:string,date:string){const prior=previousSessions(date,14);return this.bars(symbol,sessionTime(prior[13],570).getTime(),sessionTime(prior[0],575).getTime(),'minute');}
++ openingMinutes(symbol:string,date:string){return this.bars(symbol,sessionTime(date,570).getTime(),sessionTime(date,575).getTime(),'minute');}
++ async quotes(symbols:string[]){
++  if(!symbols.length)return {};
++  const data=await this.get('quotes',{symbols:symbols.join(','),fields:'quote,reference'});
++  const result:Record<string,{price:number;at:number}>={};
++  for(const symbol of symbols){const q=data[symbol]?.quote;if(!q || !Number.isFinite(q.lastPrice) || !Number.isFinite(q.quoteTime))throw new SipUnavailable('SCHWAB_QUOTE_INCOMPLETE');result[symbol]={price:q.lastPrice,at:q.quoteTime};}
++  return result;
++ }
++}
+diff --git a/src/lib/sip/store.ts b/src/lib/sip/store.ts
+new file mode 100644
+index 0000000..8c54492
+--- /dev/null
++++ b/src/lib/sip/store.ts
+@@ -0,0 +1,44 @@
++import { Redis } from '@upstash/redis';
++import { randomUUID } from 'node:crypto';
++import { SipUnavailable, type Preparation, type PreparationRow, type Exclusion, type SipSnapshot } from './contract';
++const TTL=7*86400;
++export type PreparedSymbol={row:PreparationRow}|{exclusion:Exclusion};
++export interface SipStorage {
++ result(date:string):Promise<SipSnapshot|null>;
++ preparation(date:string):Promise<Preparation|null>;
++ symbol(date:string,symbol:string):Promise<PreparedSymbol|null>;
++ saveSymbol(date:string,symbol:string,value:PreparedSymbol,owner:string):Promise<void>;
++ savePreparation(date:string,value:Preparation,owner:string):Promise<void>;
++ saveResult(date:string,value:SipSnapshot,owner:string):Promise<void>;
++ withLock<T>(date:string,work:(owner:string)=>Promise<T>):Promise<T|null>;
++}
++const FENCED_SET=`if redis.call('get',KEYS[1]) ~= ARGV[1] then return -1 end
++if ARGV[3] == 'nx' then return redis.call('set',KEYS[2],ARGV[2],'EX',ARGV[4],'NX') end
++return redis.call('set',KEYS[2],ARGV[2],'EX',ARGV[4])`;
++const RELEASE=`if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) end return 0`;
++export class SipStore implements SipStorage {
++ constructor(private redis:Pick<Redis,'get'|'set'|'eval'>){}
++ static fromEnvironment(){
++  const url=process.env.UPSTASH_REDIS_REST_URL,token=process.env.UPSTASH_REDIS_REST_TOKEN;
++  if(!url || !token)throw new SipUnavailable('SIP_STORAGE_UNCONFIGURED');
++  return new SipStore(new Redis({url,token}));
++ }
++ private key(date:string,name:string){return `cc:sip:v1:${date}:${name}`;}
++ private async read<T>(date:string,name:string):Promise<T|null>{try{return await this.redis.get<T>(this.key(date,name));}catch{throw new SipUnavailable('SIP_STORAGE_FAILED');}}
++ result(date:string){return this.read<SipSnapshot>(date,'result');}
++ preparation(date:string){return this.read<Preparation>(date,'preparation');}
++ symbol(date:string,symbol:string){return this.read<PreparedSymbol>(date,`symbol:${symbol}`);}
++ private async write(date:string,name:string,value:unknown,owner:string,immutable=false){
++  try{const outcome=await this.redis.eval(FENCED_SET,[this.key(date,'lock'),this.key(date,name)],[owner,JSON.stringify(value),immutable?'nx':'replace',TTL]);if(outcome===-1)throw new SipUnavailable('SIP_LOCK_LOST');}
++  catch(e){if(e instanceof SipUnavailable)throw e;throw new SipUnavailable('SIP_STORAGE_FAILED');}
++ }
++ saveSymbol(date:string,symbol:string,value:PreparedSymbol,owner:string){return this.write(date,`symbol:${symbol}`,value,owner,true);}
++ savePreparation(date:string,value:Preparation,owner:string){return this.write(date,'preparation',value,owner);}
++ saveResult(date:string,value:SipSnapshot,owner:string){return this.write(date,'result',value,owner,true);}
++ async withLock<T>(date:string,work:(owner:string)=>Promise<T>):Promise<T|null>{
++  const owner=randomUUID();let acquired;
++  try{acquired=await this.redis.set(this.key(date,'lock'),owner,{nx:true,ex:330});}catch{throw new SipUnavailable('SIP_STORAGE_FAILED');}
++  if(!acquired)return null;
++  try{return await work(owner);}finally{try{await this.redis.eval(RELEASE,[this.key(date,'lock')],[owner]);}catch{console.error('[cc-sip] lock release failed');}}
++ }
++}
+-- 
+2.52.0
+
+
+From f6b9413d31102b5758016025d55326089fb3d32a Mon Sep 17 00:00:00 2001
+From: Mark Watson <markwatson2@comcast.net>
+Date: Tue, 6 Oct 2026 11:32:10 +0000
+Subject: [PATCH 3/3] feat: schedule durable SIP scans and publish
+ authenticated opening-volume snapshots
+
+---
+ docs/runbooks/CC-SIP-SCANNER.md              |  31 +++
+ src/app/api/cron/cc-sip-scanner/route.ts     |  62 ++++++
+ src/app/api/internal/cc/sip-scanner/route.ts |  12 ++
+ src/config/controlPlaneJobPolicies.json      |  22 +-
+ src/config/cronManifest.json                 |  10 +-
+ src/lib/sip/__tests__/calculation.test.ts    | 194 ++++++++++++++----
+ src/lib/sip/__tests__/infrastructure.test.ts | 142 +++++++++----
+ src/lib/sip/__tests__/service.test.ts        | 196 ++++++++++++++++++
+ src/lib/sip/calculation.ts                   | 130 +++++++++---
+ src/lib/sip/calendar.ts                      |  30 ++-
+ src/lib/sip/contract.ts                      |  65 +++++-
+ src/lib/sip/http.ts                          |  64 ++++++
+ src/lib/sip/schwab.ts                        | 176 ++++++++++++----
+ src/lib/sip/service.ts                       | 205 +++++++++++++++++++
+ src/lib/sip/store.ts                         | 164 +++++++++++----
+ tests/fixtures/sip/sip-v1-ready.json         |  31 +++
+ 16 files changed, 1331 insertions(+), 203 deletions(-)
+ create mode 100644 docs/runbooks/CC-SIP-SCANNER.md
+ create mode 100644 src/app/api/cron/cc-sip-scanner/route.ts
+ create mode 100644 src/app/api/internal/cc/sip-scanner/route.ts
+ create mode 100644 src/lib/sip/__tests__/service.test.ts
+ create mode 100644 src/lib/sip/http.ts
+ create mode 100644 src/lib/sip/service.ts
+ create mode 100644 tests/fixtures/sip/sip-v1-ready.json
+
+diff --git a/docs/runbooks/CC-SIP-SCANNER.md b/docs/runbooks/CC-SIP-SCANNER.md
+new file mode 100644
+index 0000000..01951a2
+--- /dev/null
++++ b/docs/runbooks/CC-SIP-SCANNER.md
+@@ -0,0 +1,31 @@
++# Command Center SIP scanner
++
++This dedicated scanner supplies the existing paper Stocks-in-Play ORB strategy. It uses Schwab stock market data; it does not place orders or change bot stops, sizing, or portfolio capital. The existing broad platform scanner and Stock Intelligence V2 are not substitutes for this contract.
++
++## Deployment inputs
++
++Deploy the reviewed `feat/cc-sip-scanner` platform branch through the normal build/review process. Leave `SIP_SCANNER_ENABLED` unset until prerequisites and an operating morning window are available. Enable with the exact value `true` before 09:00 Eastern on a trading day.
++
++Required existing platform inputs: working shared Schwab token state and its existing OAuth service; `CRON_SECRET`; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Redis is required, with no in-memory substitute. Configure a new `SIP_SCANNER_SECRET` of at least 32 random characters. It must differ from `CRON_SECRET`, `MONITOR_SECRET`, `DASHBOARD_PASSWORD`, and `SCHWAB_BROKER_SECRET`. Enter credentials securely in deployment settings, never in URLs or committed files. No database migration is required.
++
++Native bot inputs in `bots/sip_orb/.env.local`: `SCANNER_URL=https://www.mark2markets.com/api/internal/cc/sip-scanner`, `SCANNER_SECRET` matching the new dedicated platform secret, and the existing shared Schwab token-broker configuration. Keep `SIP_SYMBOLS` blank for scanner-only operation. Populating it explicitly opts into a fixed operator watchlist fallback; it is logged as such and is not a relative-volume scan. A valid empty scanner result never triggers that fallback.
++
++## Daily operation and evidence
++
++One new logical job is dispatched by the existing minute control plane. It prepares at 09:00, 09:05, 09:10, 09:15, 09:20, 09:25 Eastern, and retries publication each minute from 09:35 through 09:39. Paired UTC expressions plus an Eastern guard handle daylight saving time. The shared exchange calendar currently enumerates 2026 and 2027 full closures; update it before later years. Early-close days still have a normal opening window. Physical `vercel.json` scheduling is unchanged.
++
++The stock universe is the actual configured `ALL_SYMBOLS` list filtered by verified sector classification; ETFs/funds and unknown classifications are excluded. Logs record the classification exclusion count. Price must exceed $5, completed 20-session average share volume must be at least 1 million, and Wilder ATR(14) must exceed $0.50. RVOL is the sum of exactly five completed 09:30–09:34 minute volumes divided by the mean of the same window over exactly 14 previous exchange sessions. Missing historical windows exclude that symbol with a reason. Today’s incomplete window or a provider/auth/storage failure prevents publication and is retried. No missing volume is invented.
++
++Preparation is cached per symbol and resumes after failures. Current completed opening volumes are also cached for retry; quotes are obtained afresh before publication and must be current. Four workers share pacing of at most about 100 data requests/minute within this scanner; other platform/fleet requests share the provider’s overall limit, so 429 remains a retryable outage. Work has a 240-second budget and a 330-second ownership lease. Redis writes atomically verify the lease owner. A session snapshot is immutable, retained seven days with its coverage and exclusions. A ready result can legitimately contain zero candidates.
++
++`cron_runs` and safe `[cc-sip]` logs record preparation/publication status and failure codes. Redis keys use `cc:sip:v1:YYYY-MM-DD:*`; inspect `preparation` for exclusions/failures and `result` for the frozen published snapshot. Native decisions record `SCANNER`, `SCANNER_PENDING`, `SCANNER_ERROR`, `SCANNER_FALLBACK`, or `SCANNER_UNAVAILABLE`; per-bot JSONL records heartbeat health. The native client validates version, date, exact window, coverage, finite rows, duplicate symbols, and a maximum 300-second age. It does not follow redirects.
++
++The authenticated machine GET only reads stored results: disabled 404, unauthorized 401, not-ready 202, storage/configuration error 503, ready 200. Every response is private/no-store. At 09:40 Eastern, an unresolved bot disables new entries, retains degraded heartbeat evidence, and keeps managing exits. Restarting after 09:40 does not fabricate a new universe.
++
++## Release checks
++
++Cloud fixtures demonstrate calculation, auth, retry/isolation, and the real SIP rules→risk→paper fills→EOD exit. They do not establish live provider history coverage, entitlement, quote freshness, or Windows scheduler readiness. Before enabling for a morning, verify deployment status, Redis health, shared Schwab connection, and preparation completeness. At 09:35 verify the authenticated v1 snapshot and native `UNIVERSE` decision. Review exclusions rather than assuming all configured stocks qualify.
++
++Portfolio equity remains a separate unresolved configuration item. This scanner does not seed it or demonstrate that portfolio exposure/drawdown protection is fully initialized. Paper execution only; operator promotion remains separate.
++
++The scanner calendar fails closed outside its covered 2026–2027 years, including lookback windows that cross into an uncovered year. This avoids pretending an unlisted holiday is a trading session; extend the shared calendar and scanner guard together before using such a window.
+diff --git a/src/app/api/cron/cc-sip-scanner/route.ts b/src/app/api/cron/cc-sip-scanner/route.ts
+new file mode 100644
+index 0000000..470d2ce
+--- /dev/null
++++ b/src/app/api/cron/cc-sip-scanner/route.ts
+@@ -0,0 +1,62 @@
++import { ALL_SYMBOLS } from "@/config/watchlist";
++import { SYMBOL_SECTOR } from "@/config/universeSectors";
++import { startCronRun, finishCronRun } from "@/lib/cronRunLog";
++import { stockUniverse } from "@/lib/sip/calculation";
++import { phaseAt, SipScanner } from "@/lib/sip/service";
++import { SchwabSipData } from "@/lib/sip/schwab";
++import { SipStore } from "@/lib/sip/store";
++import { SipExcluded, SipUnavailable } from "@/lib/sip/contract";
++import { NO_STORE, safeEqual } from "@/lib/sip/http";
++export const dynamic = "force-dynamic";
++export const maxDuration = 300;
++export async function GET(request: Request) {
++  const secret = process.env.CRON_SECRET;
++  if (
++    !secret ||
++    !safeEqual(request.headers.get("authorization"), `Bearer ${secret}`)
++  )
++    return Response.json(
++      { error: "unauthorized" },
++      { status: 401, headers: NO_STORE },
++    );
++  const now = new Date(),
++    phase = phaseAt(now);
++  if (process.env.SIP_SCANNER_ENABLED !== "true" || !phase)
++    return Response.json({ status: "skipped" }, { headers: NO_STORE });
++  const runId = await startCronRun("cc-sip-scanner", { phase });
++  try {
++    const universe = stockUniverse(ALL_SYMBOLS, SYMBOL_SECTOR);
++    const scanner = new SipScanner(
++      new SchwabSipData(),
++      SipStore.fromEnvironment(),
++      universe,
++    );
++    const result =
++      phase === "prepare"
++        ? await scanner.prepare(now)
++        : await scanner.publish(now);
++    const complete = result && ("complete" in result ? result.complete : true);
++    const summary = {
++      phase,
++      status: !result ? "busy" : complete ? "ready" : "pending",
++      universe: universe.length,
++      classificationExcluded: ALL_SYMBOLS.length - universe.length,
++      coverage: result && "coverage" in result ? result.coverage : null,
++      failures: result && "failures" in result ? result.failures.length : 0,
++    };
++    console.info("[cc-sip]", JSON.stringify(summary));
++    await finishCronRun(runId, complete ? "success" : "failure", summary);
++    return Response.json(summary, {
++      status: !result ? 202 : complete ? 200 : 503,
++      headers: NO_STORE,
++    });
++  } catch (error) {
++    const code =
++      error instanceof SipUnavailable || error instanceof SipExcluded
++        ? error.code
++        : "SIP_SCANNER_FAILED";
++    console.error("[cc-sip]", code);
++    await finishCronRun(runId, "failure", { phase, error: code });
++    return Response.json({ error: code }, { status: 503, headers: NO_STORE });
++  }
++}
+diff --git a/src/app/api/internal/cc/sip-scanner/route.ts b/src/app/api/internal/cc/sip-scanner/route.ts
+new file mode 100644
+index 0000000..80586e1
+--- /dev/null
++++ b/src/app/api/internal/cc/sip-scanner/route.ts
+@@ -0,0 +1,12 @@
++import { authEnvironment, machineResponse } from "@/lib/sip/http";
++import { SipStore } from "@/lib/sip/store";
++export const dynamic = "force-dynamic";
++/** Machine read endpoint: stored snapshot only. No browser/session auth or provider calls. */
++export async function GET(request: Request) {
++  return machineResponse(
++    request,
++    authEnvironment(),
++    (date) => SipStore.fromEnvironment().result(date),
++    new Date(),
++  );
++}
+diff --git a/src/config/controlPlaneJobPolicies.json b/src/config/controlPlaneJobPolicies.json
+index 0e932a3..4d1fcb2 100644
+--- a/src/config/controlPlaneJobPolicies.json
++++ b/src/config/controlPlaneJobPolicies.json
+@@ -1,6 +1,6 @@
+ {
+   "inventoryGovernance": {
+-    "exactRegisteredJobPaths": 91,
++    "exactRegisteredJobPaths": 92,
+     "downgradeProcedure": "docs/runbooks/CONTROL-PLANE-INVENTORY-GOVERNANCE.md"
+   },
+   "jobs": [
+@@ -1378,6 +1378,26 @@
+       "prerequisites": [
+         "CRON_SECRET"
+       ]
++    },
++    {
++      "id": "cc-sip-scanner",
++      "path": "/api/cron/cc-sip-scanner",
++      "dispatchMode": "scheduled",
++      "domain": "market-data",
++      "authority": "read-only",
++      "costClass": "provider-high",
++      "criticality": "high",
++      "timeoutMs": 280000,
++      "lockTtlSeconds": 330,
++      "maxAttempts": 1,
++      "prerequisites": [
++        "CRON_SECRET"
++      ],
++      "runtimePrerequisites": [
++        "SIP_SCANNER_ENABLED=true",
++        "UPSTASH_REDIS_REST_URL",
++        "UPSTASH_REDIS_REST_TOKEN"
++      ]
+     }
+   ]
+ }
+diff --git a/src/config/cronManifest.json b/src/config/cronManifest.json
+index 3602a23..e5ab553 100644
+--- a/src/config/cronManifest.json
++++ b/src/config/cronManifest.json
+@@ -1,6 +1,6 @@
+ {
+   "inventoryGovernance": {
+-    "exactLogicalSchedules": 98,
++    "exactLogicalSchedules": 100,
+     "downgradeProcedure": "docs/runbooks/CONTROL-PLANE-INVENTORY-GOVERNANCE.md"
+   },
+   "crons": [
+@@ -395,6 +395,14 @@
+     {
+       "path": "/api/cron/plan-interpret",
+       "schedule": "15,45 23 * * 1-5"
++    },
++    {
++      "path": "/api/cron/cc-sip-scanner",
++      "schedule": "0-25/5 13,14 * * 1-5"
++    },
++    {
++      "path": "/api/cron/cc-sip-scanner",
++      "schedule": "35-39 13,14 * * 1-5"
+     }
+   ]
+ }
+diff --git a/src/lib/sip/__tests__/calculation.test.ts b/src/lib/sip/__tests__/calculation.test.ts
+index aef4629..f8b6fdb 100644
+--- a/src/lib/sip/__tests__/calculation.test.ts
++++ b/src/lib/sip/__tests__/calculation.test.ts
+@@ -1,61 +1,173 @@
+-import { describe, expect, it } from 'vitest';
+-import { clock, previousSessions, sessionTime } from '../calendar';
+-import { dailyEligibility, preparationFromBars, openingVolume, rankCandidates, stockUniverse } from '../calculation';
+-import type { SipBar } from '../contract';
++import { describe, expect, it } from "vitest";
++import { clock, previousSessions, sessionTime } from "../calendar";
++import {
++  dailyEligibility,
++  preparationFromBars,
++  openingVolume,
++  rankCandidates,
++  stockUniverse,
++} from "../calculation";
++import type { SipBar } from "../contract";
+ 
+-const date = '2026-10-06';
++const date = "2026-10-06";
+ function daily(): SipBar[] {
+-  return previousSessions(date, 40).reverse().map(day => ({t: sessionTime(day, 0).getTime(), o: 10, h: 10.5, l: 9.5, c: 10, v: 1_000_000}));
++  return previousSessions(date, 40)
++    .reverse()
++    .map((day) => ({
++      t: sessionTime(day, 0).getTime(),
++      o: 10,
++      h: 10.5,
++      l: 9.5,
++      c: 10,
++      v: 1_000_000,
++    }));
+ }
+ function opening(day: string, volume = 100): SipBar[] {
+-  return Array.from({length: 5}, (_, i) => ({t: sessionTime(day, 570 + i).getTime(), o: 10, h: 11, l: 9, c: 10, v: volume}));
++  return Array.from({ length: 5 }, (_, i) => ({
++    t: sessionTime(day, 570 + i).getTime(),
++    o: 10,
++    h: 11,
++    l: 9,
++    c: 10,
++    v: volume,
++  }));
++}
++function history(): SipBar[] {
++  return previousSessions(date, 14).flatMap((day) => opening(day));
+ }
+-function history(): SipBar[] { return previousSessions(date, 14).flatMap(day => opening(day)); }
+ 
+-describe('SIP completed opening-volume calculation', () => {
+-  it('compares the same five minutes across exactly fourteen previous sessions', () => {
+-    expect(preparationFromBars('NVDA', date, daily(), history())).toMatchObject({symbol: 'NVDA', atr14: 1, avg_vol: 1_000_000, opening_mean: 500});
++describe("SIP completed opening-volume calculation", () => {
++  it("compares the same five minutes across exactly fourteen previous sessions", () => {
++    expect(preparationFromBars("NVDA", date, daily(), history())).toMatchObject(
++      { symbol: "NVDA", atr14: 1, avg_vol: 1_000_000, opening_mean: 500 },
++    );
+     expect(openingVolume(opening(date, 200), date)).toBe(1000);
+   });
+-  it('excludes today from daily ATR and average share volume', () => {
+-    const extra = {...daily()[0], t: sessionTime(date, 0).getTime(), h: 100, v: 50_000_000};
+-    expect(dailyEligibility(date, [...daily(), extra])).toMatchObject({atr14: 1, avg_vol: 1_000_000});
++  it("excludes today from daily ATR and average share volume", () => {
++    const extra = {
++      ...daily()[0],
++      t: sessionTime(date, 0).getTime(),
++      h: 100,
++      v: 50_000_000,
++    };
++    expect(dailyEligibility(date, [...daily(), extra])).toMatchObject({
++      atr14: 1,
++      avg_vol: 1_000_000,
++    });
+   });
+-  it('rejects incomplete historical opening windows instead of inventing volume', () => {
+-    expect(() => preparationFromBars('NVDA', date, daily(), history().slice(1))).toThrow('OPENING_HISTORY_INCOMPLETE');
++  it("rejects incomplete historical opening windows instead of inventing volume", () => {
++    expect(() =>
++      preparationFromBars("NVDA", date, daily(), history().slice(1)),
++    ).toThrow("OPENING_HISTORY_INCOMPLETE");
+   });
+-  it('rejects duplicated bars and nonfinite volume', () => {
+-    expect(() => openingVolume([...opening(date), opening(date)[0]], date)).toThrow('OPENING_WINDOW_INVALID');
+-    expect(() => openingVolume(opening(date).map((b,i) => i ? b : {...b,v:NaN}), date)).toThrow('OPENING_WINDOW_INVALID');
++  it("rejects duplicated bars and nonfinite volume", () => {
++    expect(() =>
++      openingVolume([...opening(date), opening(date)[0]], date),
++    ).toThrow("OPENING_WINDOW_INVALID");
++    expect(() =>
++      openingVolume(
++        opening(date).map((b, i) => (i ? b : { ...b, v: NaN })),
++        date,
++      ),
++    ).toThrow("OPENING_WINDOW_INVALID");
+   });
+-  it('ignores premarket and the still-forming 09:35 bar', () => {
+-    const extras = [569, 575].map(m => ({...opening(date)[0], t:sessionTime(date,m).getTime(),v:999_999}));
+-    expect(openingVolume([...extras,...opening(date)], date)).toBe(500);
++  it("ignores premarket and the still-forming 09:35 bar", () => {
++    const extras = [569, 575].map((m) => ({
++      ...opening(date)[0],
++      t: sessionTime(date, m).getTime(),
++      v: 999_999,
++    }));
++    expect(openingVolume([...extras, ...opening(date)], date)).toBe(500);
+   });
+-  it('requires enough completed history and keeps the exact liquidity/ATR boundaries', () => {
+-    expect(() => dailyEligibility(date,daily().slice(0,19))).toThrow('DAILY_HISTORY_INCOMPLETE');
+-    expect(() => dailyEligibility(date,daily().map(b => ({...b,v:999_999})))).toThrow('DAILY_LIQUIDITY');
+-    expect(() => dailyEligibility(date,daily().map(b => ({...b,h:10.25,l:9.75})))).toThrow('ATR_TOO_LOW');
++  it("requires enough completed history and keeps the exact liquidity/ATR boundaries", () => {
++    expect(() => dailyEligibility(date, daily().slice(0, 19))).toThrow(
++      "DAILY_HISTORY_INCOMPLETE",
++    );
++    expect(() =>
++      dailyEligibility(
++        date,
++        daily().map((b) => ({ ...b, v: 999_999 })),
++      ),
++    ).toThrow("DAILY_LIQUIDITY");
++    expect(() =>
++      dailyEligibility(
++        date,
++        daily().map((b) => ({ ...b, h: 10.25, l: 9.75 })),
++      ),
++    ).toThrow("ATR_TOO_LOW");
+   });
+-  it('does not permit a zero baseline denominator', () => {
+-    expect(() => preparationFromBars('NVDA',date,daily(),history().map(b=>({...b,v:0})))).toThrow('OPENING_BASELINE_ZERO');
++  it("does not permit a zero baseline denominator", () => {
++    expect(() =>
++      preparationFromBars(
++        "NVDA",
++        date,
++        daily(),
++        history().map((b) => ({ ...b, v: 0 })),
++      ),
++    ).toThrow("OPENING_BASELINE_ZERO");
+   });
+-  it('ranks at most twenty, price strictly above five, by RVOL then symbol', () => {
+-    const row = {price:10,rvol:2,atr14:1,avg_vol:1_000_000};
+-    const rows = [...Array.from({length:25},(_,i)=>({...row,symbol:'S'+String(i).padStart(2,'0')})), {...row,symbol:'FIVE',price:5}, {...row,symbol:'BAD',rvol:Infinity}];
++  it("ranks at most twenty, price strictly above five, by RVOL then symbol", () => {
++    const row = { price: 10, rvol: 2, atr14: 1, avg_vol: 1_000_000 };
++    const rows = [
++      ...Array.from({ length: 25 }, (_, i) => ({
++        ...row,
++        symbol: "S" + String(i).padStart(2, "0"),
++      })),
++      { ...row, symbol: "FIVE", price: 5 },
++      { ...row, symbol: "BAD", rvol: Infinity },
++    ];
+     const ranked = rankCandidates(rows);
+-    expect(ranked).toHaveLength(20); expect(ranked[0].symbol).toBe('S00');
+-    expect(ranked.some(r => r.symbol === 'FIVE' || r.symbol === 'BAD')).toBe(false);
++    expect(ranked).toHaveLength(20);
++    expect(ranked[0].symbol).toBe("S00");
++    expect(ranked.some((r) => r.symbol === "FIVE" || r.symbol === "BAD")).toBe(
++      false,
++    );
+   });
+-  it('uses verified stock classification and excludes ETFs and unknowns', () => {
+-    expect(stockUniverse(['NVDA','SPY','QQQ','UNKNOWN'],{NVDA:'Technology',SPY:'ETF/Fund',QQQ:'ETF/Fund'})).toEqual(['NVDA']);
++  it("uses verified stock classification and excludes ETFs and unknowns", () => {
++    expect(
++      stockUniverse(["NVDA", "SPY", "QQQ", "UNKNOWN"], {
++        NVDA: "Technology",
++        SPY: "ETF/Fund",
++        QQQ: "ETF/Fund",
++      }),
++    ).toEqual(["NVDA"]);
+   });
+ });
+-describe('Eastern exchange calendar', () => {
+-  it('skips the July 3 exchange closure and weekend', () => expect(previousSessions('2026-07-06',1)).toEqual(['2026-07-02']));
+-  it('handles DST without changing the opening-window identity', () => {
+-    expect(sessionTime('2026-10-06',575).toISOString()).toBe('2026-10-06T13:35:00.000Z');
+-    expect(sessionTime('2026-11-09',575).toISOString()).toBe('2026-11-09T14:35:00.000Z');
+-    expect(clock(sessionTime('2026-11-09',575))).toMatchObject({date:'2026-11-09',minute:575,trading:true});
++describe("Eastern exchange calendar", () => {
++  it("skips the July 3 exchange closure and weekend", () =>
++    expect(previousSessions("2026-07-06", 1)).toEqual(["2026-07-02"]));
++  it("handles DST without changing the opening-window identity", () => {
++    expect(sessionTime("2026-10-06", 575).toISOString()).toBe(
++      "2026-10-06T13:35:00.000Z",
++    );
++    expect(sessionTime("2026-11-09", 575).toISOString()).toBe(
++      "2026-11-09T14:35:00.000Z",
++    );
++    expect(clock(sessionTime("2026-11-09", 575))).toMatchObject({
++      date: "2026-11-09",
++      minute: 575,
++      trading: true,
++    });
+   });
+ });
++
++it("rejects impossible open/close values in daily and opening candles", () => {
++  expect(() =>
++    dailyEligibility(
++      date,
++      daily().map((b) => ({ ...b, o: 100, c: 100 })),
++    ),
++  ).toThrow("DAILY_HISTORY_INCOMPLETE");
++  expect(() =>
++    openingVolume(
++      opening(date).map((b) => ({ ...b, c: 100 })),
++      date,
++    ),
++  ).toThrow("OPENING_WINDOW_INVALID");
++});
++it("fails closed for unsupported calendar years and history boundaries", () => {
++  expect(clock(sessionTime("2028-11-23", 575)).trading).toBe(false);
++  expect(() => previousSessions("2026-01-05", 14)).toThrow(
++    "CALENDAR_UNSUPPORTED",
++  );
++});
+diff --git a/src/lib/sip/__tests__/infrastructure.test.ts b/src/lib/sip/__tests__/infrastructure.test.ts
+index 71ee29a..cc08645 100644
+--- a/src/lib/sip/__tests__/infrastructure.test.ts
++++ b/src/lib/sip/__tests__/infrastructure.test.ts
+@@ -1,38 +1,110 @@
+-import { describe,it,expect,vi } from 'vitest';
+-import { SchwabSipData } from '../schwab';
+-import { SipStore } from '../store';
++import { describe, it, expect, vi } from "vitest";
++import { SchwabSipData } from "../schwab";
++import { SipStore } from "../store";
+ 
+-describe('read-only Schwab boundary',()=>{
+- it('uses only pricehistory GET and retries a single 401 with token invalidation',async()=>{
+-  const fetcher=vi.fn().mockResolvedValueOnce(new Response('',{status:401})).mockResolvedValue(new Response(JSON.stringify({candles:[{datetime:123,open:10,high:11,low:9,close:10,volume:100}]})));
+-  const invalidate=vi.fn(); const data=new SchwabSipData(async()=> 'private-token',invalidate,fetcher);
+-  expect(await data.dailyBars('NVDA','2026-10-06')).toHaveLength(1);
+-  expect(invalidate).toHaveBeenCalledTimes(1); expect(fetcher).toHaveBeenCalledTimes(2);
+-  const [url,options]=fetcher.mock.calls[0];expect(url.pathname).toBe('/marketdata/v1/pricehistory'); expect(options.method).toBe('GET');expect(options.redirect).toBe('error');
+- });
+- it('never exposes upstream errors or token values',async()=>{
+-  const data=new SchwabSipData(async()=> 'private-token',()=>{},vi.fn().mockResolvedValue(new Response('private-token',{status:500})));
+-  await expect(data.dailyBars('NVDA','2026-10-06')).rejects.toThrow('SCHWAB_HTTP_500');
+- });
+- it('rejects bad provider schemas rather than reporting empty history',async()=>{
+-  const data=new SchwabSipData(async()=> 'private-token',()=>{},vi.fn().mockResolvedValue(new Response('{}')));
+-  await expect(data.historyMinutes('NVDA','2026-10-06')).rejects.toThrow('SCHWAB_SCHEMA');
+- });
++describe("read-only Schwab boundary", () => {
++  it("uses only pricehistory GET and retries a single 401 with token invalidation", async () => {
++    const fetcher = vi
++      .fn()
++      .mockResolvedValueOnce(new Response("", { status: 401 }))
++      .mockResolvedValue(
++        new Response(
++          JSON.stringify({
++            candles: [
++              {
++                datetime: 123,
++                open: 10,
++                high: 11,
++                low: 9,
++                close: 10,
++                volume: 100,
++              },
++            ],
++          }),
++        ),
++      );
++    const invalidate = vi.fn();
++    const data = new SchwabSipData(
++      async () => "private-token",
++      invalidate,
++      fetcher,
++    );
++    expect(await data.dailyBars("NVDA", "2026-10-06")).toHaveLength(1);
++    expect(invalidate).toHaveBeenCalledTimes(1);
++    expect(fetcher).toHaveBeenCalledTimes(2);
++    const [url, options] = fetcher.mock.calls[0];
++    expect(url.pathname).toBe("/marketdata/v1/pricehistory");
++    expect(options.method).toBe("GET");
++    expect(options.redirect).toBe("error");
++  });
++  it("never exposes upstream errors or token values", async () => {
++    const data = new SchwabSipData(
++      async () => "private-token",
++      () => {},
++      vi.fn().mockResolvedValue(new Response("private-token", { status: 500 })),
++    );
++    await expect(data.dailyBars("NVDA", "2026-10-06")).rejects.toThrow(
++      "SCHWAB_HTTP_500",
++    );
++  });
++  it("rejects bad provider schemas rather than reporting empty history", async () => {
++    const data = new SchwabSipData(
++      async () => "private-token",
++      () => {},
++      vi.fn().mockResolvedValue(new Response("{}")),
++    );
++    await expect(data.historyMinutes("NVDA", "2026-10-06")).rejects.toThrow(
++      "SCHWAB_SCHEMA",
++    );
++  });
+ });
+-describe('durable ownership',()=>{
+- it('requires Redis configuration',()=>{vi.stubEnv('UPSTASH_REDIS_REST_URL','');expect(()=>SipStore.fromEnvironment()).toThrow('SIP_STORAGE_UNCONFIGURED');vi.unstubAllEnvs();});
+- it('stores an immutable result with date-scoped key and retention',async()=>{
+-  const redis={set:vi.fn(),eval:vi.fn().mockResolvedValue('OK')};const store=new SipStore(redis as any);
+-  await store.saveResult('2026-10-06',{} as any,'owner');
+-  // Publication is fenced atomically against the owner, as well as SET NX.
+-  expect(redis.set).not.toHaveBeenCalled();expect(redis.eval.mock.calls[0][0]).toContain("'NX'");expect(redis.eval.mock.calls[0][1][1]).toBe('cc:sip:v1:2026-10-06:result');expect(redis.eval.mock.calls[0][2][3]).toBe(604800);
+- });
+- it('releases only its own lock after callbacks, including failures',async()=>{
+-  const redis={set:vi.fn().mockResolvedValue('OK'),eval:vi.fn().mockResolvedValue(1)};const store=new SipStore(redis as any);
+-  await expect(store.withLock('2026-10-06',async()=>{throw new Error('stop');})).rejects.toThrow('stop');
+-  expect(redis.set.mock.calls[0][0]).toBe('cc:sip:v1:2026-10-06:lock');expect(redis.set.mock.calls[0][2]).toEqual({nx:true,ex:330});
+-  expect(redis.eval.mock.calls[0][0]).toContain("redis.call('get'");expect(redis.eval.mock.calls[0][1]).toEqual(['cc:sip:v1:2026-10-06:lock']);
+- });
+- it('does not execute overlapping work',async()=>{const redis={set:vi.fn().mockResolvedValue(null)};const work=vi.fn();expect(await new SipStore(redis as any).withLock('2026-10-06',work)).toBe(null);expect(work).not.toHaveBeenCalled();});
+- it('fences writes if the lock has expired or changed owner',async()=>{const redis={eval:vi.fn().mockResolvedValue(-1)};const store=new SipStore(redis as any);await expect(store.saveResult('2026-10-06',{} as any,'old-owner')).rejects.toThrow('SIP_LOCK_LOST');});
++describe("durable ownership", () => {
++  it("requires Redis configuration", () => {
++    vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
++    expect(() => SipStore.fromEnvironment()).toThrow(
++      "SIP_STORAGE_UNCONFIGURED",
++    );
++    vi.unstubAllEnvs();
++  });
++  it("stores an immutable result with date-scoped key and retention", async () => {
++    const redis = { set: vi.fn(), eval: vi.fn().mockResolvedValue("OK") };
++    const store = new SipStore(redis as any);
++    await store.saveResult("2026-10-06", {} as any, "owner");
++    // Publication is fenced atomically against the owner, as well as SET NX.
++    expect(redis.set).not.toHaveBeenCalled();
++    expect(redis.eval.mock.calls[0][0]).toContain("'NX'");
++    expect(redis.eval.mock.calls[0][1][1]).toBe("cc:sip:v1:2026-10-06:result");
++    expect(redis.eval.mock.calls[0][2][3]).toBe(604800);
++  });
++  it("releases only its own lock after callbacks, including failures", async () => {
++    const redis = {
++      set: vi.fn().mockResolvedValue("OK"),
++      eval: vi.fn().mockResolvedValue(1),
++    };
++    const store = new SipStore(redis as any);
++    await expect(
++      store.withLock("2026-10-06", async () => {
++        throw new Error("stop");
++      }),
++    ).rejects.toThrow("stop");
++    expect(redis.set.mock.calls[0][0]).toBe("cc:sip:v1:2026-10-06:lock");
++    expect(redis.set.mock.calls[0][2]).toEqual({ nx: true, ex: 330 });
++    expect(redis.eval.mock.calls[0][0]).toContain("redis.call('get'");
++    expect(redis.eval.mock.calls[0][1]).toEqual(["cc:sip:v1:2026-10-06:lock"]);
++  });
++  it("does not execute overlapping work", async () => {
++    const redis = { set: vi.fn().mockResolvedValue(null) };
++    const work = vi.fn();
++    expect(await new SipStore(redis as any).withLock("2026-10-06", work)).toBe(
++      null,
++    );
++    expect(work).not.toHaveBeenCalled();
++  });
++  it("fences writes if the lock has expired or changed owner", async () => {
++    const redis = { eval: vi.fn().mockResolvedValue(-1) };
++    const store = new SipStore(redis as any);
++    await expect(
++      store.saveResult("2026-10-06", {} as any, "old-owner"),
++    ).rejects.toThrow("SIP_LOCK_LOST");
++  });
+ });
+diff --git a/src/lib/sip/__tests__/service.test.ts b/src/lib/sip/__tests__/service.test.ts
+new file mode 100644
+index 0000000..81782ac
+--- /dev/null
++++ b/src/lib/sip/__tests__/service.test.ts
+@@ -0,0 +1,196 @@
++import { describe, it, expect, vi } from "vitest";
++import readyFixture from "../../../../tests/fixtures/sip/sip-v1-ready.json";
++import { SipScanner, phaseAt } from "../service";
++import { machineResponse } from "../http";
++import { previousSessions, sessionTime } from "../calendar";
++import { SipUnavailable } from "../contract";
++const date = "2026-10-06",
++  now = sessionTime(date, 575);
++const daily = previousSessions(date, 40)
++  .reverse()
++  .map((d) => ({
++    t: sessionTime(d, 0).getTime(),
++    o: 10,
++    h: 10.5,
++    l: 9.5,
++    c: 10,
++    v: 1e6,
++  }));
++const bars = (d: string, v = 100) =>
++  Array.from({ length: 5 }, (_, i) => ({
++    t: sessionTime(d, 570 + i).getTime(),
++    o: 10,
++    h: 11,
++    l: 9,
++    c: 10,
++    v,
++  }));
++function fixture() {
++  const values = new Map<string, any>();
++  const store = {
++    result: vi.fn(async (d) => values.get(d + ":result") ?? null),
++    preparation: vi.fn(async (d) => values.get(d + ":prep") ?? null),
++    symbol: vi.fn(async (d, s) => values.get(d + ":" + s) ?? null),
++    saveSymbol: vi.fn(async (d, s, v) => {
++      values.set(d + ":" + s, v);
++    }),
++    savePreparation: vi.fn(async (d, v) => {
++      values.set(d + ":prep", v);
++    }),
++    saveResult: vi.fn(async (d, v) => {
++      if (!values.has(d + ":result")) values.set(d + ":result", v);
++    }),
++    withLock: vi.fn(async (d, fn) => fn("owner")),
++  };
++  const data = {
++    dailyBars: vi.fn(async () => daily),
++    historyMinutes: vi.fn(async () =>
++      previousSessions(date, 14).flatMap((d) => bars(d)),
++    ),
++    openingMinutes: vi.fn(async () => bars(date, 200)),
++    quotes: vi.fn(async (symbols) =>
++      Object.fromEntries(
++        symbols.map((s) => [s, { price: 10, at: now.getTime() }]),
++      ),
++    ),
++  };
++  const scanner = new SipScanner(data, store, ["NVDA", "AMD"], () => now);
++  return { data, store, scanner, values };
++}
++describe("preparation, completeness and publication", () => {
++  it("prepares the universe then publishes precise RVOL and immutable result", async () => {
++    const { scanner, store, data } = fixture();
++    expect((await scanner.prepare(now))?.complete).toBe(true);
++    const result = await scanner.publish(now);
++    expect(result).toEqual(readyFixture);
++    expect(result?.candidates.map((c) => c.symbol)).toEqual(["AMD", "NVDA"]);
++    expect(result?.candidates[0].rvol).toBe(2);
++    expect(result?.coverage).toEqual({
++      universe: 2,
++      eligible: 2,
++      observed: 2,
++      excluded: 0,
++    });
++    await scanner.publish(now);
++    expect(store.saveResult).toHaveBeenCalledTimes(1);
++    expect(data.openingMinutes).toHaveBeenCalledTimes(2);
++  });
++  it("retains successful preparation but never publishes through transport failures", async () => {
++    const f = fixture();
++    f.data.dailyBars.mockRejectedValueOnce(
++      new SipUnavailable("SCHWAB_HTTP_500"),
++    );
++    expect((await f.scanner.prepare(now))?.complete).toBe(false);
++    await expect(f.scanner.publish(now)).rejects.toThrow(
++      "PREPARATION_INCOMPLETE",
++    );
++    await f.scanner.prepare(now);
++    expect(f.data.dailyBars).toHaveBeenCalledTimes(3);
++  });
++  it("records history exclusions without inventing zero-volume observations", async () => {
++    const f = fixture();
++    f.data.historyMinutes.mockResolvedValue([]);
++    await f.scanner.prepare(now);
++    const r = await f.scanner.publish(now);
++    expect(r?.candidates).toEqual([]);
++    expect(r?.exclusions).toHaveLength(2);
++    expect(f.data.openingMinutes).not.toHaveBeenCalled();
++  });
++  it("retries incomplete current bars and preserves already completed observations", async () => {
++    const f = fixture();
++    await f.scanner.prepare(now);
++    f.data.openingMinutes.mockResolvedValueOnce(bars(date).slice(1));
++    await expect(f.scanner.publish(now)).rejects.toThrow(
++      "OPENING_WINDOW_INCOMPLETE",
++    );
++    expect(f.store.saveResult).not.toHaveBeenCalled();
++    await f.scanner.publish(now);
++    expect(f.data.openingMinutes).toHaveBeenCalledTimes(3);
++  });
++  it("refuses stale quotes and before-window publication", async () => {
++    const f = fixture();
++    await f.scanner.prepare(now);
++    await expect(f.scanner.publish(sessionTime(date, 574))).rejects.toThrow(
++      "OUTSIDE_PUBLISH_WINDOW",
++    );
++    f.data.quotes.mockResolvedValue({
++      NVDA: { price: 10, at: now.getTime() - 121000 },
++      AMD: { price: 10, at: now.getTime() },
++    });
++    await expect(f.scanner.publish(now)).rejects.toThrow("SCHWAB_QUOTE_STALE");
++  });
++});
++describe("machine auth and schedules", () => {
++  it("guards Eastern windows, DST and holidays", () => {
++    expect(phaseAt(sessionTime(date, 540))).toBe("prepare");
++    expect(phaseAt(sessionTime(date, 575))).toBe("publish");
++    expect(phaseAt(sessionTime(date, 580))).toBe(null);
++    expect(phaseAt(new Date("2026-11-09T14:35:00Z"))).toBe("publish");
++    expect(phaseAt(sessionTime("2026-11-26", 575))).toBe(null);
++  });
++  const secret = "s".repeat(32);
++  const env = {
++    enabled: "true",
++    secret,
++    reserved: { CRON_SECRET: "c".repeat(32) },
++  };
++  it("hides disabled and denies unauthenticated or shared credentials without storage calls", async () => {
++    const read = vi.fn();
++    expect(
++      (
++        await machineResponse(
++          new Request("https://test"),
++          { ...env, enabled: "false" },
++          read,
++          now,
++        )
++      ).status,
++    ).toBe(404);
++    expect(
++      (await machineResponse(new Request("https://test"), env, read, now))
++        .status,
++    ).toBe(401);
++    expect(
++      (
++        await machineResponse(
++          new Request("https://test", {
++            headers: { authorization: `Bearer ${secret}` },
++          }),
++          { ...env, reserved: { CRON_SECRET: secret } },
++          read,
++          now,
++        )
++      ).status,
++    ).toBe(503);
++    expect(read).not.toHaveBeenCalled();
++  });
++  it("returns pending then authenticated empty-ready from storage alone with no-store", async () => {
++    const req = new Request("https://test", {
++      headers: { authorization: `Bearer ${secret}` },
++    });
++    const read = vi
++      .fn()
++      .mockResolvedValueOnce(null)
++      .mockResolvedValueOnce({ version: 1, status: "ready", candidates: [] });
++    const pending = await machineResponse(req, env, read, now);
++    expect(pending.status).toBe(202);
++    const ready = await machineResponse(req, env, read, now);
++    expect(ready.status).toBe(200);
++    expect(ready.headers.get("Cache-Control")).toContain("no-store");
++    expect(read).toHaveBeenCalledWith(date);
++  });
++  it("does not leak storage failures", async () => {
++    const response = await machineResponse(
++      new Request("https://test", {
++        headers: { authorization: `Bearer ${secret}` },
++      }),
++      env,
++      async () => {
++        throw new Error("private");
++      },
++      now,
++    );
++    expect(response.status).toBe(503);
++    expect(await response.text()).not.toContain("private");
++  });
++});
+diff --git a/src/lib/sip/calculation.ts b/src/lib/sip/calculation.ts
+index f7bc498..b92bad4 100644
+--- a/src/lib/sip/calculation.ts
++++ b/src/lib/sip/calculation.ts
+@@ -1,45 +1,107 @@
+-import { clock, previousSessions, sessionTime } from './calendar';
+-import { SipExcluded, type PreparationRow, type SipBar, type SipCandidate } from './contract';
++import { clock, previousSessions, sessionTime } from "./calendar";
++import {
++  SipExcluded,
++  type PreparationRow,
++  type SipBar,
++  type SipCandidate,
++} from "./contract";
+ 
+ function validBar(bar: SipBar): boolean {
+-  return [bar.t,bar.o,bar.h,bar.l,bar.c,bar.v].every(Number.isFinite)
+-    && bar.o > 0 && bar.c > 0 && bar.l > 0 && bar.h >= bar.l && bar.v >= 0;
++  return (
++    [bar.t, bar.o, bar.h, bar.l, bar.c, bar.v].every(Number.isFinite) &&
++    bar.o > 0 &&
++    bar.c > 0 &&
++    bar.l > 0 &&
++    bar.h >= Math.max(bar.o, bar.c) &&
++    bar.l <= Math.min(bar.o, bar.c) &&
++    bar.v >= 0
++  );
+ }
+-export function stockUniverse(symbols: string[], sectors: Record<string, string>): string[] {
+-  return [...new Set(symbols)].filter(s => Boolean(sectors[s]) && sectors[s] !== 'ETF/Fund').sort();
++export function stockUniverse(
++  symbols: string[],
++  sectors: Record<string, string>,
++): string[] {
++  return [...new Set(symbols)]
++    .filter((s) => Boolean(sectors[s]) && sectors[s] !== "ETF/Fund")
++    .sort();
+ }
+-export function dailyEligibility(date: string, bars: SipBar[]): {atr14: number; avg_vol: number} {
+-  const completed = bars.filter(b => Number.isFinite(b.t) && clock(new Date(b.t)).date < date).sort((a,b) => a.t-b.t);
+-  const days = completed.map(b => clock(new Date(b.t)).date);
+-  const needed = previousSessions(date,20).reverse();
+-  if (completed.length < 20 || completed.some(b => !validBar(b)) || new Set(days).size !== days.length
+-    || needed.some((day,i) => days.slice(-20)[i] !== day)) throw new SipExcluded('DAILY_HISTORY_INCOMPLETE');
+-  const avg_vol = completed.slice(-20).reduce((s,b) => s+b.v,0)/20;
+-  const ranges = completed.slice(1).map((b,i) => Math.max(b.h-b.l,Math.abs(b.h-completed[i].c),Math.abs(b.l-completed[i].c)));
+-  let atr14 = ranges.slice(0,14).reduce((s,n)=>s+n,0)/14;
+-  for (const range of ranges.slice(14)) atr14 = (atr14*13+range)/14;
+-  if (avg_vol < 1_000_000) throw new SipExcluded('DAILY_LIQUIDITY');
+-  if (!(atr14 > .50)) throw new SipExcluded('ATR_TOO_LOW');
+-  return {atr14,avg_vol};
++export function dailyEligibility(
++  date: string,
++  bars: SipBar[],
++): { atr14: number; avg_vol: number } {
++  const completed = bars
++    .filter((b) => Number.isFinite(b.t) && clock(new Date(b.t)).date < date)
++    .sort((a, b) => a.t - b.t);
++  const days = completed.map((b) => clock(new Date(b.t)).date);
++  const needed = previousSessions(date, 20).reverse();
++  if (
++    completed.length < 20 ||
++    completed.some((b) => !validBar(b)) ||
++    new Set(days).size !== days.length ||
++    needed.some((day, i) => days.slice(-20)[i] !== day)
++  )
++    throw new SipExcluded("DAILY_HISTORY_INCOMPLETE");
++  const avg_vol = completed.slice(-20).reduce((s, b) => s + b.v, 0) / 20;
++  const ranges = completed
++    .slice(1)
++    .map((b, i) =>
++      Math.max(
++        b.h - b.l,
++        Math.abs(b.h - completed[i].c),
++        Math.abs(b.l - completed[i].c),
++      ),
++    );
++  let atr14 = ranges.slice(0, 14).reduce((s, n) => s + n, 0) / 14;
++  for (const range of ranges.slice(14)) atr14 = (atr14 * 13 + range) / 14;
++  if (avg_vol < 1_000_000) throw new SipExcluded("DAILY_LIQUIDITY");
++  if (!(atr14 > 0.5)) throw new SipExcluded("ATR_TOO_LOW");
++  return { atr14, avg_vol };
+ }
+ export function openingVolume(bars: SipBar[], date: string): number {
+-  const start = sessionTime(date,570).getTime(), end = sessionTime(date,575).getTime();
+-  const window = bars.filter(b => b.t >= start && b.t < end).sort((a,b)=>a.t-b.t);
+-  if (window.length !== 5) throw new SipExcluded(window.length > 5 ? 'OPENING_WINDOW_INVALID' : 'OPENING_WINDOW_INCOMPLETE');
+-  if (window.some((b,i) => !validBar(b) || b.t !== start+i*60_000)) throw new SipExcluded('OPENING_WINDOW_INVALID');
+-  return window.reduce((s,b)=>s+b.v,0);
++  const start = sessionTime(date, 570).getTime(),
++    end = sessionTime(date, 575).getTime();
++  const window = bars
++    .filter((b) => b.t >= start && b.t < end)
++    .sort((a, b) => a.t - b.t);
++  if (window.length !== 5)
++    throw new SipExcluded(
++      window.length > 5
++        ? "OPENING_WINDOW_INVALID"
++        : "OPENING_WINDOW_INCOMPLETE",
++    );
++  if (window.some((b, i) => !validBar(b) || b.t !== start + i * 60_000))
++    throw new SipExcluded("OPENING_WINDOW_INVALID");
++  return window.reduce((s, b) => s + b.v, 0);
+ }
+-export function preparationFromBars(symbol: string, date: string, daily: SipBar[], minute: SipBar[]): PreparationRow {
+-  const eligibility = dailyEligibility(date,daily);
++export function preparationFromBars(
++  symbol: string,
++  date: string,
++  daily: SipBar[],
++  minute: SipBar[],
++): PreparationRow {
++  const eligibility = dailyEligibility(date, daily);
+   let observations: number[];
+-  try { observations = previousSessions(date,14).map(day => openingVolume(minute,day)); }
+-  catch { throw new SipExcluded('OPENING_HISTORY_INCOMPLETE'); }
+-  const opening_mean = observations.reduce((s,n)=>s+n,0)/14;
+-  if (!(opening_mean > 0)) throw new SipExcluded('OPENING_BASELINE_ZERO');
+-  return {symbol,...eligibility,opening_mean};
++  try {
++    observations = previousSessions(date, 14).map((day) =>
++      openingVolume(minute, day),
++    );
++  } catch {
++    throw new SipExcluded("OPENING_HISTORY_INCOMPLETE");
++  }
++  const opening_mean = observations.reduce((s, n) => s + n, 0) / 14;
++  if (!(opening_mean > 0)) throw new SipExcluded("OPENING_BASELINE_ZERO");
++  return { symbol, ...eligibility, opening_mean };
+ }
+ export function rankCandidates(rows: SipCandidate[]): SipCandidate[] {
+-  return rows.filter(r => [r.price,r.rvol,r.atr14,r.avg_vol].every(Number.isFinite)
+-    && r.price > 5 && r.rvol >= 0 && r.atr14 > .50 && r.avg_vol >= 1_000_000)
+-    .sort((a,b)=>b.rvol-a.rvol || a.symbol.localeCompare(b.symbol)).slice(0,20);
++  return rows
++    .filter(
++      (r) =>
++        [r.price, r.rvol, r.atr14, r.avg_vol].every(Number.isFinite) &&
++        r.price > 5 &&
++        r.rvol >= 0 &&
++        r.atr14 > 0.5 &&
++        r.avg_vol >= 1_000_000,
++    )
++    .sort((a, b) => b.rvol - a.rvol || a.symbol.localeCompare(b.symbol))
++    .slice(0, 20);
+ }
+diff --git a/src/lib/sip/calendar.ts b/src/lib/sip/calendar.ts
+index 8a0fed1..1e0f9fe 100644
+--- a/src/lib/sip/calendar.ts
++++ b/src/lib/sip/calendar.ts
+@@ -1,17 +1,31 @@
+-import { isTradingDay } from '@/lib/trading-day';
++import { SipUnavailable } from "./contract";
++import { isTradingDay } from "@/lib/trading-day";
+ 
+-const formatter = new Intl.DateTimeFormat('en-US', {
+-  timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+-  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
++const formatter = new Intl.DateTimeFormat("en-US", {
++  timeZone: "America/New_York",
++  year: "numeric",
++  month: "2-digit",
++  day: "2-digit",
++  hour: "2-digit",
++  minute: "2-digit",
++  hourCycle: "h23",
+ });
+ export function clock(now: Date) {
+-  const p = Object.fromEntries(formatter.formatToParts(now).map(p => [p.type, p.value]));
++  const p = Object.fromEntries(
++    formatter.formatToParts(now).map((p) => [p.type, p.value]),
++  );
+   const date = `${p.year}-${p.month}-${p.day}`;
+-  return { date, minute: Number(p.hour) * 60 + Number(p.minute), trading: isTradingDay(date) };
++  return {
++    date,
++    minute: Number(p.hour) * 60 + Number(p.minute),
++    trading: ["2026", "2027"].includes(p.year) && isTradingDay(date),
++  };
+ }
+ export function sessionTime(date: string, minute: number): Date {
+   const noonUtc = new Date(`${date}T12:00:00Z`);
+-  return new Date(noonUtc.getTime() + (minute - clock(noonUtc).minute) * 60_000);
++  return new Date(
++    noonUtc.getTime() + (minute - clock(noonUtc).minute) * 60_000,
++  );
+ }
+ export function previousSessions(date: string, count: number): string[] {
+   const result: string[] = [];
+@@ -19,6 +33,8 @@ export function previousSessions(date: string, count: number): string[] {
+   while (result.length < count) {
+     cursor.setUTCDate(cursor.getUTCDate() - 1);
+     const day = cursor.toISOString().slice(0, 10);
++    if (![2026, 2027].includes(cursor.getUTCFullYear()))
++      throw new SipUnavailable("CALENDAR_UNSUPPORTED");
+     if (isTradingDay(day)) result.push(day);
+   }
+   return result;
+diff --git a/src/lib/sip/contract.ts b/src/lib/sip/contract.ts
+index a44a672..588624f 100644
+--- a/src/lib/sip/contract.ts
++++ b/src/lib/sip/contract.ts
+@@ -1,21 +1,64 @@
+ /** Dedicated paper-fleet scanner contract. All prices/volumes originate in Schwab data. */
+-export interface SipBar { t: number; o: number; h: number; l: number; c: number; v: number }
+-export interface PreparationRow { symbol: string; atr14: number; avg_vol: number; opening_mean: number }
+-export interface SipCandidate { symbol: string; price: number; rvol: number; atr14: number; avg_vol: number }
+-export interface Exclusion { symbol: string; reason: string }
++export interface SipBar {
++  t: number;
++  o: number;
++  h: number;
++  l: number;
++  c: number;
++  v: number;
++}
++export interface PreparationRow {
++  symbol: string;
++  atr14: number;
++  avg_vol: number;
++  opening_mean: number;
++}
++export interface SipCandidate {
++  symbol: string;
++  price: number;
++  rvol: number;
++  atr14: number;
++  avg_vol: number;
++}
++export interface Exclusion {
++  symbol: string;
++  reason: string;
++}
+ export interface SipSnapshot {
+-  version: 1; status: 'ready'; session_date: string; generated_at: string;
+-  window_start: string; window_end: string; candidates: SipCandidate[];
+-  coverage: { universe: number; eligible: number; observed: number; excluded: number };
++  version: 1;
++  status: "ready";
++  session_date: string;
++  generated_at: string;
++  window_start: string;
++  window_end: string;
++  candidates: SipCandidate[];
++  coverage: {
++    universe: number;
++    eligible: number;
++    observed: number;
++    excluded: number;
++  };
+   exclusions: Exclusion[];
+ }
+ export interface Preparation {
+-  version: 1; session_date: string; generated_at: string; universe: string[];
+-  rows: PreparationRow[]; exclusions: Exclusion[]; failures: Exclusion[]; complete: boolean;
++  version: 1;
++  session_date: string;
++  generated_at: string;
++  universe: string[];
++  rows: PreparationRow[];
++  exclusions: Exclusion[];
++  failures: Exclusion[];
++  complete: boolean;
+ }
+ export class SipExcluded extends Error {
+-  constructor(public readonly code: string) { super(code); this.name = 'SipExcluded'; }
++  constructor(public readonly code: string) {
++    super(code);
++    this.name = "SipExcluded";
++  }
+ }
+ export class SipUnavailable extends Error {
+-  constructor(public readonly code: string) { super(code); this.name = 'SipUnavailable'; }
++  constructor(public readonly code: string) {
++    super(code);
++    this.name = "SipUnavailable";
++  }
+ }
+diff --git a/src/lib/sip/http.ts b/src/lib/sip/http.ts
+new file mode 100644
+index 0000000..8f8f25a
+--- /dev/null
++++ b/src/lib/sip/http.ts
+@@ -0,0 +1,64 @@
++import { timingSafeEqual } from "node:crypto";
++import type { SipSnapshot } from "./contract";
++export const NO_STORE = {
++  "Cache-Control": "private, no-store, max-age=0",
++  Pragma: "no-cache",
++  Vary: "Authorization",
++};
++export function safeEqual(a: string | null, b: string | undefined): boolean {
++  if (!a || !b) return false;
++  const aa = Buffer.from(a),
++    bb = Buffer.from(b);
++  return aa.length === bb.length && timingSafeEqual(aa, bb);
++}
++export interface SipAuthEnv {
++  enabled: string | undefined;
++  secret: string | undefined;
++  reserved: Record<string, string | undefined>;
++}
++export function authEnvironment(): SipAuthEnv {
++  return {
++    enabled: process.env.SIP_SCANNER_ENABLED,
++    secret: process.env.SIP_SCANNER_SECRET,
++    reserved: {
++      CRON_SECRET: process.env.CRON_SECRET,
++      DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD,
++      MONITOR_SECRET: process.env.MONITOR_SECRET,
++      SCHWAB_BROKER_SECRET: process.env.SCHWAB_BROKER_SECRET,
++    },
++  };
++}
++export async function machineResponse(
++  req: Request,
++  env: SipAuthEnv,
++  read: (date: string) => Promise<SipSnapshot | null>,
++  now: Date,
++): Promise<Response> {
++  const json = (
++    body: unknown,
++    status: number,
++    headers: Record<string, string> = {},
++  ) => Response.json(body, { status, headers: { ...NO_STORE, ...headers } });
++  if (env.enabled !== "true") return json({ error: "not_found" }, 404);
++  if (
++    !env.secret ||
++    env.secret.length < 32 ||
++    Object.values(env.reserved).some((v) => safeEqual(v ?? null, env.secret))
++  )
++    return json({ error: "scanner_configuration" }, 503);
++  if (!safeEqual(req.headers.get("authorization"), `Bearer ${env.secret}`))
++    return json({ error: "unauthorized" }, 401);
++  try {
++    const { clock } = await import("./calendar");
++    const result = await read(clock(now).date);
++    if (!result)
++      return json(
++        { version: 1, status: "pending", session_date: clock(now).date },
++        202,
++        { "Retry-After": "15" },
++      );
++    return json(result, 200);
++  } catch {
++    return json({ error: "scanner_unavailable" }, 503, { "Retry-After": "15" });
++  }
++}
+diff --git a/src/lib/sip/schwab.ts b/src/lib/sip/schwab.ts
+index 2319240..56906ad 100644
+--- a/src/lib/sip/schwab.ts
++++ b/src/lib/sip/schwab.ts
+@@ -1,42 +1,148 @@
+-import { getAccessToken, invalidateSchwabAccessToken } from '@/services/schwabService';
+-import { previousSessions, sessionTime } from './calendar';
+-import { SipUnavailable, type SipBar } from './contract';
++import {
++  getAccessToken,
++  invalidateSchwabAccessToken,
++} from "@/services/schwabService";
++import { previousSessions, sessionTime } from "./calendar";
++import { SipUnavailable, type SipBar } from "./contract";
+ 
+ export interface SipData {
+- dailyBars(symbol:string,date:string):Promise<SipBar[]>;
+- historyMinutes(symbol:string,date:string):Promise<SipBar[]>;
+- openingMinutes(symbol:string,date:string):Promise<SipBar[]>;
+- quotes(symbols:string[]):Promise<Record<string,{price:number;at:number}>>;
++  dailyBars(symbol: string, date: string): Promise<SipBar[]>;
++  historyMinutes(symbol: string, date: string): Promise<SipBar[]>;
++  openingMinutes(symbol: string, date: string): Promise<SipBar[]>;
++  quotes(
++    symbols: string[],
++  ): Promise<Record<string, { price: number; at: number }>>;
+ }
+ /** Only market-data GETs. OAuth remains owned by the existing platform service. */
+ export class SchwabSipData implements SipData {
+- constructor(private token=getAccessToken,private invalidate:()=>void=invalidateSchwabAccessToken,private fetcher:typeof fetch=fetch){}
+- private async get(path:'pricehistory'|'quotes',params:Record<string,string>):Promise<any>{
+-  const url=new URL(`https://api.schwabapi.com/marketdata/v1/${path}`);
+-  for(const [key,value] of Object.entries(params))url.searchParams.set(key,value);
+-  for(let attempt=0;attempt<2;attempt++){
+-   let response:Response;
+-   try {response=await this.fetcher(url,{method:'GET',headers:{Authorization:`Bearer ${await this.token()}`},signal:AbortSignal.timeout(20_000),redirect:'error',cache:'no-store'});}
+-   catch{throw new SipUnavailable('SCHWAB_REQUEST_FAILED');}
+-   if(response.status===401 && attempt===0){this.invalidate();continue;}
+-   if(!response.ok)throw new SipUnavailable(`SCHWAB_HTTP_${response.status}`);
+-   try{return await response.json();}catch{throw new SipUnavailable('SCHWAB_SCHEMA');}
++  constructor(
++    private token = getAccessToken,
++    private invalidate: () => void = invalidateSchwabAccessToken,
++    private fetcher: typeof fetch = fetch,
++    private intervalMs = 600,
++  ) {}
++  private pacing = Promise.resolve();
++  private async pace() {
++    const wait = this.pacing;
++    this.pacing = wait.then(
++      () =>
++        new Promise<void>((resolve) => setTimeout(resolve, this.intervalMs)),
++    );
++    await wait;
+   }
+-  throw new SipUnavailable('SCHWAB_AUTH_FAILED');
+- }
+- private async bars(symbol:string,start:number,end:number,frequencyType:'daily'|'minute'):Promise<SipBar[]>{
+-  const data=await this.get('pricehistory',{symbol,periodType:frequencyType==='daily'?'month':'day',frequencyType,frequency:'1',startDate:String(start),endDate:String(end),needExtendedHoursData:'false'});
+-  if(!Array.isArray(data.candles))throw new SipUnavailable('SCHWAB_SCHEMA');
+-  return data.candles.map((b:any)=>({t:b.datetime,o:b.open,h:b.high,l:b.low,c:b.close,v:b.volume}));
+- }
+- dailyBars(symbol:string,date:string){const end=sessionTime(date,0).getTime();return this.bars(symbol,end-90*86_400_000,end,'daily');}
+- historyMinutes(symbol:string,date:string){const prior=previousSessions(date,14);return this.bars(symbol,sessionTime(prior[13],570).getTime(),sessionTime(prior[0],575).getTime(),'minute');}
+- openingMinutes(symbol:string,date:string){return this.bars(symbol,sessionTime(date,570).getTime(),sessionTime(date,575).getTime(),'minute');}
+- async quotes(symbols:string[]){
+-  if(!symbols.length)return {};
+-  const data=await this.get('quotes',{symbols:symbols.join(','),fields:'quote,reference'});
+-  const result:Record<string,{price:number;at:number}>={};
+-  for(const symbol of symbols){const q=data[symbol]?.quote;if(!q || !Number.isFinite(q.lastPrice) || !Number.isFinite(q.quoteTime))throw new SipUnavailable('SCHWAB_QUOTE_INCOMPLETE');result[symbol]={price:q.lastPrice,at:q.quoteTime};}
+-  return result;
+- }
++  private async get(
++    path: "pricehistory" | "quotes",
++    params: Record<string, string>,
++  ): Promise<unknown> {
++    const url = new URL(`https://api.schwabapi.com/marketdata/v1/${path}`);
++    for (const [key, value] of Object.entries(params))
++      url.searchParams.set(key, value);
++    for (let attempt = 0; attempt < 2; attempt++) {
++      let response: Response;
++      try {
++        await this.pace();
++        response = await this.fetcher(url, {
++          method: "GET",
++          headers: { Authorization: `Bearer ${await this.token()}` },
++          signal: AbortSignal.timeout(20_000),
++          redirect: "error",
++          cache: "no-store",
++        });
++      } catch {
++        throw new SipUnavailable("SCHWAB_REQUEST_FAILED");
++      }
++      if (response.status === 401 && attempt === 0) {
++        this.invalidate();
++        continue;
++      }
++      if (!response.ok)
++        throw new SipUnavailable(`SCHWAB_HTTP_${response.status}`);
++      try {
++        return await response.json();
++      } catch {
++        throw new SipUnavailable("SCHWAB_SCHEMA");
++      }
++    }
++    throw new SipUnavailable("SCHWAB_AUTH_FAILED");
++  }
++  private async bars(
++    symbol: string,
++    start: number,
++    end: number,
++    frequencyType: "daily" | "minute",
++  ): Promise<SipBar[]> {
++    const data = record(
++      await this.get("pricehistory", {
++        symbol,
++        periodType: frequencyType === "daily" ? "month" : "day",
++        frequencyType,
++        frequency: "1",
++        startDate: String(start),
++        endDate: String(end),
++        needExtendedHoursData: "false",
++      }),
++    );
++    if (!Array.isArray(data.candles)) throw new SipUnavailable("SCHWAB_SCHEMA");
++    return data.candles.map((raw) => {
++      const b = record(raw);
++      const values = ["datetime", "open", "high", "low", "close", "volume"].map(
++        (key) => number(b[key]),
++      );
++      return {
++        t: values[0],
++        o: values[1],
++        h: values[2],
++        l: values[3],
++        c: values[4],
++        v: values[5],
++      };
++    });
++  }
++  dailyBars(symbol: string, date: string) {
++    const end = sessionTime(date, 0).getTime();
++    return this.bars(symbol, end - 90 * 86_400_000, end, "daily");
++  }
++  historyMinutes(symbol: string, date: string) {
++    const prior = previousSessions(date, 14);
++    return this.bars(
++      symbol,
++      sessionTime(prior[13], 570).getTime(),
++      sessionTime(prior[0], 575).getTime(),
++      "minute",
++    );
++  }
++  openingMinutes(symbol: string, date: string) {
++    return this.bars(
++      symbol,
++      sessionTime(date, 570).getTime(),
++      sessionTime(date, 575).getTime(),
++      "minute",
++    );
++  }
++  async quotes(symbols: string[]) {
++    if (!symbols.length) return {};
++    const data = record(
++      await this.get("quotes", {
++        symbols: symbols.join(","),
++        fields: "quote,reference",
++      }),
++    );
++    const result: Record<string, { price: number; at: number }> = {};
++    for (const symbol of symbols) {
++      const q = record(record(data[symbol]).quote);
++      result[symbol] = { price: number(q.lastPrice), at: number(q.quoteTime) };
++    }
++    return result;
++  }
++}
++
++function record(value: unknown): Record<string, unknown> {
++  if (!value || typeof value !== "object" || Array.isArray(value))
++    throw new SipUnavailable("SCHWAB_SCHEMA");
++  return value as Record<string, unknown>;
++}
++function number(value: unknown): number {
++  if (typeof value !== "number" || !Number.isFinite(value))
++    throw new SipUnavailable("SCHWAB_SCHEMA");
++  return value;
+ }
+diff --git a/src/lib/sip/service.ts b/src/lib/sip/service.ts
+new file mode 100644
+index 0000000..9a726c7
+--- /dev/null
++++ b/src/lib/sip/service.ts
+@@ -0,0 +1,205 @@
++import { clock, sessionTime } from "./calendar";
++import {
++  dailyEligibility,
++  preparationFromBars,
++  openingVolume,
++  rankCandidates,
++} from "./calculation";
++import {
++  SipExcluded,
++  SipUnavailable,
++  type Preparation,
++  type SipSnapshot,
++  type SipCandidate,
++} from "./contract";
++import type { SipData } from "./schwab";
++import type { SipStorage } from "./store";
++export function phaseAt(now: Date): "prepare" | "publish" | null {
++  const { trading, minute } = clock(now);
++  if (!trading) return null;
++  return minute >= 540 && minute < 570
++    ? "prepare"
++    : minute >= 575 && minute < 580
++      ? "publish"
++      : null;
++}
++export class SipScanner {
++  constructor(
++    private data: SipData,
++    private store: SipStorage,
++    private universe: string[],
++    private now = () => new Date(),
++  ) {}
++  async prepare(at: Date): Promise<Preparation | null> {
++    const date = clock(at).date,
++      deadline = Date.now() + 240000;
++    return this.store.withLock(date, async (owner) => {
++      const result: Preparation = {
++        version: 1,
++        session_date: date,
++        generated_at: this.now().toISOString(),
++        universe: this.universe,
++        rows: [],
++        exclusions: [],
++        failures: [],
++        complete: false,
++      };
++      let index = 0;
++      const work = async () => {
++        while (index < this.universe.length) {
++          const symbol = this.universe[index++];
++          try {
++            const cached = await this.store.symbol(date, symbol);
++            if (cached && "row" in cached) {
++              result.rows.push(cached.row);
++              continue;
++            }
++            if (cached && "exclusion" in cached) {
++              result.exclusions.push(cached.exclusion);
++              continue;
++            }
++            if (Date.now() >= deadline) {
++              result.failures.push({ symbol, reason: "PREPARATION_BUDGET" });
++              continue;
++            }
++            const daily = await this.data.dailyBars(symbol, date);
++            dailyEligibility(date, daily);
++            const row = preparationFromBars(
++              symbol,
++              date,
++              daily,
++              await this.data.historyMinutes(symbol, date),
++            );
++            await this.store.saveSymbol(date, symbol, { row }, owner);
++            result.rows.push(row);
++          } catch (error) {
++            if (error instanceof SipExcluded) {
++              const exclusion = { symbol, reason: error.code };
++              await this.store.saveSymbol(date, symbol, { exclusion }, owner);
++              result.exclusions.push(exclusion);
++            } else if (
++              error instanceof SipUnavailable &&
++              error.code === "SIP_LOCK_LOST"
++            ) {
++              throw error;
++            } else {
++              result.failures.push({
++                symbol,
++                reason:
++                  error instanceof SipUnavailable
++                    ? error.code
++                    : "PREPARATION_FAILED",
++              });
++            }
++          }
++        }
++      };
++      const jobs = await Promise.allSettled(
++        Array.from({ length: 4 }, () => work()),
++      );
++      for (const job of jobs) if (job.status === "rejected") throw job.reason;
++      result.complete = result.failures.length === 0;
++      result.rows.sort((a, b) => a.symbol.localeCompare(b.symbol));
++      result.exclusions.sort((a, b) => a.symbol.localeCompare(b.symbol));
++      await this.store.savePreparation(date, result, owner);
++      return result;
++    });
++  }
++  async publish(at: Date): Promise<SipSnapshot | null> {
++    if (phaseAt(at) !== "publish")
++      throw new SipUnavailable("OUTSIDE_PUBLISH_WINDOW");
++    const date = clock(at).date,
++      deadline = Date.now() + 240000;
++    return this.store.withLock(date, async (owner) => {
++      const existing = await this.store.result(date);
++      if (existing) return existing;
++      const prep = await this.store.preparation(date);
++      if (!prep?.complete || prep.session_date !== date)
++        throw new SipUnavailable("PREPARATION_INCOMPLETE");
++      const volumes = new Map<string, number>();
++      let index = 0;
++      const work = async () => {
++        while (index < prep.rows.length) {
++          const row = prep.rows[index++];
++          const cached = await this.store.symbol(date, `opening:${row.symbol}`);
++          if (cached && "opening_volume" in cached) {
++            volumes.set(row.symbol, cached.opening_volume);
++            continue;
++          }
++          if (Date.now() >= deadline)
++            throw new SipUnavailable("PUBLICATION_BUDGET");
++          const volume = openingVolume(
++            await this.data.openingMinutes(row.symbol, date),
++            date,
++          );
++          await this.store.saveSymbol(
++            date,
++            `opening:${row.symbol}`,
++            { opening_volume: volume },
++            owner,
++          );
++          volumes.set(row.symbol, volume);
++        }
++      };
++      // Wait for every worker to settle before releasing the lease on failure.
++      const jobs = await Promise.allSettled(
++        Array.from({ length: 4 }, () => work()),
++      );
++      for (const job of jobs) if (job.status === "rejected") throw job.reason;
++      const quotes: Record<string, { price: number; at: number }> = {};
++      for (let i = 0; i < prep.rows.length; i += 100) {
++        if (Date.now() >= deadline)
++          throw new SipUnavailable("PUBLICATION_BUDGET");
++        Object.assign(
++          quotes,
++          await this.data.quotes(
++            prep.rows.slice(i, i + 100).map((r) => r.symbol),
++          ),
++        );
++      }
++      const generated = this.now();
++      if (phaseAt(generated) !== "publish")
++        throw new SipUnavailable("PUBLICATION_TOO_LATE");
++      const candidates: SipCandidate[] = prep.rows.map((row) => {
++        const quote = quotes[row.symbol];
++        if (
++          !quote ||
++          quote.at < sessionTime(date, 575).getTime() ||
++          generated.getTime() - quote.at > 120000 ||
++          quote.at - generated.getTime() > 30000 ||
++          !Number.isFinite(quote.price) ||
++          quote.price <= 0
++        )
++          throw new SipUnavailable("SCHWAB_QUOTE_STALE");
++        return {
++          symbol: row.symbol,
++          price: quote.price,
++          rvol: volumes.get(row.symbol)! / row.opening_mean,
++          atr14: row.atr14,
++          avg_vol: row.avg_vol,
++        };
++      });
++      const priceExclusions = candidates
++        .filter((c) => c.price <= 5)
++        .map((c) => ({ symbol: c.symbol, reason: "PRICE_TOO_LOW" }));
++      const result: SipSnapshot = {
++        version: 1,
++        status: "ready",
++        session_date: date,
++        generated_at: generated.toISOString(),
++        window_start: sessionTime(date, 570).toISOString(),
++        window_end: sessionTime(date, 575).toISOString(),
++        candidates: rankCandidates(candidates),
++        coverage: {
++          universe: prep.universe.length,
++          eligible: prep.rows.length,
++          observed: volumes.size,
++          excluded: prep.exclusions.length + priceExclusions.length,
++        },
++        exclusions: [...prep.exclusions, ...priceExclusions],
++      };
++      await this.store.saveResult(date, result, owner);
++      return result;
++    });
++  }
++}
+diff --git a/src/lib/sip/store.ts b/src/lib/sip/store.ts
+index 8c54492..21648e2 100644
+--- a/src/lib/sip/store.ts
++++ b/src/lib/sip/store.ts
+@@ -1,44 +1,132 @@
+-import { Redis } from '@upstash/redis';
+-import { randomUUID } from 'node:crypto';
+-import { SipUnavailable, type Preparation, type PreparationRow, type Exclusion, type SipSnapshot } from './contract';
+-const TTL=7*86400;
+-export type PreparedSymbol={row:PreparationRow}|{exclusion:Exclusion};
++import { Redis } from "@upstash/redis";
++import { randomUUID } from "node:crypto";
++import {
++  SipUnavailable,
++  type Preparation,
++  type PreparationRow,
++  type Exclusion,
++  type SipSnapshot,
++} from "./contract";
++const TTL = 7 * 86400;
++export type PreparedSymbol =
++  | { row: PreparationRow }
++  | { exclusion: Exclusion }
++  | { opening_volume: number };
+ export interface SipStorage {
+- result(date:string):Promise<SipSnapshot|null>;
+- preparation(date:string):Promise<Preparation|null>;
+- symbol(date:string,symbol:string):Promise<PreparedSymbol|null>;
+- saveSymbol(date:string,symbol:string,value:PreparedSymbol,owner:string):Promise<void>;
+- savePreparation(date:string,value:Preparation,owner:string):Promise<void>;
+- saveResult(date:string,value:SipSnapshot,owner:string):Promise<void>;
+- withLock<T>(date:string,work:(owner:string)=>Promise<T>):Promise<T|null>;
++  result(date: string): Promise<SipSnapshot | null>;
++  preparation(date: string): Promise<Preparation | null>;
++  symbol(date: string, symbol: string): Promise<PreparedSymbol | null>;
++  saveSymbol(
++    date: string,
++    symbol: string,
++    value: PreparedSymbol,
++    owner: string,
++  ): Promise<void>;
++  savePreparation(
++    date: string,
++    value: Preparation,
++    owner: string,
++  ): Promise<void>;
++  saveResult(date: string, value: SipSnapshot, owner: string): Promise<void>;
++  withLock<T>(
++    date: string,
++    work: (owner: string) => Promise<T>,
++  ): Promise<T | null>;
+ }
+-const FENCED_SET=`if redis.call('get',KEYS[1]) ~= ARGV[1] then return -1 end
++const FENCED_SET = `if redis.call('get',KEYS[1]) ~= ARGV[1] then return -1 end
+ if ARGV[3] == 'nx' then return redis.call('set',KEYS[2],ARGV[2],'EX',ARGV[4],'NX') end
+ return redis.call('set',KEYS[2],ARGV[2],'EX',ARGV[4])`;
+-const RELEASE=`if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) end return 0`;
++const RELEASE = `if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) end return 0`;
+ export class SipStore implements SipStorage {
+- constructor(private redis:Pick<Redis,'get'|'set'|'eval'>){}
+- static fromEnvironment(){
+-  const url=process.env.UPSTASH_REDIS_REST_URL,token=process.env.UPSTASH_REDIS_REST_TOKEN;
+-  if(!url || !token)throw new SipUnavailable('SIP_STORAGE_UNCONFIGURED');
+-  return new SipStore(new Redis({url,token}));
+- }
+- private key(date:string,name:string){return `cc:sip:v1:${date}:${name}`;}
+- private async read<T>(date:string,name:string):Promise<T|null>{try{return await this.redis.get<T>(this.key(date,name));}catch{throw new SipUnavailable('SIP_STORAGE_FAILED');}}
+- result(date:string){return this.read<SipSnapshot>(date,'result');}
+- preparation(date:string){return this.read<Preparation>(date,'preparation');}
+- symbol(date:string,symbol:string){return this.read<PreparedSymbol>(date,`symbol:${symbol}`);}
+- private async write(date:string,name:string,value:unknown,owner:string,immutable=false){
+-  try{const outcome=await this.redis.eval(FENCED_SET,[this.key(date,'lock'),this.key(date,name)],[owner,JSON.stringify(value),immutable?'nx':'replace',TTL]);if(outcome===-1)throw new SipUnavailable('SIP_LOCK_LOST');}
+-  catch(e){if(e instanceof SipUnavailable)throw e;throw new SipUnavailable('SIP_STORAGE_FAILED');}
+- }
+- saveSymbol(date:string,symbol:string,value:PreparedSymbol,owner:string){return this.write(date,`symbol:${symbol}`,value,owner,true);}
+- savePreparation(date:string,value:Preparation,owner:string){return this.write(date,'preparation',value,owner);}
+- saveResult(date:string,value:SipSnapshot,owner:string){return this.write(date,'result',value,owner,true);}
+- async withLock<T>(date:string,work:(owner:string)=>Promise<T>):Promise<T|null>{
+-  const owner=randomUUID();let acquired;
+-  try{acquired=await this.redis.set(this.key(date,'lock'),owner,{nx:true,ex:330});}catch{throw new SipUnavailable('SIP_STORAGE_FAILED');}
+-  if(!acquired)return null;
+-  try{return await work(owner);}finally{try{await this.redis.eval(RELEASE,[this.key(date,'lock')],[owner]);}catch{console.error('[cc-sip] lock release failed');}}
+- }
++  constructor(private redis: Pick<Redis, "get" | "set" | "eval">) {}
++  static fromEnvironment() {
++    const url = process.env.UPSTASH_REDIS_REST_URL,
++      token = process.env.UPSTASH_REDIS_REST_TOKEN;
++    if (!url || !token) throw new SipUnavailable("SIP_STORAGE_UNCONFIGURED");
++    return new SipStore(
++      new Redis({
++        url,
++        token,
++        retry: false,
++        signal: () => AbortSignal.timeout(5000),
++      }),
++    );
++  }
++  private key(date: string, name: string) {
++    return `cc:sip:v1:${date}:${name}`;
++  }
++  private async read<T>(date: string, name: string): Promise<T | null> {
++    try {
++      return await this.redis.get<T>(this.key(date, name));
++    } catch {
++      throw new SipUnavailable("SIP_STORAGE_FAILED");
++    }
++  }
++  result(date: string) {
++    return this.read<SipSnapshot>(date, "result");
++  }
++  preparation(date: string) {
++    return this.read<Preparation>(date, "preparation");
++  }
++  symbol(date: string, symbol: string) {
++    return this.read<PreparedSymbol>(date, `symbol:${symbol}`);
++  }
++  private async write(
++    date: string,
++    name: string,
++    value: unknown,
++    owner: string,
++    immutable = false,
++  ) {
++    try {
++      const outcome = await this.redis.eval(
++        FENCED_SET,
++        [this.key(date, "lock"), this.key(date, name)],
++        [owner, JSON.stringify(value), immutable ? "nx" : "replace", TTL],
++      );
++      if (outcome === -1) throw new SipUnavailable("SIP_LOCK_LOST");
++    } catch (e) {
++      if (e instanceof SipUnavailable) throw e;
++      throw new SipUnavailable("SIP_STORAGE_FAILED");
++    }
++  }
++  saveSymbol(
++    date: string,
++    symbol: string,
++    value: PreparedSymbol,
++    owner: string,
++  ) {
++    return this.write(date, `symbol:${symbol}`, value, owner, true);
++  }
++  savePreparation(date: string, value: Preparation, owner: string) {
++    return this.write(date, "preparation", value, owner);
++  }
++  saveResult(date: string, value: SipSnapshot, owner: string) {
++    return this.write(date, "result", value, owner, true);
++  }
++  async withLock<T>(
++    date: string,
++    work: (owner: string) => Promise<T>,
++  ): Promise<T | null> {
++    const owner = randomUUID();
++    let acquired;
++    try {
++      acquired = await this.redis.set(this.key(date, "lock"), owner, {
++        nx: true,
++        ex: 330,
++      });
++    } catch {
++      throw new SipUnavailable("SIP_STORAGE_FAILED");
++    }
++    if (!acquired) return null;
++    try {
++      return await work(owner);
++    } finally {
++      try {
++        await this.redis.eval(RELEASE, [this.key(date, "lock")], [owner]);
++      } catch {
++        console.error("[cc-sip] lock release failed");
++      }
++    }
++  }
+ }
+diff --git a/tests/fixtures/sip/sip-v1-ready.json b/tests/fixtures/sip/sip-v1-ready.json
+new file mode 100644
+index 0000000..de3229a
+--- /dev/null
++++ b/tests/fixtures/sip/sip-v1-ready.json
+@@ -0,0 +1,31 @@
++{
++  "version": 1,
++  "status": "ready",
++  "session_date": "2026-10-06",
++  "generated_at": "2026-10-06T13:35:00.000Z",
++  "window_start": "2026-10-06T13:30:00.000Z",
++  "window_end": "2026-10-06T13:35:00.000Z",
++  "candidates": [
++    {
++      "symbol": "AMD",
++      "price": 10,
++      "rvol": 2,
++      "atr14": 1,
++      "avg_vol": 1000000
++    },
++    {
++      "symbol": "NVDA",
++      "price": 10,
++      "rvol": 2,
++      "atr14": 1,
++      "avg_vol": 1000000
++    }
++  ],
++  "coverage": {
++    "universe": 2,
++    "eligible": 2,
++    "observed": 2,
++    "excluded": 0
++  },
++  "exclusions": []
++}
+-- 
+2.52.0
+

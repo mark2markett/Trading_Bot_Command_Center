@@ -48,3 +48,25 @@ def test_readiness_requires_the_actual_windows_sessions_to_be_running():
     tasks[0]["State"] = "Ready"
     assert not m.scheduler_ready(tasks)
     assert not m.scheduler_ready([])
+
+
+def test_windows_harness_refuses_missing_native_configuration_by_default(monkeypatch):
+    from scripts import closed_loop, native_readiness
+
+    monkeypatch.setattr(closed_loop.sys, "platform", "win32")
+    monkeypatch.delenv("CC_VAR", raising=False)
+    monkeypatch.setenv("MODE", "paper")
+    requested = []
+
+    def missing(args):
+        requested.append(args)
+        return 1
+
+    monkeypatch.setattr(native_readiness, "main", missing)
+
+    def unexpected_launch(*args, **kwargs):
+        raise AssertionError("A failed native gate must not launch the sandbox")
+
+    monkeypatch.setattr(closed_loop.subprocess, "Popen", unexpected_launch)
+    assert closed_loop.main([]) == 1
+    assert requested == [["--configuration-only"]]

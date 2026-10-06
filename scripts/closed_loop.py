@@ -193,13 +193,10 @@ def run_worker(repo: Path, runtime: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sandbox-only", action="store_true", help="Explicitly skip native prerequisites for offline code checks")
     parser.add_argument("--require-ready", action="store_true", help="Require native live readiness before sandbox tests")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
-    if args.require_ready:
-        from scripts.native_readiness import main as native_readiness
-        if native_readiness([]):
-            return 1
     if not args.worker:
         print("Synthetic closed-loop checks do not certify deployment. Use --require-ready during 09:35–09:39 ET for native readiness.")
     try:
@@ -220,6 +217,11 @@ def main(argv: list[str] | None = None) -> int:
         # Validate even the temp-directory location before creating any directories.
         probe = Path(tempfile.gettempdir()) / "cc-closed-loop-location-check" / "var"
         sandbox_env(ROOT, probe)
+        if args.require_ready or (sys.platform == 'win32' and not args.sandbox_only):
+            from scripts.native_readiness import main as native_readiness
+            if native_readiness([] if args.require_ready else ['--configuration-only']):
+                print('Native prerequisites FAILED; sandbox success cannot override missing deployment configuration.')
+                return 1
         root = Path(tempfile.mkdtemp(prefix="cc-closed-loop-"))
         runtime = root / "var"
         env = sandbox_env(ROOT, runtime)

@@ -1,23 +1,23 @@
 diff --git a/docs/delivery/plans/R00-cc-sip-scanner.json b/docs/delivery/plans/R00-cc-sip-scanner.json
 new file mode 100644
-index 00000000..b870017a
+index 00000000..b7bd1b20
 --- /dev/null
 +++ b/docs/delivery/plans/R00-cc-sip-scanner.json
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,35 @@
 +{
 +  "version": 1,
 +  "stage": "implementation",
 +  "requirements": ["R00"],
-+  "owner_outcome": "Restore the existing Command Center paper SIP ORB strategy's missing scanner input using the platform's existing stock universe, shared Schwab connection and minute dispatcher. Owner requested this integration and directed the session to proceed. This is an internal data feed, with no platform product surface or order authority.",
-+  "rollback": "Set SIP_SCANNER_ENABLED=false to stop preparation/publication and refuse machine reads; revert this feature PR to remove its two endpoints and logical job. Preserve previously captured evidence. Command Center keeps managing exits when scanner input is unavailable; disabling the producer does not flatten positions.",
++  "owner_outcome": "Restore the existing Command Center paper SIP ORB strategy's missing scanner input using the platform's existing stock universe, shared Schwab connection and minute dispatcher. Owner requested this integration and directed the session to proceed. This is an internal data feed, with no platform product surface or order authority. Bounded supporting validation corrections preload the existing font subset to avoid the reproduced cold-build resolver failure and refuse unmocked absent-database sentinel requests immediately; no successful database response or additional egress permission is supplied.",
++  "rollback": "Set SIP_SCANNER_ENABLED=false to stop preparation/publication and refuse machine reads; revert this feature PR to remove its two endpoints and logical job. Preserve previously captured evidence. Command Center keeps managing exits when scanner input is unavailable; disabling the producer does not flatten positions. Disabling the scanner retains the supporting font preload and test-sentinel corrections. Full PR reversion also restores their prior configuration/DNS behavior; rerun build and test gates before releasing that broader rollback.",
 +  "criteria": [
 +    {
 +      "id": "R00-behavior",
-+      "expected": "Filter verified stock classifications from the existing universe; require price > $5, completed 20-session mean volume >= 1,000,000 and Wilder ATR(14) > $0.50. Rank by completed 09:30-09:34 volume divided by the same five-minute window over exactly 14 prior exchange sessions. Exclude missing history and reject malformed OHLC. Prepare before the open and publish an immutable current-session v1 snapshot only during the guarded Eastern publication window. Formula and threshold definitions: docs/runbooks/CC-SIP-SCANNER.md § Calculation contract, src/lib/sip/calculation.ts dailyEligibility/openingVolume/preparationFromEligibility/rankCandidates and src/lib/sip/service.ts publish. Dedicated machine auth and Redis owner-checked leases fail closed; pending, unavailable and valid empty results remain distinct. Malformed stored v1 snapshots are unavailable, never successful ready responses."
++      "expected": "Filter the eleven recognized FMP/Yahoo stock sectors from the existing universe, refusing Unknown/Unclassified/unrecognized labels; require price > $5, completed 20-session mean volume >= 1,000,000 and Wilder ATR(14) > $0.50. Rank by completed 09:30-09:34 volume divided by the same five-minute window over exactly 14 prior exchange sessions. Exclude missing history and reject malformed OHLC. Prepare before the open and publish an immutable current-session v1 snapshot only during the guarded Eastern publication window. Formula and threshold definitions: docs/runbooks/CC-SIP-SCANNER.md § Calculation contract, src/lib/sip/calculation.ts dailyEligibility/openingVolume/preparationFromEligibility/rankCandidates and src/lib/sip/service.ts publish. Dedicated machine auth and Redis owner-checked leases fail closed; pending, unavailable and valid empty results remain distinct. Malformed stored v1 snapshots are unavailable, never successful ready responses."
 +    },
 +    {
 +      "id": "R00-regression",
-+      "expected": "The job is registered in the existing minute dispatcher with exchange-calendar guards; its route execution ceiling matches the governed dispatcher timeout; physical Vercel scheduling and existing trading authority remain unchanged. Provider/storage errors and lease loss cannot publish fabricated or stale data. Production-boundary tests scrub the new secrets and refuse production HTTP access."
++      "expected": "The job is registered in the existing minute dispatcher with exchange-calendar guards; its route execution ceiling matches the governed dispatcher timeout; physical Vercel scheduling and existing trading authority remain unchanged. Provider/storage errors and lease loss cannot publish fabricated or stale data. Production-boundary tests scrub the new secrets and refuse production HTTP access. Enabled producer work refuses invalid dedicated-auth configuration before provider/storage requests. Runtime prerequisite metadata does not certify deployed OAuth/Redis health. The existing JetBrains Mono Latin preload is checked by the production build; AT00 proves unmocked sentinel GET/POST/PATCH fail immediately without permitting production egress."
 +    }
 +  ],
 +  "tests": [
@@ -28,28 +28,31 @@ index 00000000..b870017a
 +    {"runner": "vitest", "file": "src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts", "covers": ["R00-regression"]},
 +    {"runner": "vitest", "file": "src/lib/controlPlane/__tests__/jobRegistry.test.ts", "covers": ["R00-regression"]},
 +    {"runner": "vitest", "file": "src/lib/controlPlane/__tests__/dispatcher.test.ts", "covers": ["R00-regression"]},
-+    {"runner": "vitest", "file": "tests/acceptance/autotrader/AT00.test.ts", "covers": ["R00-regression"]}
++    {"runner": "vitest", "file": "tests/acceptance/autotrader/AT00.test.ts", "covers": ["R00-regression"]},
++    {"runner": "vitest", "file": "src/app/api/internal/cc/sip-scanner/__tests__/route.test.ts", "covers": ["R00-behavior", "R00-regression"]}
 +  ],
 +  "limitations": [
 +    "Fixtures and local tests do not establish live Schwab entitlements, historical window coverage, fleet-wide provider quota or deployed Redis health.",
 +    "The scanner's calendar covers 2026-2027; lookbacks outside that coverage fail closed. Four-worker pacing applies within this producer, not across all M2M applications.",
 +    "Separate GitHub current-head review/checks and owner merge are required. Vercel READY status, secure scanner configuration and a fresh authenticated 09:35-09:39 Eastern snapshot must be observed before native readiness is claimed.",
-+    "This plan changes no requirement criteria, GATES history, portfolio capital, trading strategy, execution mode or existing platform product scope. The native shared-paper-account repair is delivered separately."
++    "This plan changes no requirement criteria, GATES history, portfolio capital, trading strategy, execution mode or existing platform product scope. The native shared-paper-account repair is delivered separately.",
++    "Runtime prerequisite declarations and fixture successes are not live readiness. The shared rotated refresh token resides in existing database state; its OAuth health and current-session provider/Redis publication must be observed securely before native scanner readiness is claimed."
 +  ]
 +}
 diff --git a/docs/implementation-plan/CHANGELOG.md b/docs/implementation-plan/CHANGELOG.md
-index 4ceb7f05..bcabdb09 100644
+index 4ceb7f05..cbd72fed 100644
 --- a/docs/implementation-plan/CHANGELOG.md
 +++ b/docs/implementation-plan/CHANGELOG.md
-@@ -1,5 +1,17 @@
+@@ -1,5 +1,18 @@
  # M2M Plan v2 — Changelog
  
 +## 2026-10-06 ET — Restore the Command Center paper SIP ORB scanner input (PR #1260)
 +
 +- **Bounded integration:** `/api/cron/cc-sip-scanner` prepares the existing verified stock universe before the open and publishes a frozen opening-window RVOL snapshot through the existing minute dispatcher. The authenticated read-only machine endpoint is `/api/internal/cc/sip-scanner`. Physical Vercel scheduling and order authority are unchanged.
 +- **Durable contract:** date-scoped `cc:sip:v1:*` Redis state, owner-fenced leases and immutable seven-day snapshots distinguish pending, unavailable and valid empty results. Redis is required; no in-memory substitute. Historical malformed/incomplete window exclusions keep their specific codes. Lease contention remains visible as HTTP 202 busy/skipped and does not trigger a cron failure; storage/provider failures remain failures.
-+- **Second review corrections:** the runbook links canonical D-021 release and D-031 authorship decisions separately and cites the executable math contract. Daily eligibility is reused rather than recomputed; cron summaries distinguish `prepared` from `publish_ready`, and safe route/store logs carry run/session context.
++- **Second review corrections:** the runbook links canonical D-021 release and existing CLAUDE authorship/review rules separately and cites the executable math contract. Daily eligibility is reused rather than recomputed; cron summaries distinguish `prepared` from `publish_ready`, and safe route/store logs carry run/session context.
 +- **Final review concerns:** route execution and governed dispatcher ceilings both use 280 seconds; the historical Superpowers plan/spec explicitly defer to canonical governance, acceptance and operational sources. The machine read validates the stored v1 contract before returning 200, refusing malformed snapshots with bounded diagnostics; deduplicated universe counts avoid overstated classification exclusions.
++- **Latest review corrections:** recognized stock-sector allowlist rejects unverified labels; producer and machine endpoints share dedicated-auth configuration validation before data work. Runtime metadata declares OAuth/database/auth inputs and the runbook distinguishes inventory checks from live proof. Actual machine-route regressions cover wiring and storage outcomes. R00 now explicitly maps the supporting font and absent-database sentinel corrections and their rollback behavior. Canonical governance records are unchanged.
 +- **Cold-build correction:** the existing JetBrains Mono font now preloads its configured Latin subset to avoid Next 16.3.5's deferred-font internal-query resolver failure, reproduced on CI's Node 20.19.5. Family, weights, fallback and CSS variable are unchanged; the additional font preload is the bounded build-unblocking change. Required build/review checks are retained.
 +- **Release and acceptance:** `docs/runbooks/CC-SIP-SCANNER.md` describes dedicated machine authentication, native inputs and production deployment from the owner-merged `main` release. `docs/delivery/plans/R00-cc-sip-scanner.json` maps the bounded restoration to executable checks, limits and rollback. PR prose is informational; canonical governance and current-head checks retain authority.
 +- **Evidence boundary:** local regressions prove diagnostic distinctions; they do not prove production Redis, live provider history coverage, daily publication, native scheduling or operator acceptance. PR #1260's preview was reported READY; independent review requested these corrections and must rerun on the revised head.
@@ -61,27 +64,35 @@ index 4ceb7f05..bcabdb09 100644
  - **Owner-approved migration** `20261006164647_plan_interpretations_read_slot.sql`, applied to production and recorded here so the repository matches the database.
 diff --git a/docs/runbooks/CC-SIP-SCANNER.md b/docs/runbooks/CC-SIP-SCANNER.md
 new file mode 100644
-index 00000000..d9242781
+index 00000000..cb636aab
 --- /dev/null
 +++ b/docs/runbooks/CC-SIP-SCANNER.md
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,56 @@
 +# Command Center SIP scanner
 +
 +This dedicated scanner supplies the existing paper Stocks-in-Play ORB strategy. It uses Schwab stock market data; it does not place orders or change bot stops, sizing, or portfolio capital. The existing broad platform scanner and Stock Intelligence V2 are not substitutes for this contract.
 +
 +## Deployment inputs
 +
-+Production deployment uses the merged `main` commit/release artifact, after the feature PR's current-head independent review and required checks pass and the owner merges it under [DECISIONS.md § D-021](../implementation-plan/DECISIONS.md#d-021--decided-reconcile-the-plans-staged-promotion-text-with-the-branch-protocol-actually-in-force). [DECISIONS.md § D-031](../implementation-plan/DECISIONS.md#d-031--decided-permit-codex-desktop-authorship-with-independent-pr-review) covers Codex authorship and independent review; it grants no production deployment or trading authority. A feature-branch preview is build evidence, not a production release. Confirm the production deployment is READY for that merged commit. Leave `SIP_SCANNER_ENABLED` unset until prerequisites and an operating morning window are available. Enable with the exact value `true` before 09:00 Eastern on a trading day.
++Production deployment uses the merged `main` commit/release artifact, after the feature PR's current-head independent review and required checks pass and the owner merges it under [DECISIONS.md § D-021](../implementation-plan/DECISIONS.md#d-021--decided-reconcile-the-plans-staged-promotion-text-with-the-branch-protocol-actually-in-force). Authorship and independent review follow the existing [CLAUDE.md review rules](../../CLAUDE.md#codex-adversarial-review); this integration grants no deployment or trading authority. A feature-branch preview is build evidence, not a production release. Confirm the production deployment is READY for that merged commit. Leave `SIP_SCANNER_ENABLED` unset until prerequisites and an operating morning window are available. Enable with the exact value `true` before 09:00 Eastern on a trading day.
 +
-+Required existing platform inputs: working shared Schwab token state and its existing OAuth service; `CRON_SECRET`; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Redis is required, with no in-memory substitute. Configure a new `SIP_SCANNER_SECRET` of at least 32 random characters. It must differ from `CRON_SECRET`, `MONITOR_SECRET`, `DASHBOARD_PASSWORD`, and `SCHWAB_BROKER_SECRET`. Enter credentials securely in deployment settings, never in URLs or committed files. No database migration is required.
++Required existing platform inputs: working shared Schwab token state and its existing OAuth service (`SCHWAB_CLIENT_ID`, `SCHWAB_CLIENT_SECRET`); the existing Supabase connection (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) for rotated token state and cron telemetry; `CRON_SECRET`; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Redis is required, with no in-memory substitute. Configure a new `SIP_SCANNER_SECRET` of at least 32 random characters. It must differ from `CRON_SECRET`, `MONITOR_SECRET`, `DASHBOARD_PASSWORD`, and `SCHWAB_BROKER_SECRET`. Enter credentials securely in deployment settings, never in URLs or committed files. No database migration is required.
 +
 +Native bot inputs in `bots/sip_orb/.env.local`: `SCANNER_URL=https://www.mark2markets.com/api/internal/cc/sip-scanner`, `SCANNER_SECRET` matching the new dedicated platform secret, and the existing shared Schwab token-broker configuration. Keep `SIP_SYMBOLS` blank for scanner-only operation. Populating it explicitly opts into a fixed operator watchlist fallback; it is logged as such and is not a relative-volume scan. A valid empty scanner result never triggers that fallback.
++
++## Configuration and live readiness
++
++The policy's `runtimePrerequisites` lists the enabled flag, dedicated scanner secret, Schwab client credentials, Supabase and Redis inputs. These are descriptive route-observed inputs: unlike dispatcher `prerequisites`, they do not suppress dispatch and their presence is not proof of live health. Inventory/registry checks validate the declarations and wiring, not deployed credentials or provider access.
++
++Both machine reads and producer work check that the dedicated secret is at least 32 characters and differs from the reserved secrets. An enabled producer with invalid authentication configuration records `SIP_SCANNER_CONFIGURATION` as a failed run and makes no provider or Redis request. The machine endpoint refuses the same configuration with 503. `SCHWAB_REFRESH_TOKEN` is intentionally not required as an environment key: the existing OAuth service reads the rotated token from `scan_state.schwab_token_state` first and uses the environment token only for bootstrap.
++
++Before enabling, securely verify the existing OAuth/token-health operation and deployed Supabase/Redis connections. The morning operational gate is successful current-session preparation (inspect stored exclusions/failures and `cron_runs`), followed by an authenticated current-session publication and the native client's freshness/selection checks at 09:35–09:39 Eastern. A cached preparation or green registry check cannot substitute for the live publication: current quotes and opening bars are obtained before publication and provider/storage failures prevent it. Fixture endpoint and configuration-refusal regressions establish the fail-closed wiring; they do not certify those production inputs.
 +
 +## Daily operation and evidence
 +
 +One new logical job is dispatched by the existing minute control plane. It prepares at 09:00, 09:05, 09:10, 09:15, 09:20, 09:25 Eastern, and retries publication each minute from 09:35 through 09:39. Paired UTC expressions plus an Eastern guard handle daylight saving time. The shared exchange calendar currently enumerates 2026 and 2027 full closures; update it before later years. Early-close days still have a normal opening window. Physical `vercel.json` scheduling is unchanged.
 +
-+The stock universe is the actual configured `ALL_SYMBOLS` list filtered by verified sector classification; ETFs/funds and unknown classifications are excluded. Logs record the classification exclusion count. Price must exceed $5, completed 20-session average share volume must be at least 1 million, and Wilder ATR(14) must exceed $0.50. RVOL is the sum of exactly five completed 09:30–09:34 minute volumes divided by the mean of the same window over exactly 14 previous exchange sessions. These claims follow the [calculation contract](#calculation-contract) below. Missing historical windows exclude that symbol with a reason. Today’s incomplete window or a provider/auth/storage failure prevents publication and is retried. No missing volume is invented.
++The stock universe is the actual configured `ALL_SYMBOLS` list filtered by the recognized FMP/Yahoo stock-sector allowlist in `calculation.ts`; ETFs/funds, missing classifications and labels such as `Unknown` or `Unclassified` are excluded. The eleven supported stock sectors are Basic Materials, Communication Services, Consumer Cyclical, Consumer Defensive, Energy, Financial Services, Healthcare, Industrials, Real Estate, Technology and Utilities. New taxonomy labels require explicit review before admission. Logs record the classification exclusion count. Price must exceed $5, completed 20-session average share volume must be at least 1 million, and Wilder ATR(14) must exceed $0.50. RVOL is the sum of exactly five completed 09:30–09:34 minute volumes divided by the mean of the same window over exactly 14 previous exchange sessions. These claims follow the [calculation contract](#calculation-contract) below. Missing historical windows exclude that symbol with a reason. Today’s incomplete window or a provider/auth/storage failure prevents publication and is retried. No missing volume is invented.
 +
 +## Calculation contract
 +
@@ -107,6 +118,12 @@ index 00000000..d9242781
 +Portfolio equity is initialized and verified separately in Command Center. This scanner does not seed it or demonstrate that portfolio exposure/drawdown protection is fully initialized. Paper execution only; operator promotion remains separate.
 +
 +The scanner calendar fails closed outside its covered 2026–2027 years, including lookback windows that cross into an uncovered year. This avoids pretending an unlisted holiday is a trading session; extend the shared calendar and scanner guard together before using such a window.
++
++## Bounded supporting changes and rollback
++
++R00 includes two supporting corrections needed to validate this integration: `src/lib/fonts.ts` preloads the existing JetBrains Mono Latin subset after the cold Next.js resolver failure was reproduced; `tests/setup/productionBoundary.ts` immediately rejects the suite's absent-database sentinel instead of delegating it to DNS. The existing family, weights and CSS variable stay the same. The test change does not supply successful database responses or weaken production egress refusal; its GET/POST/PATCH negative regressions are in `tests/acceptance/autotrader/AT00.test.ts`. Both changes are explicitly covered by the R00 acceptance mapping, build/lint gates and changelog, and neither changes a trading signal or order authority.
++
++Operational rollback is `SIP_SCANNER_ENABLED=false`; this stops producer work and refuses machine reads while retaining the supporting build/test corrections and native exit management. A full PR revert also restores the prior font preload and sentinel/DNS behavior; rerun the production build and test gates before releasing that broader rollback. Preserve scanner evidence for diagnosis.
 diff --git a/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
 new file mode 100644
 index 00000000..90bbc4a0
@@ -187,10 +204,10 @@ index 00000000..166397c3
 +TDD covers ratio/ATR/filter boundaries, completed-window coverage, holiday/DST, unknown instruments, finite numbers, auth separation, read-only endpoint paths, safe errors, Redis failure/locking/idempotence, job windows and read readiness. Command Center covers delayed readiness, retries/deadline, valid empty vs malformed, date/freshness and actual SIP paper signal/risk/fill/EOD exit. Platform focused tests, typecheck/build where available, cron/registry guards and Command Center full tests/harness run before delivery. Publish review branches/draft PR if supported; no merge or production deployment without approval. Native Windows installation remains a separate verified transfer step. Portfolio capital configuration remains pending and unchanged.
 diff --git a/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
 new file mode 100644
-index 00000000..198a6fb7
+index 00000000..6a06b150
 --- /dev/null
 +++ b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,139 @@
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 +import type { Redis } from "@upstash/redis";
 +import { SipStore } from "@/lib/sip/store";
@@ -228,6 +245,7 @@ index 00000000..198a6fb7
 +    vi.setSystemTime(sessionTime("2026-10-06", 545));
 +    vi.stubEnv("CRON_SECRET", "fixture-cron-secret");
 +    vi.stubEnv("SIP_SCANNER_ENABLED", "true");
++    vi.stubEnv("SIP_SCANNER_SECRET", "fixture-scanner-secret-32-characters");
 +  });
 +  afterEach(() => {
 +    vi.restoreAllMocks();
@@ -294,6 +312,20 @@ index 00000000..198a6fb7
 +    expect(response.status).toBe(401);
 +    expect(telemetry.start).not.toHaveBeenCalled();
 +  });
++  it.each(["", "short", "fixture-monitor-secret-32-characters"])("refuses invalid scanner configuration %s before storage/provider work", async (secret) => {
++    vi.stubEnv("SIP_SCANNER_SECRET", secret);
++    vi.stubEnv("MONITOR_SECRET", secret);
++    const store = vi.spyOn(SipStore, "fromEnvironment");
++    const provider = vi.spyOn(SchwabSipData.prototype, "dailyBars");
++    const response = await GET(request());
++    expect(response.status).toBe(503);
++    expect(await response.json()).toEqual({ error: "SIP_SCANNER_CONFIGURATION" });
++    expect(store).not.toHaveBeenCalled();
++    expect(provider).not.toHaveBeenCalled();
++    expect(telemetry.finish).toHaveBeenCalledWith(17, "failure", {
++      phase: "prepare", error: "SIP_SCANNER_CONFIGURATION",
++    });
++  });
 +
 +  it.each([545, 575])("distinguishes preparation from published readiness at minute %i", async (minute) => {
 +    vi.setSystemTime(sessionTime("2026-10-06", minute));
@@ -317,10 +349,10 @@ index 00000000..198a6fb7
 +});
 diff --git a/src/app/api/cron/cc-sip-scanner/route.ts b/src/app/api/cron/cc-sip-scanner/route.ts
 new file mode 100644
-index 00000000..e7598c5a
+index 00000000..b463c830
 --- /dev/null
 +++ b/src/app/api/cron/cc-sip-scanner/route.ts
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,68 @@
 +import { ALL_SYMBOLS } from "@/config/watchlist";
 +import { SYMBOL_SECTOR } from "@/config/universeSectors";
 +import { startCronRun, finishCronRun } from "@/lib/cronRunLog";
@@ -329,7 +361,7 @@ index 00000000..e7598c5a
 +import { SchwabSipData } from "@/lib/sip/schwab";
 +import { SipStore } from "@/lib/sip/store";
 +import { SipExcluded, SipUnavailable } from "@/lib/sip/contract";
-+import { NO_STORE, safeEqual } from "@/lib/sip/http";
++import { authEnvironment, NO_STORE, safeEqual, scannerAuthConfigured } from "@/lib/sip/http";
 +export const dynamic = "force-dynamic";
 +// Keep this static route ceiling aligned with controlPlaneJobPolicies.json.
 +export const maxDuration = 280;
@@ -349,6 +381,8 @@ index 00000000..e7598c5a
 +    return Response.json({ status: "skipped" }, { headers: NO_STORE });
 +  const runId = await startCronRun("cc-sip-scanner", { phase });
 +  try {
++    if (!scannerAuthConfigured(authEnvironment()))
++      throw new SipUnavailable("SIP_SCANNER_CONFIGURATION");
 +    const universe = stockUniverse(ALL_SYMBOLS, SYMBOL_SECTOR);
 +    const scanner = new SipScanner(
 +      new SchwabSipData(),
@@ -387,6 +421,70 @@ index 00000000..e7598c5a
 +    return Response.json({ error: code }, { status: 503, headers: NO_STORE });
 +  }
 +}
+diff --git a/src/app/api/internal/cc/sip-scanner/__tests__/route.test.ts b/src/app/api/internal/cc/sip-scanner/__tests__/route.test.ts
+new file mode 100644
+index 00000000..44feedb4
+--- /dev/null
++++ b/src/app/api/internal/cc/sip-scanner/__tests__/route.test.ts
+@@ -0,0 +1,58 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import type { Redis } from "@upstash/redis";
++import snapshot from "../../../../../../../tests/fixtures/sip/sip-v1-ready.json";
++import { SipStore } from "@/lib/sip/store";
++import { SchwabSipData } from "@/lib/sip/schwab";
++import { GET } from "../route";
++
++const secret = "fixture-scanner-secret-32-characters";
++const request = (token = secret) => new Request("https://test.invalid/api/internal/cc/sip-scanner", {
++  headers: { Authorization: `Bearer ${token}` },
++});
++
++describe("actual machine read route", () => {
++  beforeEach(() => {
++    vi.useFakeTimers();
++    vi.setSystemTime(new Date(snapshot.generated_at));
++    vi.stubEnv("SIP_SCANNER_ENABLED", "true");
++    vi.stubEnv("SIP_SCANNER_SECRET", secret);
++  });
++  afterEach(() => {
++    vi.restoreAllMocks();
++    vi.unstubAllEnvs();
++    vi.useRealTimers();
++  });
++
++  it.each(["disabled", "unauthorized", "misconfigured"])("refuses %s before storage or provider access", async (caseName) => {
++    if (caseName === "disabled") vi.stubEnv("SIP_SCANNER_ENABLED", "false");
++    if (caseName === "misconfigured") vi.stubEnv("SIP_SCANNER_SECRET", "short");
++    const store = vi.spyOn(SipStore, "fromEnvironment");
++    const provider = vi.spyOn(SchwabSipData.prototype, "dailyBars");
++    const response = await GET(request(caseName === "unauthorized" ? "wrong-token" : secret));
++    expect(response.status).toBe(caseName === "disabled" ? 404 : caseName === "unauthorized" ? 401 : 503);
++    expect(response.headers.get("Cache-Control")).toContain("no-store");
++    expect(store).not.toHaveBeenCalled();
++    expect(provider).not.toHaveBeenCalled();
++  });
++
++  it.each([null, snapshot, { version: 2 }, "storage-failed"])("wires current-session storage outcome %# through the endpoint", async (value) => {
++    const redis = {
++      get: vi.fn<Redis["get"]>(), set: vi.fn<Redis["set"]>(), eval: vi.fn<Redis["eval"]>(),
++    };
++    if (value === "storage-failed") redis.get.mockRejectedValue(new Error("fixture storage outage"));
++    else redis.get.mockResolvedValue(value);
++    const store = vi.spyOn(SipStore, "fromEnvironment").mockReturnValue(new SipStore(redis));
++    const provider = vi.spyOn(SchwabSipData.prototype, "dailyBars");
++    vi.spyOn(console, "error").mockImplementation(() => {});
++    const response = await GET(request());
++    expect(response.status).toBe(value === null ? 202 : value === snapshot ? 200 : 503);
++    expect(response.headers.get("Cache-Control")).toContain("no-store");
++    expect(store).toHaveBeenCalledOnce();
++    expect(redis.get).toHaveBeenCalledWith("cc:sip:v1:2026-10-06:result");
++    expect(redis.set).not.toHaveBeenCalled();
++    expect(redis.eval).not.toHaveBeenCalled();
++    expect(provider).not.toHaveBeenCalled();
++    if (value === snapshot) expect(await response.json()).toEqual(snapshot);
++    else if (value !== null) expect(await response.json()).toEqual({ error: "scanner_unavailable" });
++  });
++});
 diff --git a/src/app/api/internal/cc/sip-scanner/route.ts b/src/app/api/internal/cc/sip-scanner/route.ts
 new file mode 100644
 index 00000000..80586e17
@@ -406,7 +504,7 @@ index 00000000..80586e17
 +  );
 +}
 diff --git a/src/config/controlPlaneJobPolicies.json b/src/config/controlPlaneJobPolicies.json
-index 0e932a30..4d1fcb2b 100644
+index 0e932a30..f66ac138 100644
 --- a/src/config/controlPlaneJobPolicies.json
 +++ b/src/config/controlPlaneJobPolicies.json
 @@ -1,6 +1,6 @@
@@ -417,7 +515,7 @@ index 0e932a30..4d1fcb2b 100644
      "downgradeProcedure": "docs/runbooks/CONTROL-PLANE-INVENTORY-GOVERNANCE.md"
    },
    "jobs": [
-@@ -1378,6 +1378,26 @@
+@@ -1378,6 +1378,31 @@
        "prerequisites": [
          "CRON_SECRET"
        ]
@@ -438,6 +536,11 @@ index 0e932a30..4d1fcb2b 100644
 +      ],
 +      "runtimePrerequisites": [
 +        "SIP_SCANNER_ENABLED=true",
++        "SIP_SCANNER_SECRET",
++        "SCHWAB_CLIENT_ID",
++        "SCHWAB_CLIENT_SECRET",
++        "SUPABASE_URL",
++        "SUPABASE_SERVICE_ROLE_KEY",
 +        "UPSTASH_REDIS_REST_URL",
 +        "UPSTASH_REDIS_REST_TOKEN"
 +      ]
@@ -471,6 +574,25 @@ index 3602a231..e5ab5534 100644
      }
    ]
  }
+diff --git a/src/lib/controlPlane/__tests__/jobRegistry.test.ts b/src/lib/controlPlane/__tests__/jobRegistry.test.ts
+index ece82e6f..2b77e4f4 100644
+--- a/src/lib/controlPlane/__tests__/jobRegistry.test.ts
++++ b/src/lib/controlPlane/__tests__/jobRegistry.test.ts
+@@ -68,6 +68,14 @@ describe('control-plane job registry', () => {
+     expect(due.map(job => job.id)).toContain('pin-forecast-outcomes');
+     expect(due.every(job => job.dispatchMode === 'scheduled')).toBe(true);
+   });
++  it('declares SIP machine-auth and Schwab OAuth inputs without requiring a bootstrap refresh token', () => {
++    const job = getJobRegistry().find(item => item.id === 'cc-sip-scanner');
++    expect(job?.runtimePrerequisites).toEqual(expect.arrayContaining([
++      'SIP_SCANNER_ENABLED=true', 'SIP_SCANNER_SECRET', 'SCHWAB_CLIENT_ID', 'SCHWAB_CLIENT_SECRET',
++      'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
++    ]));
++    expect(job?.runtimePrerequisites).not.toContain('SCHWAB_REFRESH_TOKEN');
++  });
+ 
+   it('requires declared boolean gates to equal true without exposing actual values', () => {
+     const job = { prerequisites: ['PRESENT_KEY', 'ENABLED_KEY=true', 'DISABLED_KEY=true', 'MISSING_KEY'] };
 diff --git a/src/lib/fonts.ts b/src/lib/fonts.ts
 index f6bc951c..1f5988ac 100644
 --- a/src/lib/fonts.ts
@@ -489,10 +611,10 @@ index f6bc951c..1f5988ac 100644
  
 diff --git a/src/lib/sip/__tests__/calculation.test.ts b/src/lib/sip/__tests__/calculation.test.ts
 new file mode 100644
-index 00000000..f0dd5e0d
+index 00000000..3d1d9ff0
 --- /dev/null
 +++ b/src/lib/sip/__tests__/calculation.test.ts
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,205 @@
 +import { describe, expect, it } from "vitest";
 +import { clock, previousSessions, sessionTime } from "../calendar";
 +import {
@@ -648,6 +770,17 @@ index 00000000..f0dd5e0d
 +      }),
 +    ).toEqual(["NVDA"]);
 +  });
++  it.each(["Unknown", "Unclassified", "unknown", "ETF/Fund", "", "Invented Sector"])(
++    "refuses unverified classification %s", (sector) => {
++      expect(stockUniverse(["TEST"], { TEST: sector })).toEqual([]);
++    },
++  );
++  it.each(["Basic Materials", "Communication Services", "Consumer Cyclical", "Consumer Defensive",
++    "Energy", "Financial Services", "Healthcare", "Industrials", "Real Estate", "Technology", "Utilities"])(
++    "accepts the recognized stock sector %s", (sector) => {
++      expect(stockUniverse(["TEST"], { TEST: sector })).toEqual(["TEST"]);
++    },
++  );
 +});
 +describe("Eastern exchange calendar", () => {
 +  it("skips the July 3 exchange closure and weekend", () =>
@@ -1110,10 +1243,10 @@ index 00000000..29833515
 +});
 diff --git a/src/lib/sip/calculation.ts b/src/lib/sip/calculation.ts
 new file mode 100644
-index 00000000..ac3c37f5
+index 00000000..8d6d1fcc
 --- /dev/null
 +++ b/src/lib/sip/calculation.ts
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,123 @@
 +import { clock, previousSessions, sessionTime } from "./calendar";
 +import {
 +  SipExcluded,
@@ -1133,12 +1266,18 @@ index 00000000..ac3c37f5
 +    bar.v >= 0
 +  );
 +}
++// Recognized stock sectors in config/universeSectors.ts (FMP/Yahoo taxonomy).
++// A new/unknown label must be reviewed before it can admit scanner symbols.
++const STOCK_SECTORS = new Set([
++  "Basic Materials", "Communication Services", "Consumer Cyclical", "Consumer Defensive",
++  "Energy", "Financial Services", "Healthcare", "Industrials", "Real Estate", "Technology", "Utilities",
++]);
 +export function stockUniverse(
 +  symbols: string[],
 +  sectors: Record<string, string>,
 +): string[] {
 +  return [...new Set(symbols)]
-+    .filter((s) => Boolean(sectors[s]) && sectors[s] !== "ETF/Fund")
++    .filter((s) => STOCK_SECTORS.has(sectors[s]))
 +    .sort();
 +}
 +export function dailyEligibility(
@@ -1350,7 +1489,7 @@ index 00000000..588624fa
 +}
 diff --git a/src/lib/sip/http.ts b/src/lib/sip/http.ts
 new file mode 100644
-index 00000000..f64c2742
+index 00000000..7a3c784c
 --- /dev/null
 +++ b/src/lib/sip/http.ts
 @@ -0,0 +1,69 @@
@@ -1385,6 +1524,10 @@ index 00000000..f64c2742
 +    },
 +  };
 +}
++export function scannerAuthConfigured(env: SipAuthEnv): boolean {
++  return Boolean(env.secret && env.secret.length >= 32 &&
++    !Object.values(env.reserved).some((v) => safeEqual(v ?? null, env.secret)));
++}
 +export async function machineResponse(
 +  req: Request,
 +  env: SipAuthEnv,
@@ -1397,11 +1540,7 @@ index 00000000..f64c2742
 +    headers: Record<string, string> = {},
 +  ) => Response.json(body, { status, headers: { ...NO_STORE, ...headers } });
 +  if (env.enabled !== "true") return json({ error: "not_found" }, 404);
-+  if (
-+    !env.secret ||
-+    env.secret.length < 32 ||
-+    Object.values(env.reserved).some((v) => safeEqual(v ?? null, env.secret))
-+  )
++  if (!scannerAuthConfigured(env))
 +    return json({ error: "scanner_configuration" }, 503);
 +  if (!safeEqual(req.headers.get("authorization"), `Bearer ${env.secret}`))
 +    return json({ error: "unauthorized" }, 401);

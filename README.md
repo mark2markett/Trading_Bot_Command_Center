@@ -1,5 +1,9 @@
 # Current Command Center delivery
 
+## October 7 server import repair
+
+The 10:05-10:07 Eastern native snapshot shows an open NR7 paper SPY position and unavailable paper valuation: the server cannot import the quote feed from its scheduled repository-root launch. Commit 54390e0 fixes that server startup path and adds a regression that failed before the repair and passed afterward. All 236 Python tests pass. APPLY-SERVER-IMPORT-FIX.ps1 installs only the two-file server repair and restarts only CC server while bot sessions continue. Actual Windows/provider recovery still requires the native helper output. SIP ORB remains unconfigured. See SERVER-IMPORT-FIX.md; the earlier runtime-readiness statement below predates today's first open-position failure.
+
 ## Runtime repair
 
 The source repair is db9b507 on fix/runtime-log-review-20261006. The operator installed it on native feat/options-m7, passed all 235 Python tests and initialized one shared $100,000 paper account. The server restarted successfully. The latest native configuration-only check passes server/riskd, all five paper bots, controls, the shared account and all five feed configurations; scanner URL/secret configuration fails and remains unresolved. Scheduled starts and live morning readiness are not certified. RUNTIME-FIXES.md documents that installation. Older separate installers are retained as historical payloads and are not needed for this scanner review update.

@@ -1,6 +1,6 @@
 diff --git a/docs/delivery/plans/R00-cc-sip-scanner.json b/docs/delivery/plans/R00-cc-sip-scanner.json
 new file mode 100644
-index 00000000..c7c3f9f2
+index 00000000..d65ee92e
 --- /dev/null
 +++ b/docs/delivery/plans/R00-cc-sip-scanner.json
 @@ -0,0 +1,35 @@
@@ -13,7 +13,7 @@ index 00000000..c7c3f9f2
 +  "criteria": [
 +    {
 +      "id": "R00-behavior",
-+      "expected": "Filter the eleven recognized FMP/Yahoo stock sectors from the existing universe, refusing Unknown/Unclassified/unrecognized labels; require price > $5, completed 20-session mean volume >= 1,000,000 and Wilder ATR(14) > $0.50. Rank by completed 09:30-09:34 volume divided by the same five-minute window over exactly 14 prior exchange sessions. Exclude missing history and reject malformed OHLC. Prepare before the open and publish an immutable current-session v1 snapshot only during the guarded Eastern publication window. Formula and threshold definitions: docs/runbooks/CC-SIP-SCANNER.md § Calculation contract, src/lib/sip/calculation.ts dailyEligibility/openingVolume/preparationFromEligibility/rankCandidates and src/lib/sip/service.ts publish. Dedicated machine auth and Redis owner-checked leases fail closed; pending, unavailable and valid empty results remain distinct. Malformed stored v1 snapshots are unavailable, never successful ready responses."
++      "expected": "Filter the eleven recognized FMP/Yahoo stock sectors from the existing universe, refusing Unknown/Unclassified/unrecognized labels; require price > $5, completed 20-session mean volume >= 1,000,000 and Wilder ATR(14) > $0.50. Rank by completed 09:30-09:34 volume divided by the same five-minute window over exactly 14 prior exchange sessions. Exclude missing history and reject malformed OHLC. Prepare before the open and publish an immutable current-session v1 snapshot only during the guarded Eastern publication window. Formula and threshold definitions: docs/runbooks/CC-SIP-SCANNER.md § Calculation contract, src/lib/sip/calculation.ts dailyEligibility/openingVolume/preparationFromEligibility/rankCandidates and src/lib/sip/service.ts publish. Dedicated machine auth and Redis owner-checked leases fail closed; pending, unavailable and valid empty results remain distinct. Malformed stored v1 snapshots are unavailable on both cron publication and machine reads, never successful ready responses or publish_ready telemetry; invalid immutable data is retained rather than overwritten or refreshed through provider work."
 +    },
 +    {
 +      "id": "R00-regression",
@@ -40,36 +40,33 @@ index 00000000..c7c3f9f2
 +  ]
 +}
 diff --git a/docs/implementation-plan/CHANGELOG.md b/docs/implementation-plan/CHANGELOG.md
-index 4ceb7f05..dc3cdf37 100644
+index 04bb9a92..c4e4d2a5 100644
 --- a/docs/implementation-plan/CHANGELOG.md
 +++ b/docs/implementation-plan/CHANGELOG.md
-@@ -1,5 +1,23 @@
+@@ -1,5 +1,20 @@
  # M2M Plan v2 — Changelog
  
-+## 2026-10-07 ET — Bound Command Center scanner telemetry failures (PR #1260)
-+
-+- Cron bootstrap and completion rejections return explicit no-store scanner 503 responses. Failure-logging rejection preserves the primary error and emits a bounded telemetry diagnostic. Null run IDs retain the existing terminal-row fallback with explicit scanner attribution.
-+- Historical design notes and the R00 outcome use neutral scope descriptions. Canonical release/authority sources and gate criteria are unchanged; deployment and live readiness remain separate from implementation evidence.
-+
-+## 2026-10-06 ET — Restore the Command Center paper SIP ORB scanner input (PR #1260)
++## 2026-10-06–07 ET — Restore the Command Center paper SIP ORB scanner input (PR #1260)
 +
 +- **Bounded integration:** `/api/cron/cc-sip-scanner` prepares the existing verified stock universe before the open and publishes a frozen opening-window RVOL snapshot through the existing minute dispatcher. The authenticated read-only machine endpoint is `/api/internal/cc/sip-scanner`. Physical Vercel scheduling and order authority are unchanged.
 +- **Durable contract:** date-scoped `cc:sip:v1:*` Redis state, owner-fenced leases and immutable seven-day snapshots distinguish pending, unavailable and valid empty results. Redis is required; no in-memory substitute. Historical malformed/incomplete window exclusions keep their specific codes. Lease contention remains visible as HTTP 202 busy/skipped and does not trigger a cron failure; storage/provider failures remain failures.
 +- **Second review corrections:** the runbook links canonical D-021 release and existing CLAUDE authorship/review rules separately and cites the executable math contract. Daily eligibility is reused rather than recomputed; cron summaries distinguish `prepared` from `publish_ready`, and safe route/store logs carry run/session context.
 +- **Final review concerns:** route execution and governed dispatcher ceilings both use 280 seconds; the historical Superpowers plan/spec explicitly defer to canonical governance, acceptance and operational sources. The machine read validates the stored v1 contract before returning 200, refusing malformed snapshots with bounded diagnostics; deduplicated universe counts avoid overstated classification exclusions.
 +- **Latest review corrections:** recognized stock-sector allowlist rejects unverified labels; producer and machine endpoints share dedicated-auth configuration validation before data work. Runtime metadata declares OAuth/database/auth inputs and the runbook distinguishes inventory checks from live proof. Actual machine-route regressions cover wiring and storage outcomes. R00 now explicitly maps the supporting font and absent-database sentinel corrections and their rollback behavior. Canonical governance records are unchanged.
++- **Cached publication validation:** cron publication reuses an existing snapshot only after the same v1 validation as machine reads. Invalid stored results fail with `SIP_SNAPSHOT_INVALID`, remain preserved for diagnosis and never become `publish_ready` telemetry or trigger replacement provider work.
++- **Telemetry boundary:** bootstrap and completion rejections return explicit no-store scanner 503 responses. Failure-logging rejection preserves the primary error; null run IDs retain terminal fallback with scanner attribution.
++- **Historical documentation:** the original design/work outline is archival narrative with explicit status metadata and links to canonical sources. It contains no build tasks or release authority; the R00 outcome uses neutral scope descriptions.
 +- **Cold-build correction:** the existing JetBrains Mono font now preloads its configured Latin subset to avoid Next 16.3.5's deferred-font internal-query resolver failure, reproduced on CI's Node 20.19.5. Family, weights, fallback and CSS variable are unchanged; the additional font preload is the bounded build-unblocking change. Required build/review checks are retained.
 +- **Release and acceptance:** `docs/runbooks/CC-SIP-SCANNER.md` describes dedicated machine authentication, native inputs and production deployment from the owner-merged `main` release. `docs/delivery/plans/R00-cc-sip-scanner.json` maps the bounded restoration to executable checks, limits and rollback. PR prose is informational; canonical governance and current-head checks retain authority.
 +- **Evidence boundary:** local regressions prove diagnostic distinctions; they do not prove production Redis, live provider history coverage, daily publication, native scheduling or operator acceptance.
 +- **No gate-row closure or authority change:** GATES history and requirement criteria are unchanged. No migration, portfolio capital, trading mode, strategy or order change is introduced. The native shared paper-account repair was delivered separately.
 +
-+
- ## 2026-10-06 ET — DAY-READS-1 storage: `plan_interpretations.read_slot`
+ ## 2026-10-06 ET — DAY-READS-1 built: the 09:00 / 11:00 / 13:00 / 15:00 ET expert reads (PR #1262)
  
- - **Owner-approved migration** `20261006164647_plan_interpretations_read_slot.sql`, applied to production and recorded here so the repository matches the database.
+ - **Job:** `/api/cron/plan-day-read`, schedule `0,20 13-20 * * 1-5` UTC with an ET guard (`dayReadSlotAt`, 40-minute window; the :20 run retries a failed :00 run). It runs on session days only, once per slot (ok rows are unique per session, slot, prompt version and hash).
 diff --git a/docs/runbooks/CC-SIP-SCANNER.md b/docs/runbooks/CC-SIP-SCANNER.md
 new file mode 100644
-index 00000000..e09d718d
+index 00000000..08e8a638
 --- /dev/null
 +++ b/docs/runbooks/CC-SIP-SCANNER.md
 @@ -0,0 +1,56 @@
@@ -110,7 +107,7 @@ index 00000000..e09d718d
 +
 +## Runtime state
 +
-+Preparation is cached per symbol and resumes after failures. Current completed opening volumes are also cached for retry; quotes are obtained afresh before publication and must be current. Four workers share pacing of at most about 100 data requests/minute within this scanner; other platform/fleet requests share the provider’s overall limit, so 429 remains a retryable outage. Work has a 240-second budget and a 330-second ownership lease. The authoritative dispatcher policy is `src/config/controlPlaneJobPolicies.json` (`cc-sip-scanner.timeoutMs=280000`); the cron route has the matching static `maxDuration=280` seconds, pinned by its regression test. The work budget leaves room for completion and lease cleanup before that execution ceiling. Redis writes atomically verify the lease owner. A session snapshot is immutable, retained seven days with its coverage and exclusions. A ready result can legitimately contain zero candidates.
++Preparation is cached per symbol and resumes after failures. Current completed opening volumes are also cached for retry; quotes are obtained afresh before publication and must be current. Four workers share pacing of at most about 100 data requests/minute within this scanner; other platform/fleet requests share the provider’s overall limit, so 429 remains a retryable outage. Work has a 240-second budget and a 330-second ownership lease. The authoritative dispatcher policy is `src/config/controlPlaneJobPolicies.json` (`cc-sip-scanner.timeoutMs=280000`); the cron route has the matching static `maxDuration=280` seconds, pinned by its regression test. The work budget leaves room for completion and lease cleanup before that execution ceiling. Redis writes atomically verify the lease owner. A session snapshot is immutable, retained seven days with its coverage and exclusions. Before reusing a stored result, cron publication applies the same v1 validator as machine reads. Invalid data fails with `SIP_SNAPSHOT_INVALID`; it remains preserved for diagnosis, does not produce `publish_ready`, and triggers no replacement provider work. A ready result can legitimately contain zero candidates.
 +
 +`cron_runs` and safe `[cc-sip]` logs distinguish `prepared` from `publish_ready`, with `pending` for incomplete preparation and `busy`/skipped for lease contention. Route logs include the cron run ID, phase and failure code; store cleanup logs include the session date. Unexpected cron telemetry bootstrap/completion rejections return bounded no-store 503 responses, and failure-logging rejection preserves the primary error. The existing helper may return a null run ID for best-effort recovery; terminal fallback rows identify `cc-sip-scanner` explicitly. Console diagnostics do not imply that unavailable database telemetry was persisted. Redis keys use `cc:sip:v1:YYYY-MM-DD:*`; inspect `preparation` for exclusions/failures and `result` for the frozen published snapshot. Native decisions record `SCANNER`, `SCANNER_PENDING`, `SCANNER_ERROR`, `SCANNER_FALLBACK`, or `SCANNER_UNAVAILABLE`; per-bot JSONL records heartbeat health. The native client validates version, date, exact window, coverage, finite rows, duplicate symbols, and a maximum 300-second age. It does not follow redirects.
 +
@@ -131,88 +128,54 @@ index 00000000..e09d718d
 +Operational rollback is `SIP_SCANNER_ENABLED=false`; this stops producer work and refuses machine reads while retaining the supporting build/test corrections and native exit management. A full PR revert also restores the prior font preload and sentinel/DNS behavior; rerun the production build and test gates before releasing that broader rollback. Preserve scanner evidence for diagnosis.
 diff --git a/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
 new file mode 100644
-index 00000000..4ab402ac
+index 00000000..a9aee6b9
 --- /dev/null
 +++ b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
-@@ -0,0 +1,33 @@
-+# SIP scanner implementation plan
+@@ -0,0 +1,16 @@
++---
++status: archival
++recorded_on: 2026-10-06
++---
 +
-+> **Non-canonical historical notes.** This file records the original implementation discussion; it does not grant authority, establish release readiness, or replace current requirements. Canonical release and authorship rules are in [CLAUDE.md](../../../CLAUDE.md) and [DECISIONS.md](../../implementation-plan/DECISIONS.md). Current acceptance mappings are in [R00](../../delivery/plans/R00-cc-sip-scanner.json), the implemented contract and operations are in the [runbook](../../runbooks/CC-SIP-SCANNER.md), and delivered changes are recorded in the [CHANGELOG](../../implementation-plan/CHANGELOG.md). Historical prerequisites and proposed filenames below may have changed.
++# Historical SIP scanner implementation outline
 +
-+Spec: docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md. Historical execution notes for native integration. Platform base 1e32fd9, Command Center base 2f7bef3. Constraints: Schwab stock data, Redis durability, authenticated/fresh result, unchanged trading/risk capital, isolated feature branches, no production deployment/merge.
++These are archival notes about the October 6 design discussion. They contain no implementation tasks or release instructions. Current release and authorship rules are in [CLAUDE.md](../../../CLAUDE.md) and [DECISIONS.md](../../implementation-plan/DECISIONS.md). The current acceptance mapping is [R00](../../delivery/plans/R00-cc-sip-scanner.json), the executable contract and operations are in the [runbook](../../runbooks/CC-SIP-SCANNER.md), and delivered changes are recorded in the [CHANGELOG](../../implementation-plan/CHANGELOG.md).
 +
-+## Task 1: Pure contract and calculation
++The original outline used platform base `1e32fd9` and Command Center base `2f7bef3`. It described an internal paper-strategy data feed based on shared Schwab data and Redis, with isolated feature work and separate native installation. Those base revisions and proposed filenames are historical context, not current prerequisites.
 +
-+Create src/lib/sip/contract.ts, calendar.ts, calculation.ts; tests in src/lib/sip/__tests__/calculation.test.ts. Interfaces: SipBar {t:number,o:number,h:number,l:number,c:number,v:number}; PreparationRow {symbol,atr14,avg_vol,opening_mean}; SipCandidate {symbol,price,rvol,atr14,avg_vol}; SipSnapshot v1 with date/window/coverage. Export previousSessions(date,count), clock(now), preparationFromBars(symbol,date,daily,minute), rankCandidates(rows), stockUniverse(). RED: precise 2x opening ratio, exclusion at thresholds, partial/missing/duplicate/nonfinite bars, 14 prior sessions, holiday/DST and ETF exclusion. Implement only after RED, run focused Vitest, commit.
++The work was grouped into calculation/calendar contracts, read-only provider and durable storage adapters, service/route/dispatcher integration, and the native Command Center consumer. The calculation discussion covered exact opening-window ratios, liquidity and ATR filters, deterministic ranking, stock classification and missing-data refusal. Storage discussion covered partial progress, immutable session results and owner-checked leases.
 +
-+## Task 2: Read-only provider and durable storage
++The native consumer discussion covered authenticated reads, freshness checks, delayed publication, selection deadlines and continued management of existing positions. Verification discussion included negative fixtures, the actual paper signal/risk/fill/exit loop, endpoint and dispatcher checks, and separate native evidence. These topics describe the original work breakdown; executable tests and the current acceptance mapping carry the implemented coverage.
 +
-+Create src/lib/sip/schwab.ts, store.ts and tests. Provider exposes dailyBars, historyMinutes, openingMinutes, quotes; dependency-injected fetch and existing getAccessToken/invalidate pair. Redis store exposes prepared rows, prepare summary, immutable result and lock(callback) with unique lease ownership. RED: endpoint whitelist, one 401 retry, timeout/status-safe failure, Redis required, date keys, partial progress, SET NX and compare-delete lock. Implement, run focused tests, commit.
-+
-+## Task 3: Service, routes, scheduler
-+
-+Create src/lib/sip/service.ts, auth.ts, cron.ts; routes /api/cron/cc-sip-scanner and /api/internal/cc/sip-scanner; tests service.test.ts/routes.test.ts. Service receives explicit provider/store/clock dependencies, prepares 4 concurrent symbols with deadline, publishes after complete window and persists honest coverage/errors. Cron ET guards + existing run logger; machine reads stored snapshots only. Add two logical expressions and one policy; increment governed inventory counts (98->100, 91->92). RED: disabled/auth/not-ready/ready-empty/storage/provider failures, no live calls on read, overlapping/repeated runs, incomplete prep, DST and holidays. Implement, run focused tests plus npm run cron:check and control-plane:check, commit.
-+
-+## Task 4: Command Center consumer and paper loop
-+
-+Modify bots/sip_orb/sip_scanner.py and cc_sdk/cc_sdk/intraday.py; add/update scanner and session readiness tests. Add UniversePending type in intraday; strict authenticated v1 client with SCANNER_SECRET, 300-second age and exact ET window. Normal poll retries until 09:40; scanner failure at deadline persists and keeps health degraded while exits continue. Update env example and operator docs. RED: delayed snapshot, 202/429/500, deadline, wrong date/window/age/future/nonfinite rows, secret-safe errors, no redirects, ready empty, exits during pending, actual SipOrbRules->risk->paper fill->EOD exit. Run focused and full Python suites, commit.
-+
-+## Task 5: Integration, review and delivery
-+
-+Cross-language deterministic fixture snapshots plus actual paper-loop integration; run platform focused suite and broad appropriate checks, platform build/typecheck, cron/registry checks, Python full suite and browser harness sequentially. Request one independent read-only reviewer; fix important findings with RED/GREEN. Prepare platform review branch and Command Center incremental bundle/native helper; verify remote readback. No live scanner calls without credentials and no installed-on-Windows claim until native evidence. Save reusable cloud setup if changed. Native server/scanner credentials and portfolio capital are outstanding deployment prerequisites.
-+
-+## Review Focus
-+
-+- Stock list classification completeness and ETF exclusion.
-+- Historical gaps/duplicates are not fabricated zeros or inconsistent per-minute denominators.
-+- Redis lock expiry and overlapping jobs cannot corrupt prepared rows or overwrite immutable results.
-+- Complete history and publication boundaries work across DST/holidays and cold starts.
-+- Pending universe never bypasses risk controls or blocks adopted-position exits; healthy zero remains distinct from unavailable data.
++The historical review focus included classification completeness, missing-window distinctions, lock overlap, holiday/DST boundaries and truthful pending/empty/unavailable outcomes. The outline did not establish a production deployment, live provider readiness, Windows installation or portfolio valuation.
 diff --git a/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md b/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
 new file mode 100644
-index 00000000..1032f3fd
+index 00000000..3a9a3145
 --- /dev/null
 +++ b/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
-@@ -0,0 +1,33 @@
-+# Command Center SIP scanner
+@@ -0,0 +1,16 @@
++---
++status: archival
++recorded_on: 2026-10-06
++---
 +
-+> **Non-canonical historical notes.** This file records the original implementation discussion; it does not grant authority, establish release readiness, or replace current requirements. Canonical release and authorship rules are in [CLAUDE.md](../../../CLAUDE.md) and [DECISIONS.md](../../implementation-plan/DECISIONS.md). Current acceptance mappings are in [R00](../../delivery/plans/R00-cc-sip-scanner.json), the implemented contract and operations are in the [runbook](../../runbooks/CC-SIP-SCANNER.md), and delivered changes are recorded in the [CHANGELOG](../../implementation-plan/CHANGELOG.md). Historical prerequisites and proposed filenames below may have changed.
++# Historical Command Center SIP scanner design discussion
 +
-+Original design outline: prepare history before open, rank completed opening-window volume after 09:35 Eastern, authenticate the Command Center read, and test the paper entry/exit loop. These historical notes describe the native integration and isolated feature-branch work. Current release requirements are documented in the canonical sources linked above.
++These are archival notes about the October 6 design discussion. They contain no implementation tasks or release instructions. Current release and authorship rules are in [CLAUDE.md](../../../CLAUDE.md) and [DECISIONS.md](../../implementation-plan/DECISIONS.md). The current acceptance mapping is [R00](../../delivery/plans/R00-cc-sip-scanner.json), the executable contract and operations are in the [runbook](../../runbooks/CC-SIP-SCANNER.md), and delivered changes are recorded in the [CHANGELOG](../../implementation-plan/CHANGELOG.md).
 +
-+## Contract and strategy
++The discussion concerned the missing input for the existing paper Stocks-in-Play ORB strategy. Its proposed shape was a versioned, authenticated stock snapshot prepared before the open and ranked after the completed five-minute opening window. The configured platform universe supplied stock classifications; it was not described as every US stock. Trading signals, stops, sizing and execution mode were outside the integration scope.
 +
-+Dedicated version-1 snapshot: version=1, status=ready, session_date, generated_at, window_start, window_end, candidates (symbol, price, rvol, atr14, avg_vol), coverage and exclusions. Window is exactly 09:30–09:35 America/New_York. Filters are price > 5, 20 completed-session average daily share volume >= 1 million, Wilder ATR14 > 0.50; rank by descending opening-share-volume / mean of 14 prior opening-window share volumes, deterministic symbol tie-break, max 20. Eligibility history and opening baseline never include today's partial data. No new minimum RVOL threshold or change to trading signals, sizing, stops or paper mode.
++The proposed data path used shared Schwab market data, per-session Redis preparation progress, owner-checked work leases and an immutable publication. Historical windows supplied the relative-volume denominator; missing history, transient failures and valid empty results were distinct. Provider reads were separated from the authenticated machine endpoint, which served stored data.
 +
-+Universe is current ALL_SYMBOLS with verified non-fund sector classifications in SYMBOL_SECTOR; missing classification is excluded visibly. ETFs/funds are excluded, not hand-maintained or inferred from ticker spelling. The configured set is not claimed to be all US stocks.
++The consumer discussion included strict date/window/row checks, initial-selection freshness, bounded retries through the selection deadline and continued exit management during unavailable input. A fixed watchlist remained an explicitly configured alternative rather than an implicit replacement for failed relative-volume scanning.
 +
-+## Preparation and publication
-+
-+A read-only Schwab adapter uses existing platform token refresh, GET marketdata pricehistory/quotes only, bounded timeouts, one 401 refresh/retry; safe codes only, no response bodies/credentials. Preparation caches daily eligibility and complete 14-session opening-window totals in Redis per trading date. Two price-history reads per stock; one multi-session minute request replaces 14 separate historical requests. Rate-limited concurrency is 4. A preparation deadline retains successful per-symbol rows for retry, not a misleading complete result. Ineligible stocks need no opening-history request. Missing/incomplete history excludes that stock with a durable reason; transport/auth/storage failures prevent a ready snapshot and are retried in the scheduled window. New data never silently overwrites a ready result for the same session.
-+
-+Redis keys use cc:sip:v1 prefix, seven-day retention for diagnostics. Redis availability is required: no in-process fallback. Per-session work locks have unique owners and compare-and-delete release. Prepared rows are date/version scoped; results use an atomic SET NX so an existing ready result is immutable. Preparation progress is recorded per symbol so repeated invocations only retry unfinished failures. Counts/reasons are retained in preparation and result records and JSON logs; existing cron run logging is reused. No database migration.
-+
-+One new logical cron job chooses phase by ET time: preparation 09:00–09:30, publication 09:35–09:40. Logical expressions 0-25/5 13,14 * * 1-5 and 35-39 13,14 * * 1-5; New York and exchange-holiday guards accept the correct DST candidate. Job policy timeout 280000 ms, lock 330 s, no money-path effects. SIP_SCANNER_ENABLED is an explicit false-by-default deployment switch. Existing physical minute dispatcher stays unchanged.
-+
-+## Machine interface
-+
-+GET /api/internal/cc/sip-scanner serves only stored results for today's ET trading date. Separate SIP_SCANNER_SECRET, minimum 32 characters, must differ from CRON_SECRET, DASHBOARD_PASSWORD, MONITOR_SECRET and SCHWAB_BROKER_SECRET. Header-only Bearer authentication, private/no-store responses, no browser-user entitlement requirement and no provider calls during reads. Disabled route=404, bad auth=401, missing config/storage=503, result not yet ready=202 with Retry-After, ready=200. Cron guard accepts CRON_SECRET only. Read errors never look like a healthy empty list.
-+
-+## Command Center consumer
-+
-+SCANNER_SECRET in the SIP bot's gitignored local environment authenticates HTTPS requests; localhost HTTP is allowed for isolated tests only. No redirects or response/URL/credential text in errors. Strict version/date/window/age/row validation rejects stale, future, malformed and cross-day snapshots. Ready snapshots must be generated no earlier than window end and no older than five minutes on first selection. Explicit ready candidates=[] is valid. No fabricated RVOL or silent legacy-response acceptance.
-+
-+Transient HTTP 429/5xx, 202, transport failures and readiness races yield UniversePending. SessionRunner retries on its normal polls until 09:40 without entries; existing position management runs first. At the deadline, mark the scanner unavailable, stop further entry attempts for that day, persist diagnostics, and keep heartbeat unhealthy through the session. Permanent auth/config/protocol failures retain the existing bot-run failure path. Fixed fallback symbols remain an explicitly configured existing option and are logged as fallback. No automatic fallback is inserted.
-+
-+## Verification and delivery
-+
-+TDD covers ratio/ATR/filter boundaries, completed-window coverage, holiday/DST, unknown instruments, finite numbers, auth separation, read-only endpoint paths, safe errors, Redis failure/locking/idempotence, job windows and read readiness. Command Center covers delayed readiness, retries/deadline, valid empty vs malformed, date/freshness and actual SIP paper signal/risk/fill/EOD exit. Platform focused tests, typecheck/build where available, cron/registry guards and Command Center full tests/harness run before delivery. Publish review branches/draft PR if supported; no merge or production deployment without approval. Native Windows installation remains a separate verified transfer step. Portfolio capital configuration remains pending and unchanged.
++The original verification discussion covered filter/calculation boundaries, calendar transitions, credentials, storage/lease failures, repeated publication and the actual paper entry/exit loop. Native installation, deployed credentials and portfolio valuation were separate evidence at the time of the discussion. This archive does not describe their current completion status or grant operational authority; current behavior, limits and release evidence are documented in the linked sources.
 diff --git a/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
 new file mode 100644
-index 00000000..bb6ee644
+index 00000000..519ce638
 --- /dev/null
 +++ b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
-@@ -0,0 +1,188 @@
+@@ -0,0 +1,206 @@
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 +import type { Redis } from "@upstash/redis";
 +import { SipStore } from "@/lib/sip/store";
@@ -220,6 +183,7 @@ index 00000000..bb6ee644
 +import { SipUnavailable } from "@/lib/sip/contract";
 +import { sessionTime } from "@/lib/sip/calendar";
 +import policies from "@/config/controlPlaneJobPolicies.json";
++import readyFixture from "../../../../../../tests/fixtures/sip/sip-v1-ready.json";
 +import { GET, maxDuration } from "../route";
 +
 +// Persisted cron telemetry is the external boundary; scanner and lease handling
@@ -289,6 +253,23 @@ index 00000000..bb6ee644
 +    expect(await response.json()).toEqual({ error: "SIP_STORAGE_FAILED" });
 +    expect(telemetry.finish).toHaveBeenCalledWith(17, "failure", {
 +      cronName: "cc-sip-scanner", phase: "prepare", error: "SIP_STORAGE_FAILED",
++    });
++  });
++
++  it("rejects corrupt cached publication instead of reporting publish_ready", async () => {
++    vi.setSystemTime(sessionTime("2026-10-06", 575));
++    const redis = {
++      set: vi.fn<Redis["set"]>().mockResolvedValue("OK"),
++      get: vi.fn<Redis["get"]>().mockResolvedValue({ ...readyFixture, version: 2 }),
++      eval: vi.fn<Redis["eval"]>().mockResolvedValue(1),
++    };
++    vi.spyOn(SipStore, "fromEnvironment").mockReturnValue(new SipStore(redis));
++    const response = await GET(request());
++    expect(response.status).toBe(503);
++    expect(response.headers.get("Cache-Control")).toContain("no-store");
++    expect(await response.json()).toEqual({ error: "SIP_SNAPSHOT_INVALID" });
++    expect(telemetry.finish).toHaveBeenCalledWith(17, "failure", {
++      cronName: "cc-sip-scanner", phase: "publish", error: "SIP_SNAPSHOT_INVALID",
 +    });
 +  });
 +
@@ -386,7 +367,7 @@ index 00000000..bb6ee644
 +    const redis = {
 +      set: vi.fn<Redis["set"]>().mockResolvedValue("OK"),
 +      get: vi.fn<Redis["get"]>().mockResolvedValue(
-+        minute === 575 ? { status: "ready", coverage: { universe: 0, eligible: 0, observed: 0, excluded: 0 } } : null,
++        minute === 575 ? { ...readyFixture, candidates: [], coverage: { universe: 0, eligible: 0, observed: 0, excluded: 0 } } : null,
 +      ),
 +      eval: vi.fn<Redis["eval"]>().mockResolvedValue(1),
 +    };
@@ -564,18 +545,18 @@ index 00000000..80586e17
 +  );
 +}
 diff --git a/src/config/controlPlaneJobPolicies.json b/src/config/controlPlaneJobPolicies.json
-index 0e932a30..f66ac138 100644
+index f5830ad9..fbfe554f 100644
 --- a/src/config/controlPlaneJobPolicies.json
 +++ b/src/config/controlPlaneJobPolicies.json
 @@ -1,6 +1,6 @@
  {
    "inventoryGovernance": {
--    "exactRegisteredJobPaths": 91,
-+    "exactRegisteredJobPaths": 92,
+-    "exactRegisteredJobPaths": 92,
++    "exactRegisteredJobPaths": 93,
      "downgradeProcedure": "docs/runbooks/CONTROL-PLANE-INVENTORY-GOVERNANCE.md"
    },
    "jobs": [
-@@ -1378,6 +1378,31 @@
+@@ -1397,6 +1397,31 @@
        "prerequisites": [
          "CRON_SECRET"
        ]
@@ -608,21 +589,21 @@ index 0e932a30..f66ac138 100644
    ]
  }
 diff --git a/src/config/cronManifest.json b/src/config/cronManifest.json
-index 3602a231..e5ab5534 100644
+index 5896282d..d62ae400 100644
 --- a/src/config/cronManifest.json
 +++ b/src/config/cronManifest.json
 @@ -1,6 +1,6 @@
  {
    "inventoryGovernance": {
--    "exactLogicalSchedules": 98,
-+    "exactLogicalSchedules": 100,
+-    "exactLogicalSchedules": 99,
++    "exactLogicalSchedules": 101,
      "downgradeProcedure": "docs/runbooks/CONTROL-PLANE-INVENTORY-GOVERNANCE.md"
    },
    "crons": [
-@@ -395,6 +395,14 @@
+@@ -399,6 +399,14 @@
      {
-       "path": "/api/cron/plan-interpret",
-       "schedule": "15,45 23 * * 1-5"
+       "path": "/api/cron/plan-day-read",
+       "schedule": "0,20 13-20 * * 1-5"
 +    },
 +    {
 +      "path": "/api/cron/cc-sip-scanner",
@@ -1101,10 +1082,10 @@ index 00000000..cc086455
 +});
 diff --git a/src/lib/sip/__tests__/service.test.ts b/src/lib/sip/__tests__/service.test.ts
 new file mode 100644
-index 00000000..29833515
+index 00000000..e6990e46
 --- /dev/null
 +++ b/src/lib/sip/__tests__/service.test.ts
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,219 @@
 +import { describe, it, expect, vi } from "vitest";
 +import readyFixture from "../../../../tests/fixtures/sip/sip-v1-ready.json";
 +import { SipScanner, phaseAt } from "../service";
@@ -1165,6 +1146,29 @@ index 00000000..29833515
 +  return { data, store, scanner, values };
 +}
 +describe("preparation, completeness and publication", () => {
++  it.each([
++    ["missing version", { ...readyFixture, version: undefined }],
++    ["wrong session", { ...readyFixture, session_date: "2026-10-05" }],
++    ["contradictory coverage", { ...readyFixture, candidates: [] }],
++  ])("rejects a cached snapshot with %s without refreshing or overwriting it", async (_case, stored) => {
++    const f = fixture();
++    f.values.set(date + ":result", stored);
++    await expect(f.scanner.publish(now)).rejects.toThrow("SIP_SNAPSHOT_INVALID");
++    expect(f.store.saveResult).not.toHaveBeenCalled();
++    expect(f.store.preparation).not.toHaveBeenCalled();
++    expect(f.data.openingMinutes).not.toHaveBeenCalled();
++    expect(f.data.quotes).not.toHaveBeenCalled();
++    expect(f.values.get(date + ":result")).toEqual(stored);
++  });
++  it("reuses a valid cached empty snapshot without data requests", async () => {
++    const f = fixture();
++    const stored = { ...readyFixture, candidates: [], coverage: { universe: 0, eligible: 0, observed: 0, excluded: 0 } };
++    f.values.set(date + ":result", stored);
++    expect(await f.scanner.publish(now)).toEqual(stored);
++    expect(f.store.saveResult).not.toHaveBeenCalled();
++    expect(f.data.openingMinutes).not.toHaveBeenCalled();
++    expect(f.data.quotes).not.toHaveBeenCalled();
++  });
 +  it("prepares the universe then publishes precise RVOL and immutable result", async () => {
 +    const { scanner, store, data } = fixture();
 +    expect((await scanner.prepare(now))?.complete).toBe(true);
@@ -1778,10 +1782,10 @@ index 00000000..56906ad4
 +}
 diff --git a/src/lib/sip/service.ts b/src/lib/sip/service.ts
 new file mode 100644
-index 00000000..c44062b8
+index 00000000..b25a4b8f
 --- /dev/null
 +++ b/src/lib/sip/service.ts
-@@ -0,0 +1,205 @@
+@@ -0,0 +1,210 @@
 +import { clock, sessionTime } from "./calendar";
 +import {
 +  dailyEligibility,
@@ -1798,6 +1802,7 @@ index 00000000..c44062b8
 +} from "./contract";
 +import type { SipData } from "./schwab";
 +import type { SipStorage } from "./store";
++import { validSnapshot } from "./snapshot";
 +export function phaseAt(now: Date): "prepare" | "publish" | null {
 +  const { trading, minute } = clock(now);
 +  if (!trading) return null;
@@ -1896,7 +1901,11 @@ index 00000000..c44062b8
 +      deadline = Date.now() + 240000;
 +    return this.store.withLock(date, async (owner) => {
 +      const existing = await this.store.result(date);
-+      if (existing) return existing;
++      if (existing !== null) {
++        if (!validSnapshot(existing, date))
++          throw new SipUnavailable("SIP_SNAPSHOT_INVALID");
++        return existing;
++      }
 +      const prep = await this.store.preparation(date);
 +      if (!prep?.complete || prep.session_date !== date)
 +        throw new SipUnavailable("PREPARATION_INCOMPLETE");

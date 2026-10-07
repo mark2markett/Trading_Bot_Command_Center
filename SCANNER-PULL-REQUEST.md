@@ -13,16 +13,17 @@ SIP ORB has no configured scanner source. This change supplies its existing univ
 - The machine endpoint validates stored v1 data before returning 200, including session/window/publication timestamp, finite qualifying metrics, unique candidates and consistent exclusions/coverage. Absence returns 202; malformed data returns no-store 503 scanner_unavailable with only a bounded session/error-code log. Native freshness and the selection deadline remain separate.
 - The route's 280-second execution ceiling matches the authoritative dispatcher timeout; the service's work budget and lease duration retain their separate purposes. Classification telemetry uses a deduplicated configured universe.
 - Telemetry bootstrap/completion exceptions produce explicit no-store scanner 503 responses; nested failure logging preserves the primary error and null-ID terminal fallbacks retain scanner attribution.
-- The historical Superpowers plan/spec explicitly defer to canonical governance, acceptance mappings, the current runbook and changelog. They create no release authority.
+- Cached cron publication uses the same stored-snapshot validator as the machine read. Invalid immutable results fail with SIP_SNAPSHOT_INVALID, produce no publish_ready telemetry and trigger neither overwrite nor replacement data requests.
+- The original plan/spec are archival narrative with status metadata and canonical links, without build tasks or release instructions. The same-PR changelog entries are consolidated.
 
 ## Validation
 
-Current feature head: a1204cc3748f6c3125dcc9a3218937e25e5e0ce1, based on the feature history synced with main 2de673b9. Both changelog histories and the merged price-source repair are preserved.
+Current feature head: ab35e97387708597893353c986993b0b8580cac4, based on the feature history synced with main 436b8b4e. Main's daytime-read job and changelog are preserved; the merged price-source repair remains intact.
 
-- 115 focused scanner/route/registry tests passed. Five new negative regressions reproduced telemetry-bootstrap/completion failures and verified null-ID fallback attribution; sector/auth/readiness regressions remain covered; earlier snapshot/timeout regressions remain covered.
-- Full Node 20.19.5 suite: 9190 passed, 1 expected failure, 13 skipped and 11 todo; 943 passed files and 5 skipped. No test, timeout or required check was weakened.
+- 120 focused scanner/route/registry tests passed. New cached-publication regressions reproduced malformed version/session/coverage admission and cron false-ready telemetry before correction; valid cached empty results remain supported. Earlier telemetry, auth, snapshot and timeout regressions remain covered.
+- Full Node 20.19.5 suite: 9216 passed, 1 expected failure, 13 skipped and 11 todo; 946 passed files and 5 skipped. No test, timeout or required check was weakened.
 - Node 20.19.5 production build and TypeScript validation passed. Scoped ESLint and full lint, cron, control-plane, size, any-count, client/server and curator gates passed.
-- A separate read-only local reviewer independently ran all 16 cron-route tests for this revision and found no Critical or Important issue. Earlier independent review covered the scanner, machine endpoint and registry tests. The allowlist retains all 411 currently classified stocks; shared auth checks, actual machine-route wiring, readiness limitations and supporting-change rollback were reviewed. Snapshot coverage still rejects contradictory empty results and candidate/exclusion overlap while accepting valid empty results, preparation exclusions, top-20 caps and later same-session reads.
+- A separate read-only local reviewer independently ran all 30 service/cron-route tests for this revision and found no Critical or Important issue. Main's full registry entries and changelog body were verified preserved; only the SIP additions and governed counts differ (93 jobs, 101 schedules). Earlier independent review covered the machine endpoint and other scanner tests. The allowlist retains all 411 currently classified stocks; shared auth checks, actual machine-route wiring, readiness limitations and supporting-change rollback were reviewed. Snapshot coverage still rejects contradictory empty results and candidate/exclusion overlap while accepting valid empty results, preparation exclusions, top-20 caps and later same-session reads.
 
 The existing JetBrains Mono Latin subset now preloads to avoid the previously reproduced cold Next 16.3.5 internal-font-query resolver failure. Earlier before/after cold Node 20 build evidence established this workaround; family, weights, fallback and CSS variable remain unchanged. Its bounded tradeoff is an additional font preload. No dependency or TLS setting was bypassed.
 
@@ -30,13 +31,13 @@ These are local implementation results, not GitHub approval, production deployme
 
 ## Latest independent review response
 
-[Review comment 6030505042](https://github.com/mark2markett/m2m-platform/pull/1260#issuecomment-6030505042):
+[Review comment 6038590145](https://github.com/mark2markett/m2m-platform/pull/1260#issuecomment-6038590145) reported APPROVE_WITH_CONCERNS and no blockers on the previous head:
 
-- B-1 and N-1: cron telemetry bootstrap now executes inside the guarded route. Bootstrap/completion rejection returns bounded scanner JSON with HTTP 503 and no-store headers. Failure telemetry has its own guard, preserving the primary response even when that logging operation rejects. Five regressions cover bootstrap with and without secondary failure, original-error preservation, ordinary completion rejection and the existing best-effort null-ID fallback. Terminal fallback details explicitly identify cc-sip-scanner; console output is not evidence of database persistence.
-- C-1: the historical design/spec and delivery outcome use neutral scope descriptions. Directive-like owner quotations and approval wording were removed; existing canonical authority and requirement criteria remain unchanged.
-- C-2: the durable CHANGELOG records behavior and evidence limits. Volatile preview/review-state narrative was removed; current validation and review status remain in this PR description.
+- C-1: cached cron publication now calls the same validSnapshot validator as machine reads before reuse. Invalid stored version/session/coverage fails with bounded SIP_SNAPSHOT_INVALID and no-store HTTP 503 at the actual cron route, never publish_ready. Existing data remains immutable for diagnosis; no replacement provider work occurs. Negative service regressions and a real-route regression cover this path; valid empty reuse and ordinary idempotence remain covered.
+- C-2: historical plan/spec files now contain archival status metadata and pure narrative with canonical links. Imperative build/commit/release tasks and stale operational prerequisites were removed.
+- N-1: the two adjacent same-PR CHANGELOG records are consolidated into one durable October 6–7 entry, preserving the other main history.
 
-Prior sector/authentication, snapshot consistency, timeout, prerequisite metadata and supporting-change rollback corrections remain in place. DECISIONS.md is unchanged from main base 2de673b9; no new governance decision or gate closure is introduced. These responses are implementation evidence and require separate GitHub review of this head.
+The revision also integrates current main 436b8b4e with its daytime-read job intact. Governance, physical scheduling, workflow permissions, required checks, trading strategy and native account capital are unchanged. Local validation does not resolve a remote status-publisher failure or clear GitHub release checks; a new independent review/check run is required for this head.
 
 ## Independent review and release
 

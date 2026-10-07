@@ -18,10 +18,11 @@ SIP ORB has no configured scanner source. This change supplies its existing univ
 
 ## Validation
 
-Current feature head: ab35e97387708597893353c986993b0b8580cac4, based on the feature history synced with main 436b8b4e. Main's daytime-read job and changelog are preserved; the merged price-source repair remains intact.
+Current feature head: de30dff23e5b017d27b750be027d10adbe25641c, based on the feature history synced with main 803f29dc. Main's daytime-read job, strict interpreter-tool repair and full changelog are preserved; the merged price-source repair remains intact.
 
 - 120 focused scanner/route/registry tests passed. New cached-publication regressions reproduced malformed version/session/coverage admission and cron false-ready telemetry before correction; valid cached empty results remain supported. Earlier telemetry, auth, snapshot and timeout regressions remain covered.
-- Full Node 20.19.5 suite: 9216 passed, 1 expected failure, 13 skipped and 11 todo; 946 passed files and 5 skipped. No test, timeout or required check was weakened.
+- Full Node 20.19.5 suite: 9218 passed, 1 expected failure, 13 skipped and 11 todo; 946 passed files and 5 skipped. No test, timeout or required check was weakened.
+- Local validation ran sequentially after concurrent build/test execution hit temporary boundary-test fixtures and the existing timeouts in tradeExecutionInsertLineage and manifestVerifier. The unchanged complete suite passed on its sequential run; checks and timeout thresholds were not weakened.
 - Node 20.19.5 production build and TypeScript validation passed. Scoped ESLint and full lint, cron, control-plane, size, any-count, client/server and curator gates passed.
 - A separate read-only local reviewer independently ran all 30 service/cron-route tests for this revision and found no Critical or Important issue. Main's full registry entries and changelog body were verified preserved; only the SIP additions and governed counts differ (93 jobs, 101 schedules). Earlier independent review covered the machine endpoint and other scanner tests. The allowlist retains all 411 currently classified stocks; shared auth checks, actual machine-route wiring, readiness limitations and supporting-change rollback were reviewed. Snapshot coverage still rejects contradictory empty results and candidate/exclusion overlap while accepting valid empty results, preparation exclusions, top-20 caps and later same-session reads.
 
@@ -37,7 +38,7 @@ These are local implementation results, not GitHub approval, production deployme
 - C-2: historical plan/spec files now contain archival status metadata and pure narrative with canonical links. Imperative build/commit/release tasks and stale operational prerequisites were removed.
 - N-1: the two adjacent same-PR CHANGELOG records are consolidated into one durable October 6–7 entry, preserving the other main history.
 
-The revision also integrates current main 436b8b4e with its daytime-read job intact. Governance, physical scheduling, workflow permissions, required checks, trading strategy and native account capital are unchanged. Local validation does not resolve a remote status-publisher failure or clear GitHub release checks; a new independent review/check run is required for this head.
+The revision also integrates current main 803f29dc with its daytime-read job and strict interpreter-tool repair intact. Read-only integration review confirmed those source/tests, its R00 plan, physical scheduling, governance and complete changelog remain preserved. Governance, physical scheduling, workflow permissions, required checks, trading strategy and native account capital are unchanged. Local validation does not resolve a remote status-publisher failure or clear GitHub release checks; a new independent review/check run is required for this head.
 
 ## Independent review and release
 

@@ -40,11 +40,12 @@ index 00000000..d65ee92e
 +  ]
 +}
 diff --git a/docs/implementation-plan/CHANGELOG.md b/docs/implementation-plan/CHANGELOG.md
-index 04bb9a92..c4e4d2a5 100644
+index 3181356d..563112a7 100644
 --- a/docs/implementation-plan/CHANGELOG.md
 +++ b/docs/implementation-plan/CHANGELOG.md
-@@ -1,5 +1,20 @@
- # M2M Plan v2 — Changelog
+@@ -5,6 +5,21 @@
+ - **Incident:** the first daytime read (09:00 slot, run 09:21 ET) failed with `PLAN_INTERPRET_LENS_READ_SHAPE:QUANT`: the Quant lens returned tool input off its schema. Forced `tool_choice` is a 400 on the model, so nothing guaranteed the schema.
+ - **Fix (PR #1263):** every interpreter tool is sent with `strict: true`, so the API guarantees schema-valid input. Keywords strict mode does not accept (length and numeric ranges) are removed from the schema sent, on schema nodes only (a property named like a keyword is kept). The validators still enforce the counts on the output. No prompt, version or hash change.
  
 +## 2026-10-06–07 ET — Restore the Command Center paper SIP ORB scanner input (PR #1260)
 +

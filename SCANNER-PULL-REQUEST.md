@@ -8,13 +8,15 @@ SIP ORB currently has no scanner source. This change supplies its existing unive
 
 ## Validation
 
-The revised source passed the complete local platform suite: 9105 passed, 1 expected failure, 13 skipped and 11 todo. The production build, TypeScript checks, scoped lint, cron/control-plane registries, file-size/any-count gates and client/server/curator boundaries passed. Regression cases first failed on the original historical-code and contention-reporting defects, then passed with the corrections. A separate read-only local reviewer independently ran all 37 scanner/route tests and found no remaining blockers. Local review does not replace the GitHub independent review on the revised head.
+The original deferred-font configuration reproduced CI's 18 internal-font-query failures in a cold production build using CI's Node 20.19.5. With JetBrains Mono Latin preloading enabled, the full cold production build and TypeScript validation completed successfully. Font family, weights, fallback and CSS variable are unchanged; the bounded tradeoff is an additional Latin font preload. No dependency, TLS setting or required check was bypassed.
 
-The feature branch is synced with main e8d193c3; both implementation-plan changelog histories are preserved and the merge is clean. These are local results, not GitHub review, deployment, live provider or native scheduler certification. No production credentials were used by the tests.
+All 40 focused scanner/route tests passed. An initial three-worker Node 20 full-suite run passed 9107 tests and hit the existing inventory test's 10-second timeout while extra gates were running; that test passed in isolation. Validation was then rerun with two workers and no concurrent gates, without weakening any test or timeout. New regression tests first failed on the unqualified cron readiness statuses and absent eligibility-reuse helper, then passed with the corrections. A separate read-only local reviewer independently ran those 40 tests and found no Critical or Important issues. The final full Node 20 suite passed: 9123 passed, 1 expected failure, 13 skipped and 11 todo (941 passed files, 5 skipped). Scoped ESLint and cron/control-plane/file-size/any-count/client-server/curator gates passed; the final merged-source cold Node 20 production build and full lint ratchet passed. Local implementation acceptance also passed using the canonical delivery-gate command with a local PR-event fixture; that fixture is not GitHub readiness evidence. Local review does not replace the GitHub independent review on the revised head.
+
+Current feature head: f7f647eaa693eedf6ab779a8179e67e42af5246c. The feature branch is synced with main 2de673b9 (PR #1261); both implementation-plan changelog histories are preserved and the merge is clean. These are local results, not GitHub review, deployment, live provider or native scheduler certification. No production credentials were used by the tests.
 
 ## Independent review and release
 
-This description is informational, not governance authority. Canonical release requirements are in CLAUDE.md, D-021/D-031 and docs/delivery/ACCEPTANCE.md: separate GitHub Codex adversarial review, required checks and the preview must pass on the current head before owner merge. The canonical readiness verifier is scripts/delivery-gate.mjs; its output and external preview evidence, rather than PR prose, establish readiness. The authoring session has not self-cleared release.
+This description is informational, not governance authority. Canonical release requirements are in CLAUDE.md, docs/implementation-plan/DECISIONS.md § D-021 and docs/delivery/ACCEPTANCE.md. DECISIONS.md § D-031 permits Codex authorship with independent review and grants no production deployment or trading authority: separate GitHub Codex adversarial review, required checks and the preview must pass on the current head before owner merge. The canonical readiness verifier is scripts/delivery-gate.mjs; its output and external preview evidence, rather than PR prose, establish readiness. The authoring session has not self-cleared release.
 
 Production uses the owner-merged main commit/release artifact, with a READY production deployment tied to that commit. Secure dedicated scanner authentication, existing Schwab/Redis inputs and the enabled flag remain deployment prerequisites. Operational proof requires a fresh authenticated snapshot at 09:35–09:39 Eastern. Configuration details are in docs/runbooks/CC-SIP-SCANNER.md; credential values are not part of this PR.
 
@@ -32,6 +34,16 @@ The R00 plan covers the bounded integration and now includes actual cron-route r
 - N-1: clock is a static import; the existing machine-response tests verify the behavior.
 
 These responses are implementation evidence, not independent approval. The revised head requires a fresh GitHub review.
+
+## Response to the second independent review (comment 6028191354)
+
+- B-1: D-031 already exists on the canonical main base e8d193c3 in docs/implementation-plan/DECISIONS.md § D-031. The runbook now links its section explicitly and distinguishes its authorship/review scope from D-021's feature-PR-to-owner-merged-main protocol. No new decision or release authority was added.
+- C-1: the runbook's Calculation contract defines RVOL windowing, Wilder ATR seeding/updates and exact thresholds, with links to the executable calculation/publication functions and their boundary regressions. The R00 expected behavior cites that contract and those definitions.
+- C-2: the service evaluates daily eligibility once before obtaining intraday history and passes the validated result to preparationFromEligibility. The existing preparationFromBars wrapper retains its validation behavior; output equivalence and incomplete-window refusal are tested. This removes redundant computation without claiming live budget adequacy.
+- C-3: cron summaries use prepared for completed preparation and publish_ready for publication. Stored machine snapshots retain their v1 ready status; pending, contention and failure handling remain distinct. Real-route regression tests cover both phases.
+- N-1: safe route logs include the cron run ID and phase; lease cleanup logs include the session date and a bounded failure code, without secrets or upstream error contents.
+
+The separate quality failure was an existing cold Next.js font resolver failure. The source correction preloads the existing JetBrains Mono Latin subset, with before/after cold-build evidence on Node 20.19.5. New-head GitHub review, quality and preview remain required.
 
 ## Risks and rollback
 

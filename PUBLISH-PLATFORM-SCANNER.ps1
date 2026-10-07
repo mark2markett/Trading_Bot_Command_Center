@@ -10,11 +10,14 @@ Set-Location -LiteralPath $Repo
 $origin = (git remote get-url origin).Trim()
 if ($LASTEXITCODE -ne 0 -or $origin -notmatch 'github\.com[:/]mark2markett/m2m-platform(?:\.git)?$') { throw 'Expected the mark2markett/m2m-platform origin.' }
 $bundle = Join-Path $PSScriptRoot 'm2m-platform-sip-scanner.bundle'
-git fetch origin main
+# Transfer imports can trigger automatic repacking of files still open on
+# Windows. Defer optional maintenance for these commands only; verification
+# and normal Git locking remain enabled, and no repository setting is changed.
+git -c gc.auto=0 -c maintenance.auto=false fetch origin main
 if ($LASTEXITCODE -ne 0) { throw 'Could not retrieve platform history.' }
 git bundle verify $bundle
 if ($LASTEXITCODE -ne 0) { throw 'Platform bundle prerequisites are unavailable.' }
-git fetch $bundle 'feat/cc-sip-scanner:feat/cc-sip-scanner'
+git -c gc.auto=0 -c maintenance.auto=false fetch $bundle 'feat/cc-sip-scanner:feat/cc-sip-scanner'
 if ($LASTEXITCODE -ne 0) { throw 'Feature branch import failed; no existing branch was overwritten.' }
 git push origin 'feat/cc-sip-scanner:feat/cc-sip-scanner'
 if ($LASTEXITCODE -ne 0) { throw 'Feature branch publication failed. No main merge or deployment was requested.' }

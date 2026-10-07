@@ -1,6 +1,6 @@
 diff --git a/docs/delivery/plans/R00-cc-sip-scanner.json b/docs/delivery/plans/R00-cc-sip-scanner.json
 new file mode 100644
-index 00000000..b7bd1b20
+index 00000000..c7c3f9f2
 --- /dev/null
 +++ b/docs/delivery/plans/R00-cc-sip-scanner.json
 @@ -0,0 +1,35 @@
@@ -8,7 +8,7 @@ index 00000000..b7bd1b20
 +  "version": 1,
 +  "stage": "implementation",
 +  "requirements": ["R00"],
-+  "owner_outcome": "Restore the existing Command Center paper SIP ORB strategy's missing scanner input using the platform's existing stock universe, shared Schwab connection and minute dispatcher. Owner requested this integration and directed the session to proceed. This is an internal data feed, with no platform product surface or order authority. Bounded supporting validation corrections preload the existing font subset to avoid the reproduced cold-build resolver failure and refuse unmocked absent-database sentinel requests immediately; no successful database response or additional egress permission is supplied.",
++  "owner_outcome": "Restore the existing Command Center paper SIP ORB strategy's missing scanner input using the platform's existing stock universe, shared Schwab connection and minute dispatcher. This is an internal data feed, with no platform product surface or order authority. Bounded supporting validation corrections preload the existing font subset to avoid the reproduced cold-build resolver failure and refuse unmocked absent-database sentinel requests immediately; no successful database response or additional egress permission is supplied.",
 +  "rollback": "Set SIP_SCANNER_ENABLED=false to stop preparation/publication and refuse machine reads; revert this feature PR to remove its two endpoints and logical job. Preserve previously captured evidence. Command Center keeps managing exits when scanner input is unavailable; disabling the producer does not flatten positions. Disabling the scanner retains the supporting font preload and test-sentinel corrections. Full PR reversion also restores their prior configuration/DNS behavior; rerun build and test gates before releasing that broader rollback.",
 +  "criteria": [
 +    {
@@ -17,7 +17,7 @@ index 00000000..b7bd1b20
 +    },
 +    {
 +      "id": "R00-regression",
-+      "expected": "The job is registered in the existing minute dispatcher with exchange-calendar guards; its route execution ceiling matches the governed dispatcher timeout; physical Vercel scheduling and existing trading authority remain unchanged. Provider/storage errors and lease loss cannot publish fabricated or stale data. Production-boundary tests scrub the new secrets and refuse production HTTP access. Enabled producer work refuses invalid dedicated-auth configuration before provider/storage requests. Runtime prerequisite metadata does not certify deployed OAuth/Redis health. The existing JetBrains Mono Latin preload is checked by the production build; AT00 proves unmocked sentinel GET/POST/PATCH fail immediately without permitting production egress."
++      "expected": "The job is registered in the existing minute dispatcher with exchange-calendar guards; its route execution ceiling matches the governed dispatcher timeout; physical Vercel scheduling and existing trading authority remain unchanged. Provider/storage errors and lease loss cannot publish fabricated or stale data. Production-boundary tests scrub the new secrets and refuse production HTTP access. Enabled producer work refuses invalid dedicated-auth configuration before provider/storage requests. Telemetry bootstrap/completion rejections retain explicit scanner 503 JSON and no-store headers, including rejection of failure logging itself; null run IDs retain the existing terminal fallback with scanner attribution. Runtime prerequisite metadata does not certify deployed OAuth/Redis health. The existing JetBrains Mono Latin preload is checked by the production build; AT00 proves unmocked sentinel GET/POST/PATCH fail immediately without permitting production egress."
 +    }
 +  ],
 +  "tests": [
@@ -40,12 +40,17 @@ index 00000000..b7bd1b20
 +  ]
 +}
 diff --git a/docs/implementation-plan/CHANGELOG.md b/docs/implementation-plan/CHANGELOG.md
-index 4ceb7f05..cbd72fed 100644
+index 4ceb7f05..dc3cdf37 100644
 --- a/docs/implementation-plan/CHANGELOG.md
 +++ b/docs/implementation-plan/CHANGELOG.md
-@@ -1,5 +1,18 @@
+@@ -1,5 +1,23 @@
  # M2M Plan v2 — Changelog
  
++## 2026-10-07 ET — Bound Command Center scanner telemetry failures (PR #1260)
++
++- Cron bootstrap and completion rejections return explicit no-store scanner 503 responses. Failure-logging rejection preserves the primary error and emits a bounded telemetry diagnostic. Null run IDs retain the existing terminal-row fallback with explicit scanner attribution.
++- Historical design notes and the R00 outcome use neutral scope descriptions. Canonical release/authority sources and gate criteria are unchanged; deployment and live readiness remain separate from implementation evidence.
++
 +## 2026-10-06 ET — Restore the Command Center paper SIP ORB scanner input (PR #1260)
 +
 +- **Bounded integration:** `/api/cron/cc-sip-scanner` prepares the existing verified stock universe before the open and publishes a frozen opening-window RVOL snapshot through the existing minute dispatcher. The authenticated read-only machine endpoint is `/api/internal/cc/sip-scanner`. Physical Vercel scheduling and order authority are unchanged.
@@ -55,7 +60,7 @@ index 4ceb7f05..cbd72fed 100644
 +- **Latest review corrections:** recognized stock-sector allowlist rejects unverified labels; producer and machine endpoints share dedicated-auth configuration validation before data work. Runtime metadata declares OAuth/database/auth inputs and the runbook distinguishes inventory checks from live proof. Actual machine-route regressions cover wiring and storage outcomes. R00 now explicitly maps the supporting font and absent-database sentinel corrections and their rollback behavior. Canonical governance records are unchanged.
 +- **Cold-build correction:** the existing JetBrains Mono font now preloads its configured Latin subset to avoid Next 16.3.5's deferred-font internal-query resolver failure, reproduced on CI's Node 20.19.5. Family, weights, fallback and CSS variable are unchanged; the additional font preload is the bounded build-unblocking change. Required build/review checks are retained.
 +- **Release and acceptance:** `docs/runbooks/CC-SIP-SCANNER.md` describes dedicated machine authentication, native inputs and production deployment from the owner-merged `main` release. `docs/delivery/plans/R00-cc-sip-scanner.json` maps the bounded restoration to executable checks, limits and rollback. PR prose is informational; canonical governance and current-head checks retain authority.
-+- **Evidence boundary:** local regressions prove diagnostic distinctions; they do not prove production Redis, live provider history coverage, daily publication, native scheduling or operator acceptance. PR #1260's preview was reported READY; independent review requested these corrections and must rerun on the revised head.
++- **Evidence boundary:** local regressions prove diagnostic distinctions; they do not prove production Redis, live provider history coverage, daily publication, native scheduling or operator acceptance.
 +- **No gate-row closure or authority change:** GATES history and requirement criteria are unchanged. No migration, portfolio capital, trading mode, strategy or order change is introduced. The native shared paper-account repair was delivered separately.
 +
 +
@@ -64,7 +69,7 @@ index 4ceb7f05..cbd72fed 100644
  - **Owner-approved migration** `20261006164647_plan_interpretations_read_slot.sql`, applied to production and recorded here so the repository matches the database.
 diff --git a/docs/runbooks/CC-SIP-SCANNER.md b/docs/runbooks/CC-SIP-SCANNER.md
 new file mode 100644
-index 00000000..cb636aab
+index 00000000..e09d718d
 --- /dev/null
 +++ b/docs/runbooks/CC-SIP-SCANNER.md
 @@ -0,0 +1,56 @@
@@ -107,7 +112,7 @@ index 00000000..cb636aab
 +
 +Preparation is cached per symbol and resumes after failures. Current completed opening volumes are also cached for retry; quotes are obtained afresh before publication and must be current. Four workers share pacing of at most about 100 data requests/minute within this scanner; other platform/fleet requests share the provider’s overall limit, so 429 remains a retryable outage. Work has a 240-second budget and a 330-second ownership lease. The authoritative dispatcher policy is `src/config/controlPlaneJobPolicies.json` (`cc-sip-scanner.timeoutMs=280000`); the cron route has the matching static `maxDuration=280` seconds, pinned by its regression test. The work budget leaves room for completion and lease cleanup before that execution ceiling. Redis writes atomically verify the lease owner. A session snapshot is immutable, retained seven days with its coverage and exclusions. A ready result can legitimately contain zero candidates.
 +
-+`cron_runs` and safe `[cc-sip]` logs distinguish `prepared` from `publish_ready`, with `pending` for incomplete preparation and `busy`/skipped for lease contention. Route logs include the cron run ID, phase and failure code; store cleanup logs include the session date. Redis keys use `cc:sip:v1:YYYY-MM-DD:*`; inspect `preparation` for exclusions/failures and `result` for the frozen published snapshot. Native decisions record `SCANNER`, `SCANNER_PENDING`, `SCANNER_ERROR`, `SCANNER_FALLBACK`, or `SCANNER_UNAVAILABLE`; per-bot JSONL records heartbeat health. The native client validates version, date, exact window, coverage, finite rows, duplicate symbols, and a maximum 300-second age. It does not follow redirects.
++`cron_runs` and safe `[cc-sip]` logs distinguish `prepared` from `publish_ready`, with `pending` for incomplete preparation and `busy`/skipped for lease contention. Route logs include the cron run ID, phase and failure code; store cleanup logs include the session date. Unexpected cron telemetry bootstrap/completion rejections return bounded no-store 503 responses, and failure-logging rejection preserves the primary error. The existing helper may return a null run ID for best-effort recovery; terminal fallback rows identify `cc-sip-scanner` explicitly. Console diagnostics do not imply that unavailable database telemetry was persisted. Redis keys use `cc:sip:v1:YYYY-MM-DD:*`; inspect `preparation` for exclusions/failures and `result` for the frozen published snapshot. Native decisions record `SCANNER`, `SCANNER_PENDING`, `SCANNER_ERROR`, `SCANNER_FALLBACK`, or `SCANNER_UNAVAILABLE`; per-bot JSONL records heartbeat health. The native client validates version, date, exact window, coverage, finite rows, duplicate symbols, and a maximum 300-second age. It does not follow redirects.
 +
 +The authenticated machine GET only reads stored results: disabled 404, unauthorized 401, not-ready 202, storage/configuration error or malformed stored snapshot 503, ready 200. Before returning 200, it validates the stored v1 shape, current session, exact opening window, publication timestamp, finite qualifying metrics, unique candidates, coverage and exclusions; invalid data logs only `SIP_SNAPSHOT_INVALID` and the session date. This contract check does not expire the immutable snapshot within its session; the native consumer separately enforces freshness and the selection deadline. Every response is private/no-store. At 09:40 Eastern, an unresolved bot disables new entries, retains degraded heartbeat evidence, and keeps managing exits. Restarting after 09:40 does not fabricate a new universe.
 +
@@ -126,7 +131,7 @@ index 00000000..cb636aab
 +Operational rollback is `SIP_SCANNER_ENABLED=false`; this stops producer work and refuses machine reads while retaining the supporting build/test corrections and native exit management. A full PR revert also restores the prior font preload and sentinel/DNS behavior; rerun the production build and test gates before releasing that broader rollback. Preserve scanner evidence for diagnosis.
 diff --git a/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
 new file mode 100644
-index 00000000..90bbc4a0
+index 00000000..4ab402ac
 --- /dev/null
 +++ b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
 @@ -0,0 +1,33 @@
@@ -134,7 +139,7 @@ index 00000000..90bbc4a0
 +
 +> **Non-canonical historical notes.** This file records the original implementation discussion; it does not grant authority, establish release readiness, or replace current requirements. Canonical release and authorship rules are in [CLAUDE.md](../../../CLAUDE.md) and [DECISIONS.md](../../implementation-plan/DECISIONS.md). Current acceptance mappings are in [R00](../../delivery/plans/R00-cc-sip-scanner.json), the implemented contract and operations are in the [runbook](../../runbooks/CC-SIP-SCANNER.md), and delivered changes are recorded in the [CHANGELOG](../../implementation-plan/CHANGELOG.md). Historical prerequisites and proposed filenames below may have changed.
 +
-+Spec: docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md. Native execution, approved in conversation. Platform base 1e32fd9, Command Center base 2f7bef3. Constraints: Schwab stock data, Redis durability, authenticated/fresh result, unchanged trading/risk capital, isolated feature branches, no production deployment/merge.
++Spec: docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md. Historical execution notes for native integration. Platform base 1e32fd9, Command Center base 2f7bef3. Constraints: Schwab stock data, Redis durability, authenticated/fresh result, unchanged trading/risk capital, isolated feature branches, no production deployment/merge.
 +
 +## Task 1: Pure contract and calculation
 +
@@ -165,7 +170,7 @@ index 00000000..90bbc4a0
 +- Pending universe never bypasses risk controls or blocks adopted-position exits; healthy zero remains distinct from unavailable data.
 diff --git a/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md b/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
 new file mode 100644
-index 00000000..166397c3
+index 00000000..1032f3fd
 --- /dev/null
 +++ b/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
 @@ -0,0 +1,33 @@
@@ -173,7 +178,7 @@ index 00000000..166397c3
 +
 +> **Non-canonical historical notes.** This file records the original implementation discussion; it does not grant authority, establish release readiness, or replace current requirements. Canonical release and authorship rules are in [CLAUDE.md](../../../CLAUDE.md) and [DECISIONS.md](../../implementation-plan/DECISIONS.md). Current acceptance mappings are in [R00](../../delivery/plans/R00-cc-sip-scanner.json), the implemented contract and operations are in the [runbook](../../runbooks/CC-SIP-SCANNER.md), and delivered changes are recorded in the [CHANGELOG](../../implementation-plan/CHANGELOG.md). Historical prerequisites and proposed filenames below may have changed.
 +
-+Approved intent: prepare history before open, rank completed opening-window volume after 09:35 Eastern, authenticate the Command Center read, and test the paper entry/exit loop. The owner said “please proceed”; implementation stays native in this session. Platform main and native production branches are not modified by development.
++Original design outline: prepare history before open, rank completed opening-window volume after 09:35 Eastern, authenticate the Command Center read, and test the paper entry/exit loop. These historical notes describe the native integration and isolated feature-branch work. Current release requirements are documented in the canonical sources linked above.
 +
 +## Contract and strategy
 +
@@ -204,10 +209,10 @@ index 00000000..166397c3
 +TDD covers ratio/ATR/filter boundaries, completed-window coverage, holiday/DST, unknown instruments, finite numbers, auth separation, read-only endpoint paths, safe errors, Redis failure/locking/idempotence, job windows and read readiness. Command Center covers delayed readiness, retries/deadline, valid empty vs malformed, date/freshness and actual SIP paper signal/risk/fill/EOD exit. Platform focused tests, typecheck/build where available, cron/registry guards and Command Center full tests/harness run before delivery. Publish review branches/draft PR if supported; no merge or production deployment without approval. Native Windows installation remains a separate verified transfer step. Portfolio capital configuration remains pending and unchanged.
 diff --git a/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
 new file mode 100644
-index 00000000..6a06b150
+index 00000000..bb6ee644
 --- /dev/null
 +++ b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,188 @@
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 +import type { Redis } from "@upstash/redis";
 +import { SipStore } from "@/lib/sip/store";
@@ -240,7 +245,8 @@ index 00000000..6a06b150
 +  });
 +
 +  beforeEach(() => {
-+    vi.clearAllMocks();
++    telemetry.start.mockReset().mockResolvedValue(17);
++    telemetry.finish.mockReset().mockResolvedValue(undefined);
 +    vi.useFakeTimers();
 +    vi.setSystemTime(sessionTime("2026-10-06", 545));
 +    vi.stubEnv("CRON_SECRET", "fixture-cron-secret");
@@ -282,7 +288,7 @@ index 00000000..6a06b150
 +    expect(response.status).toBe(503);
 +    expect(await response.json()).toEqual({ error: "SIP_STORAGE_FAILED" });
 +    expect(telemetry.finish).toHaveBeenCalledWith(17, "failure", {
-+      phase: "prepare", error: "SIP_STORAGE_FAILED",
++      cronName: "cc-sip-scanner", phase: "prepare", error: "SIP_STORAGE_FAILED",
 +    });
 +  });
 +
@@ -312,6 +318,54 @@ index 00000000..6a06b150
 +    expect(response.status).toBe(401);
 +    expect(telemetry.start).not.toHaveBeenCalled();
 +  });
++  it.each([false, true])("bounds a rejected telemetry bootstrap with fallback rejection=%s", async (rejectFallback) => {
++    telemetry.start.mockRejectedValue(new Error("private-bootstrap-payload"));
++    if (rejectFallback) telemetry.finish.mockRejectedValue(new Error("private-fallback-payload"));
++    const store = vi.spyOn(SipStore, "fromEnvironment");
++    const log = vi.spyOn(console, "error").mockImplementation(() => {});
++    const response = await GET(request());
++    expect(response.status).toBe(503);
++    expect(response.headers.get("Cache-Control")).toContain("no-store");
++    expect(await response.json()).toEqual({ error: "SIP_SCANNER_FAILED" });
++    expect(store).not.toHaveBeenCalled();
++    expect(telemetry.finish).toHaveBeenCalledWith(null, "failure", { cronName: "cc-sip-scanner", phase: "prepare", error: "SIP_SCANNER_FAILED" });
++    expect(log).toHaveBeenCalledWith("[cc-sip]", JSON.stringify({ runId: null, phase: "prepare", error: "SIP_SCANNER_FAILED" }));
++    expect(JSON.stringify(log.mock.calls)).not.toContain("private-bootstrap-payload");
++    expect(JSON.stringify(log.mock.calls)).not.toContain("private-fallback-payload");
++  });
++  it("preserves the original failure response when failure telemetry also rejects", async () => {
++    vi.stubEnv("SIP_SCANNER_SECRET", "short");
++    telemetry.finish.mockRejectedValue(new Error("private-completion-payload"));
++    const log = vi.spyOn(console, "error").mockImplementation(() => {});
++    const response = await GET(request());
++    expect(response.status).toBe(503);
++    expect(response.headers.get("Cache-Control")).toContain("no-store");
++    expect(await response.json()).toEqual({ error: "SIP_SCANNER_CONFIGURATION" });
++    expect(log).toHaveBeenCalledWith("[cc-sip]", JSON.stringify({ runId: 17, phase: "prepare", error: "SIP_TELEMETRY_FAILED" }));
++    expect(JSON.stringify(log.mock.calls)).not.toContain("private-completion-payload");
++  });
++  it("bounds rejected completion telemetry on the ordinary contention path", async () => {
++    const redis = { set: vi.fn<Redis["set"]>().mockResolvedValue(null),
++      get: vi.fn<Redis["get"]>().mockResolvedValue(null), eval: vi.fn<Redis["eval"]>() };
++    vi.spyOn(SipStore, "fromEnvironment").mockReturnValue(new SipStore(redis));
++    telemetry.finish.mockRejectedValue(new Error("private-completion-payload"));
++    vi.spyOn(console, "error").mockImplementation(() => {});
++    const response = await GET(request());
++    expect(response.status).toBe(503);
++    expect(response.headers.get("Cache-Control")).toContain("no-store");
++    expect(await response.json()).toEqual({ error: "SIP_SCANNER_FAILED" });
++  });
++  it("preserves best-effort null bootstrap and attributes its terminal fallback to the scanner", async () => {
++    telemetry.start.mockResolvedValue(null);
++    const redis = { set: vi.fn<Redis["set"]>().mockResolvedValue(null),
++      get: vi.fn<Redis["get"]>().mockResolvedValue(null), eval: vi.fn<Redis["eval"]>() };
++    vi.spyOn(SipStore, "fromEnvironment").mockReturnValue(new SipStore(redis));
++    const response = await GET(request());
++    expect(response.status).toBe(202);
++    expect(telemetry.finish).toHaveBeenCalledWith(null, "success", expect.objectContaining({
++      cronName: "cc-sip-scanner", status: "busy", skipped: true,
++    }));
++  });
 +  it.each(["", "short", "fixture-monitor-secret-32-characters"])("refuses invalid scanner configuration %s before storage/provider work", async (secret) => {
 +    vi.stubEnv("SIP_SCANNER_SECRET", secret);
 +    vi.stubEnv("MONITOR_SECRET", secret);
@@ -323,7 +377,7 @@ index 00000000..6a06b150
 +    expect(store).not.toHaveBeenCalled();
 +    expect(provider).not.toHaveBeenCalled();
 +    expect(telemetry.finish).toHaveBeenCalledWith(17, "failure", {
-+      phase: "prepare", error: "SIP_SCANNER_CONFIGURATION",
++      cronName: "cc-sip-scanner", phase: "prepare", error: "SIP_SCANNER_CONFIGURATION",
 +    });
 +  });
 +
@@ -349,10 +403,10 @@ index 00000000..6a06b150
 +});
 diff --git a/src/app/api/cron/cc-sip-scanner/route.ts b/src/app/api/cron/cc-sip-scanner/route.ts
 new file mode 100644
-index 00000000..b463c830
+index 00000000..d035322d
 --- /dev/null
 +++ b/src/app/api/cron/cc-sip-scanner/route.ts
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,74 @@
 +import { ALL_SYMBOLS } from "@/config/watchlist";
 +import { SYMBOL_SECTOR } from "@/config/universeSectors";
 +import { startCronRun, finishCronRun } from "@/lib/cronRunLog";
@@ -379,8 +433,9 @@ index 00000000..b463c830
 +    phase = phaseAt(now);
 +  if (process.env.SIP_SCANNER_ENABLED !== "true" || !phase)
 +    return Response.json({ status: "skipped" }, { headers: NO_STORE });
-+  const runId = await startCronRun("cc-sip-scanner", { phase });
++  let runId: number | null = null;
 +  try {
++    runId = await startCronRun("cc-sip-scanner", { phase });
 +    if (!scannerAuthConfigured(authEnvironment()))
 +      throw new SipUnavailable("SIP_SCANNER_CONFIGURATION");
 +    const universe = stockUniverse(ALL_SYMBOLS, SYMBOL_SECTOR);
@@ -406,7 +461,7 @@ index 00000000..b463c830
 +    console.info("[cc-sip]", JSON.stringify({ runId, at: now.toISOString(), ...summary }));
 +    // An owned overlapping run is already doing the work. Keep contention
 +    // visible as busy/skipped without triggering the cron failure feed.
-+    await finishCronRun(runId, !result || complete ? "success" : "failure", summary);
++    await finishCronRun(runId, !result || complete ? "success" : "failure", { cronName: "cc-sip-scanner", ...summary });
 +    return Response.json(summary, {
 +      status: !result ? 202 : complete ? 200 : 503,
 +      headers: NO_STORE,
@@ -417,7 +472,12 @@ index 00000000..b463c830
 +        ? error.code
 +        : "SIP_SCANNER_FAILED";
 +    console.error("[cc-sip]", JSON.stringify({ runId, phase, error: code }));
-+    await finishCronRun(runId, "failure", { phase, error: code });
++    try {
++      // A null ID lets the existing helper attempt a terminal fallback row.
++      await finishCronRun(runId, "failure", { cronName: "cc-sip-scanner", phase, error: code });
++    } catch {
++      console.error("[cc-sip]", JSON.stringify({ runId, phase, error: "SIP_TELEMETRY_FAILED" }));
++    }
 +    return Response.json({ error: code }, { status: 503, headers: NO_STORE });
 +  }
 +}

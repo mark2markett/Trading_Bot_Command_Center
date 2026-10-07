@@ -8,19 +8,30 @@ SIP ORB currently has no scanner source. This change supplies its existing unive
 
 ## Validation
 
-The source at e8146e8 passed the complete local platform suite: 9050 passed, 1 expected failure, 13 skipped and 11 todo. Its production build also passed. Fresh release checks passed 52 scanner/dispatcher tests and 34 production-boundary tests, TypeScript checks, cron-manifest checks and control-plane registry checks. The acceptance-plan schema and requirement coverage passed. The added acceptance plan changes no application code.
+The revised source passed the complete local platform suite: 9105 passed, 1 expected failure, 13 skipped and 11 todo. The production build, TypeScript checks, scoped lint, cron/control-plane registries, file-size/any-count gates and client/server/curator boundaries passed. Regression cases first failed on the original historical-code and contention-reporting defects, then passed with the corrections. A separate read-only local reviewer independently ran all 37 scanner/route tests and found no remaining blockers. Local review does not replace the GitHub independent review on the revised head.
 
-The branch has a clean merge with main e8d193c3. These are local results, not GitHub review, deployment, live provider or native scheduler certification. No production credentials were used by the tests.
+The feature branch is synced with main e8d193c3; both implementation-plan changelog histories are preserved and the merge is clean. These are local results, not GitHub review, deployment, live provider or native scheduler certification. No production credentials were used by the tests.
 
 ## Independent review and release
 
-The separate GitHub Codex adversarial review and all required checks must pass on the current head before owner merge. Run `node scripts/delivery-gate.mjs readiness <PR-number>` from that head and inspect the Vercel preview check too. Only Mark merges under D-021/D-031; this authoring session has not self-cleared release.
+This description is informational, not governance authority. Canonical release requirements are in CLAUDE.md, D-021/D-031 and docs/delivery/ACCEPTANCE.md: separate GitHub Codex adversarial review, required checks and the preview must pass on the current head before owner merge. The canonical readiness verifier is scripts/delivery-gate.mjs; its output and external preview evidence, rather than PR prose, establish readiness. The authoring session has not self-cleared release.
 
-After merge, confirm the production deployment is READY and configure the dedicated scanner secret, existing Schwab/Redis inputs and enabled flag through secure deployment settings. Verify a fresh authenticated snapshot at 09:35–09:39 Eastern. Configuration details: docs/runbooks/CC-SIP-SCANNER.md. Do not place credential values in the PR.
+Production uses the owner-merged main commit/release artifact, with a READY production deployment tied to that commit. Secure dedicated scanner authentication, existing Schwab/Redis inputs and the enabled flag remain deployment prerequisites. Operational proof requires a fresh authenticated snapshot at 09:35–09:39 Eastern. Configuration details are in docs/runbooks/CC-SIP-SCANNER.md; credential values are not part of this PR.
 
 ## Plan and GATES impact
 
-The new R00 plan covers the bounded integration. It does not change requirement outcomes/criteria, GATES history, CURRENT-STATE completion records, DECISIONS or trading authority. No product completion or live-readiness claim is recorded. The native shared $100,000 paper account repair is a separate Command Center change.
+The R00 plan covers the bounded integration and now includes actual cron-route regressions. The dated implementation-plan CHANGELOG records the logical job, endpoints, Redis contract, runbook, acceptance plan and review corrections. Requirement outcomes/criteria, GATES history, CURRENT-STATE completion records, DECISIONS and trading authority are unchanged. No gate-row closure, product completion or live-readiness claim is recorded. The native shared $100,000 paper account repair is a separate Command Center change.
+
+## Response to the first independent review
+
+- B-1: the runbook now identifies the owner-merged main release as the production deployment source; a feature preview is only build evidence.
+- B-2: the implementation-plan CHANGELOG records the bounded operational addition and explicitly records no gate-row closure.
+- C-1: release text is declarative and explicitly subordinate to canonical governance and current-head checks.
+- C-2: historical SipExcluded error codes are retained, with regression cases for missing, malformed and duplicated opening bars; unknown errors retain the generic history code.
+- C-3: real lease contention remains HTTP 202 busy/skipped and uses the existing non-failure cron convention. Actual storage outages and provider-incomplete preparation retain failures, tested through the real route and scanner with external persistence/provider boundaries replaced by fixtures.
+- N-1: clock is a static import; the existing machine-response tests verify the behavior.
+
+These responses are implementation evidence, not independent approval. The revised head requires a fresh GitHub review.
 
 ## Risks and rollback
 

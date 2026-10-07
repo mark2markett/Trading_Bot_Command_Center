@@ -1,9 +1,62 @@
+diff --git a/docs/PROJECT-GOVERNANCE.md b/docs/PROJECT-GOVERNANCE.md
+index 05cf994c..257a125a 100644
+--- a/docs/PROJECT-GOVERNANCE.md
++++ b/docs/PROJECT-GOVERNANCE.md
+@@ -227,6 +227,31 @@ For web browsing use the gstack `/browse` skill (rule in CLAUDE.md). Available g
+   (src/lib/ivRank.ts); est. move over the contract's life (em30 × √(dte/30)); breakeven distance ÷ that
+   move; (intrinsic at target − debit) ÷ debit; |theta| ÷ debit. Rule 3 (vendor inputs + transparent
+   calculation); rendered est. per Rule 1. These are interpretation inputs only: no gate or rank uses them.
++- **Slate short-positioning change (src/lib/slate/planPositioning.ts, ORTEX-SLATE-1)**: relative change of
++  Ortex short interest as % of free float, (latest − earlier) ÷ earlier × 100, where "earlier" is the bulk
++  snapshot five COMPLETE manifests back, or for a name outside the snapshot the per-ticker history row five
++  rows back. Both values are Ortex-measured; Rule 3; rendered est. with both values and dates shown. Also
++  shares available to borrow ÷ shares sold short (both Ortex share counts; est.). Ortex's
++  `short_availability_pct` is not displayed (its definition is unverified; only the 9999 sentinel is read).
++  Context only: no gate or rank uses either.
++
++- **After-open tape facts and status (src/lib/open/tapeFacts.ts, OPEN-VIEW-1)**: from Polygon 1-minute bars,
++  the snapshot and daily aggregates: gap % = (open − prior close) ÷ prior close; % since the open = (last − open)
++  ÷ open (both × 100); the 09:30-09:59 ET opening range (high/low of those bars) and the 04:00-09:29 ET pre-market range;
++  volume share = day volume so far ÷ mean full-day volume of the last 20 completed sessions; null unless all 20 are present and positive (a zero-volume day is a data gap, not a session).
++  Status per card is the owner-approved OPEN-VIEW-1 table on last vs the opening range and the vendor VWAP
++  (approved in advance, Rule 2, 2026-10-05), completed by OPEN-VIEW-2 (2026-10-06): through the range but not on
++  the right side of VWAP is Not confirming; a stop hit is Invalidated at any time. Rule 3 inputs;
++  rendered est. per Rule 1; percentages are percentage points (gap % = ((open − prior close) ÷ prior close) × 100;
++  % since the open = ((last − open) ÷ open) × 100). Precedence: a stop hit → `forming` before 10:00 ET → `unknown`
++  when inputs are missing → the table. Before 10:00 ET no status (Confirming / Waiting / Not confirming / Invalidated) is
++  shown: the row reads "Range forming", the absence of a status, as in the mockup approved with OPEN-VIEW-1; the only
++  exception is a stop hit, which OPEN-VIEW-2 shows as Invalidated at any time. Display only: no gate, level or rank uses them.
++
++- **After-open market strip (/the-open owner view, src/lib/open/afterOpenModel.ts, OPEN-VIEW-1)**: for SPY, QQQ, IWM,
++  the eleven SPDR sector ETFs and SMH, % change = ((last − prior close) ÷ prior close) × 100 and the side of the vendor
++  day VWAP (above / below / at), from the Polygon stocks snapshot; VIX and its change are Yahoo values as read. Rule 3;
++  the % change renders est. per Rule 1; a missing vendor field shows "—", never 0. Display only.
+ 
+ ## Change history
+ 
+diff --git a/docs/REVIEWER-DECISIONS.md b/docs/REVIEWER-DECISIONS.md
+index 81397cd4..93ff36d3 100644
+--- a/docs/REVIEWER-DECISIONS.md
++++ b/docs/REVIEWER-DECISIONS.md
+@@ -8,9 +8,11 @@ One dated entry per decision; mirror the most material into `CURRENT-STATE.md`.
+ 
+ | Date | ID | Decision |
+ |------|----|----------|
++| 2026-10-06 | **OPEN-VIEW-2** | **Owner decided the two after-open cases OPEN-VIEW-1 left open** (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "I approve #1.", 2026-10-06 EDT, session `112ab263`, in reply to the two recommendations with worked examples). (A) A card through its opening range in its own direction but not on the right side of VWAP (bullish above the range high while at or below VWAP; bearish mirrored) is **Not confirming**: VWAP decides a breakout. (B) A stop hit is **Invalidated** at any time, before 10:00 ET included; otherwise the pre-10:00 "forming" rule stands. The `unclassified` status is removed. Display only, as OPEN-VIEW-1. Implementation: `src/lib/open/tapeFacts.ts`. |
+ | 2026-10-05 | **OPEN-VIEW-1** | **Owner approved the after-open view: status rules, placement and volume measure** (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "yes", 2026-10-05 EDT, session `112ab263`, in reply to four listed items after reviewing two mockups built on real 2026-10-05 Polygon values). Status per qualifying setup, bullish shown, bearish mirrored: Confirming = last above the 30-minute opening-range high and above VWAP; Waiting = inside the range and at or above VWAP; Not confirming = inside the range and below VWAP; Invalidated = below the range low or at or through the stop. Before 10:00 ET the range is forming and no status is shown. Display only: no gate or rule-based order changes. Placement: the view becomes `/the-open`, the owner's 09:30-to-close landing. Volume: volume so far as a share of the 20-day average day (est.). Plan: `docs/AFTER-OPEN-VIEW-PLAN-2026-10-05.md`. |
+-| 2026-10-05 | **DAY-READS-1** | **Owner set the expert read's daytime cadence to 9:00, 11:00, 13:00 and 15:00 ET** (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "i would assume the value for the day would be the review prior to market open (9AM) and at 11AM and at 1PM and at 3PM", 2026-10-05 EDT, session `112ab263`; confirmed with "yes"). Each read adds the facts for its slot (pre-open gap and catalysts; opening range, VWAP and volume; midday and open positions; last hour) to the plan facts and runs the same lens pipeline; every attempt is stored. The nightly read remains the next-day plan and the only read scored under EXPERT-READ-GRADING-1. The `read_slot` storage change is a migration that needs separate owner approval. No on-demand re-read button. |
++| 2026-10-05 | **DAY-READS-1** | **Owner set the expert read's daytime cadence to 9:00, 11:00, 13:00 and 15:00 ET** (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "i would assume the value for the day would be the review prior to market open (9AM) and at 11AM and at 1PM and at 3PM", 2026-10-05 EDT, session `112ab263`; confirmed with "yes"). Each read adds the facts for its slot (pre-open gap and catalysts; opening range, VWAP and volume; midday and open positions; last hour) to the plan facts and runs the same lens pipeline; every attempt is stored. The nightly read remains the next-day plan and the only read scored under EXPERT-READ-GRADING-1. The `read_slot` storage change is a migration that needs separate owner approval. No on-demand re-read button. Migration approved 2026-10-06 (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "approve the read_slot migration") and applied as `20261006164647_plan_interpretations_read_slot.sql`. |
+ | 2026-10-05 | **ANTHROPIC-INTERPRETER-2** | **Owner extended the Anthropic scoped exception from the setup interpreter to the ask box** (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "yes", 2026-10-05 EDT, session `112ab263`, in reply to "ask box: use the expert agents on the Anthropic model, which extends your Anthropic approval"). The ask box answers from the same expert agent instructions and facts as the latest read plus live tape facts; a number in an answer is allowed only when it exactly matches a value in the supplied facts and is cited by fact ID (validator), and it refuses when the facts do not cover a question. The expert read itself keeps its stricter rule: no numbers in model text. It replaces the generic gpt-5-mini drawer. Enforcement boundary: the model is called only through `src/lib/slate/interpret/anthropicInterpreterClient.ts`, the one file `SCOPED_PROVIDER_EXCEPTIONS` in `scripts/ci/openai-runtime-only.mjs` already waives; the ask route imports that client and holds no provider references, so the CI allowlist does not change. Every other runtime path stays OpenAI-only. |
++| 2026-10-05 | **ORTEX-SLATE-1** | **Ortex short positioning is put in front of the Slate decision, step 1 at zero credits and step 2 owner-approved** (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "I approve step 2", 2026-10-05 EDT, session `112ab263`, in reply to a two-step proposal after the owner asked to use the paid Ortex short-interest data correctly within the 10,000-credit monthly budget). Measured basis (ortex_credit_ledger, last 40 days): the daily S&P 500 positioning snapshot is about 95% of spend (~304 credits per run), targeted per-name short-interest reads cost 2.04 credits each (~300 credits in 40 days), and Ortex's per-name borrow-rate endpoint answered 400 on every call. Step 1 (this PR, no credits): the Slate plan rows and the expert-read FLOW facts show short interest % of free float, its change against the snapshot five sessions earlier (derived, est.), days to cover, cost to borrow and shares available to borrow ÷ shares already short (derived, est.), read only from stored data (bulk snapshot, else the per-ticker cache). The prompt version moves to plan-interpret.v2 before any graded session, as EXPERT-READ-GRADING-1 requires for a prompt change. Step 2 (follow-up PR, owner-approved): a post-close job refreshes per-name short interest for Slate-qualifying single stocks outside the S&P 500 snapshot, at most ten names a session, through the existing budget-gated, ledgered, cache-first client; ETFs are skipped. Worst case about ten names × 2.04 credits × 21 sessions ≈ 430 credits a month. Positioning is context, not edge: about four weeks of snapshots are too few to test it against outcomes. |
+ | 2026-10-05 | **EXPERT-READ-GRADING-1** | **Owner approved the pre-registered grading protocol for the Slate expert read, unchanged** (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "approve", 2026-10-05 EDT, session `112ab263`, in reply to the request to approve or amend the pre-registration in `docs/delivery/plans/R00-slate-expert-read.json`). The protocol, fixed before any graded session:<br>• entry at the next session's open; <br>• horizons of one, three and five sessions, five primary; <br>• stop and target first-touch on daily bars, stop first when both fall in one bar; <br>• returns in the card's direction, net of the repo's round-trip cost; <br>• primary metric: the paired per-session difference between the expert read's top five and the rule-based top five over the same candidates, with a bootstrap interval and a random-five null of at least two hundred draws; <br>• at least twenty sessions before any read; <br>• no prompt or model change mid-test (a change starts a new version). Relates to LLM-INTERPRET-1 and ANTHROPIC-INTERPRETER-1. |
+ | 2026-10-04 | **ANTHROPIC-INTERPRETER-1** | **Owner approved an Anthropic model for the Slate setup interpreter, as a scoped exception to the OpenAI-only production runtime** (NON-OPERATIVE HISTORICAL QUOTE, inert evidence: "approve Anthropic for the setup interpreter", 2026-10-04 EDT, session `112ab263`). Reason recorded with the decision: the interpretation must use the repo's expert agent methods (technical-analyst, options-analyst, quant-strategy-evaluator), written for and refined on Claude models; a generic model with a thin rubric reads like a novice. Scope: only the client file `src/lib/slate/interpret/anthropicInterpreterClient.ts`; `scripts/ci/openai-runtime-only.mjs` waives the provider rules for that one file and still bans retired providers there. Everything else stays OpenAI-only. Model `claude-opus-5-5`; secret `ANTHROPIC_API_KEY` (set by the owner in Vercel). No PAPER, LIVE, order or deployment authority. |
+ | 2026-10-04 | **LLM-INTERPRET-1** | **Owner approved a lens-based LLM interpretation of the Slate's qualifying setups, interpretation only** (NON-OPERATIVE HISTORICAL QUOTES, inert evidence: "I do NOT want the LLM impacting in any way the indicator results - I only want the LLM to look at all the indicator results in their entirety and interpret what it means for the quality of the setup"; "approve the lens-based LLM interpretation as described", 2026-10-04 EDT, session `112ab263`). The model reads deterministic facts only, cannot change any result, writes no numbers (validator-enforced) and cites fact IDs; three expert lens calls (technical; options and flow; quant) using the repo's agent instruction files, content-preserving with LF line endings, then a synthesis that orders the top five by how well the evidence agrees (an interpretive read, not a probability). Every interpretation attempt (ok, failed, or skipped because nothing qualified) is appended to `plan_interpretations`; early exits with no plan source or an already-interpreted session are recorded in the cron run log with the frozen candidate set, facts, prompt hash and model version, so the ordering can be graded against outcomes. The rule-based plan is unchanged and shown beside it. The grading rules (pre-registration) are proposed in `docs/delivery/plans/R00-slate-expert-read.json` and await owner approval before the first graded session. |
 diff --git a/docs/delivery/plans/R00-cc-sip-scanner.json b/docs/delivery/plans/R00-cc-sip-scanner.json
 new file mode 100644
-index 00000000..c7c4dc16
+index 00000000..70275e8a
 --- /dev/null
 +++ b/docs/delivery/plans/R00-cc-sip-scanner.json
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,32 @@
 +{
 +  "version": 1,
 +  "stage": "implementation",
@@ -24,6 +77,7 @@ index 00000000..c7c4dc16
 +    {"runner": "vitest", "file": "src/lib/sip/__tests__/calculation.test.ts", "covers": ["R00-behavior"]},
 +    {"runner": "vitest", "file": "src/lib/sip/__tests__/service.test.ts", "covers": ["R00-behavior", "R00-regression"]},
 +    {"runner": "vitest", "file": "src/lib/sip/__tests__/infrastructure.test.ts", "covers": ["R00-behavior", "R00-regression"]},
++    {"runner": "vitest", "file": "src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts", "covers": ["R00-regression"]},
 +    {"runner": "vitest", "file": "src/lib/controlPlane/__tests__/jobRegistry.test.ts", "covers": ["R00-regression"]},
 +    {"runner": "vitest", "file": "src/lib/controlPlane/__tests__/dispatcher.test.ts", "covers": ["R00-regression"]},
 +    {"runner": "vitest", "file": "tests/acceptance/autotrader/AT00.test.ts", "covers": ["R00-regression"]}
@@ -35,9 +89,281 @@ index 00000000..c7c4dc16
 +    "This plan changes no requirement criteria, GATES history, portfolio capital, trading strategy, execution mode or existing platform product scope. The native shared-paper-account repair is delivered separately."
 +  ]
 +}
+diff --git a/docs/delivery/plans/R00-open-tape-facts.json b/docs/delivery/plans/R00-open-tape-facts.json
+new file mode 100644
+index 00000000..72c1e5f2
+--- /dev/null
++++ b/docs/delivery/plans/R00-open-tape-facts.json
+@@ -0,0 +1,34 @@
++{
++  "version": 1,
++  "stage": "implementation",
++  "requirements": [
++    "R00"
++  ],
++  "owner_outcome": "OPEN-VIEW-1 (2026-10-05): per qualifying setup, the after-open view can say whether the tape confirms the card (opening range plus VWAP), with gap, move since the open and volume share as est. context.",
++  "rollback": "Revert the PR: a new pure module, its tests and fixture, and docs. Nothing imports it yet.",
++  "criteria": [
++    {
++      "id": "R00-behavior",
++      "expected": "computeTapeFacts derives the 09:30-09:59 ET opening range, the 04:00-09:29 ET pre-market range, gap %, % since the open and the volume share = day volume so far ÷ mean full-day volume of the last 20 completed sessions; null unless all 20 are present and positive (a zero-volume day is a data gap, not a session), from vendor values only. classifyTape applies the approved OPEN-VIEW-1 table (bullish shown, bearish mirrored), completed by OPEN-VIEW-2 (through the range but not on the right side of VWAP is not confirming; a stop hit is invalidated at any time); precedence: a stop hit, then forming before 10:00 ET, then unknown when inputs are missing, then the table. On real 2026-10-05 Polygon bars at 12:57 ET: MMM confirming, MCHP waiting, NVDA and MARA not confirming, NBIS, PATH and BAC invalidated."
++    },
++    {
++      "id": "R00-regression",
++      "expected": "No existing module imports the new file; the full suite and repo gates pass."
++    }
++  ],
++  "tests": [
++    {
++      "runner": "vitest",
++      "file": "src/lib/open/__tests__/tapeFacts.test.ts",
++      "covers": [
++        "R00-behavior",
++        "R00-regression"
++      ]
++    }
++  ],
++  "limitations": [
++    "The fixture is a hybrid: prices are the Polygon snapshot read at 12:57 ET (MMM, MARA, NBIS at vendor precision; MCHP, NVDA, PATH, BAC to the cent), but its volume is the sum of 1-minute bar volume 09:30-12:56 ET, not the snapshot day volume; the volume-share checks prove the arithmetic, not the snapshot field.",
++    "The fixture's pre-market bars start at 08:00 ET; the full 04:00-09:29 window and its boundaries are locked by a synthetic test.",
++    "OPEN-VIEW-2 (2026-10-06) decided the two cases this plan first left open; the classifier no longer returns unclassified."
++  ]
++}
+diff --git a/docs/delivery/plans/R00-slate-positioning.json b/docs/delivery/plans/R00-slate-positioning.json
+new file mode 100644
+index 00000000..eddce7c1
+--- /dev/null
++++ b/docs/delivery/plans/R00-slate-positioning.json
+@@ -0,0 +1,65 @@
++{
++  "version": 1,
++  "stage": "implementation",
++  "requirements": [
++    "R00"
++  ],
++  "owner_outcome": "Owner decision ORTEX-SLATE-1 (2026-10-05): the Ortex short-positioning data already bought every day reaches the Slate plan rows and the expert read, without spending credits; names outside the S&P 500 snapshot are refreshed by a follow-up job within the approved budget.",
++  "criteria": [
++    {
++      "id": "R00-behavior",
++      "expected": "readPlanPositioning reads only ortex_positioning_manifests, ortex_positioning_snapshots and ortex_cache with GET (never the Ortex API): bulk values for names in the latest COMPLETE snapshot with the change against the snapshot five sessions back, else the newest per-ticker history row with short interest only; 9999 in short_availability_pct is unconstrained and the field is otherwise not used (unverified definition); availability is shares available ÷ shares short (derived); a store failure is read_failed and a name with no row is absent. getPlanBoardExtras returns positioning for every stock name and reports a failed read instead of throwing. buildPlanFacts adds FLOW facts (data date, short interest % float, change est., days to cover, cost to borrow, available ÷ short est.) and says what is not supplied outside the snapshot. extrasGap fails a run closed on read_failed. PlanRow and qualifying CompactRow render one positioning line with the data date, the change in est. style, and 'none on file' when absent. PLAN_INTERPRET_PROMPT_VERSION is plan-interpret.v2."
++    },
++    {
++      "id": "R00-regression",
++      "expected": "Full suite passes; tsc, eslint and the repo gates pass; no Ortex call path is added (no import of ortexService or ortexTargetedClient in the new reader)."
++    }
++  ],
++  "tests": [
++    {
++      "runner": "vitest",
++      "file": "src/lib/slate/__tests__/planPositioning.test.ts",
++      "covers": [
++        "R00-behavior",
++        "R00-regression"
++      ]
++    },
++    {
++      "runner": "vitest",
++      "file": "src/lib/slate/interpret/__tests__/planFacts.test.ts",
++      "covers": [
++        "R00-behavior"
++      ]
++    },
++    {
++      "runner": "vitest",
++      "file": "src/lib/slate/interpret/__tests__/planInterpret.test.ts",
++      "covers": [
++        "R00-behavior"
++      ]
++    },
++    {
++      "runner": "vitest",
++      "file": "src/lib/slate/__tests__/planBoardExtras.test.ts",
++      "covers": [
++        "R00-behavior"
++      ]
++    },
++    {
++      "runner": "vitest",
++      "file": "src/components/slate/__tests__/planTableLayout.test.tsx",
++      "covers": [
++        "R00-behavior",
++        "R00-regression"
++      ]
++    }
++  ],
++  "rollback": "Revert the PR: the positioning line, the FLOW positioning facts and the reader are removed and the expert read returns to plan-interpret.v1. No schema or schedule change to undo.",
++  "limitations": [
++    "Ortex's per-name borrow-rate endpoint answered 400 on every ledgered call, so names outside the S&P 500 snapshot carry short interest only (no days to cover, borrow cost or availability).",
++    "The per-ticker cache can be days old until step 2's refresh job ships; the data date is always shown.",
++    "About four weeks of snapshots exist, too few to test positioning against outcomes; it is context, not edge.",
++    "The expert read's first nightly run on 2026-10-05 runs at plan-interpret.v1 if this PR has not merged by then; v2 starts with the first run after merge, before any graded session.",
++    "Ortex's short_availability_pct does not equal available ÷ short or a share of float on real rows (e.g. MCHP 3192 vs 13.9×), so it is not shown here; the existing /slate/[symbol] short-interest card still labels it a percentage (flagged separately)."
++  ]
++}
+diff --git a/docs/delivery/plans/R00-the-open-view.json b/docs/delivery/plans/R00-the-open-view.json
+new file mode 100644
+index 00000000..83a1ceec
+--- /dev/null
++++ b/docs/delivery/plans/R00-the-open-view.json
+@@ -0,0 +1,48 @@
++{
++  "version": 1,
++  "stage": "implementation",
++  "requirements": [
++    "R00"
++  ],
++  "owner_outcome": "OPEN-VIEW-1/-2 (2026-10-05/06): after the open, /the-open shows the owner which of today's qualifying setups the tape confirms, with the market context and the option, in one screen.",
++  "rollback": "Revert the PR: removes the owner section from /the-open and the src/lib/open readers/model; the existing owner board is unchanged underneath.",
++  "criteria": [
++    {
++      "id": "R00-behavior",
++      "expected": "For the owner audience only, /the-open renders the after-open view above the existing board: a strip (SPY/QQQ/IWM % change and VWAP side, VIX, sector ETFs) and today's qualifying single stocks (plan + also-qualify, ETFs excluded) grouped in the fixed order Confirming, Waiting, Not confirming, Range forming, No tape read, Invalidated, plan order kept inside each group. Each row shows the opening-range bar with VWAP and last, gap %, % since the open and volume share (est.), R:R from here (est.), stop -> target, the stored Ortex short-positioning line (ORTEX-SLATE-1; a failed store read is named), and when opened the suggested contract (est.) and pre-market range. On real 2026-10-05 data at 12:57 ET the groups are MMM; MCHP; NVDA, MARA; NBIS, PATH, BAC. One row per symbol (a name in both lists keeps its plan entry). Outside a trading day, or when the plan is unreadable, it makes no other vendor or store read and says so; each vendor read failure (snapshot batch, intraday bars, volume baseline, VIX, contracts, positioning) is named by symbol where it applies and leaves values empty, never filled; a zero vendor day volume shows no volume share."
++    },
++    {
++      "id": "R00-regression",
++      "expected": "Non-owner audiences and the existing owner board are unchanged; the full suite, tsc, lint and the file-size ratchet pass."
++    }
++  ],
++  "tests": [
++    {
++      "runner": "vitest",
++      "file": "src/lib/open/__tests__/afterOpen.test.ts",
++      "covers": [
++        "R00-behavior"
++      ]
++    },
++    {
++      "runner": "vitest",
++      "file": "src/app/the-open/_components/__tests__/AfterOpenBoard.test.tsx",
++      "covers": [
++        "R00-behavior"
++      ]
++    },
++    {
++      "runner": "vitest",
++      "file": "src/lib/open/__tests__/tapeFacts.test.ts",
++      "covers": [
++        "R00-behavior",
++        "R00-regression"
++      ]
++    }
++  ],
++  "limitations": [
++    "Live render was checked through an uncommitted local /learn harness against live Polygon data at 08:11 ET on 2026-10-06 (pre-open: six names, all Range forming); the in-session check after 10:00 ET is reported on the PR.",
++    "The expert read / ask box (plan PRs 4-5) are not in this PR.",
++    "Volume share compares volume so far with a full average day, so it reads low early in the session; this is stated on the page."
++  ]
++}
+diff --git a/docs/implementation-plan/CHANGELOG.md b/docs/implementation-plan/CHANGELOG.md
+index ecfd1283..effeca53 100644
+--- a/docs/implementation-plan/CHANGELOG.md
++++ b/docs/implementation-plan/CHANGELOG.md
+@@ -1,5 +1,56 @@
+ # M2M Plan v2 — Changelog
+ 
++## 2026-10-06 ET — Restore the Command Center paper SIP ORB scanner input (PR #1260)
++
++- **Bounded integration:** `/api/cron/cc-sip-scanner` prepares the existing verified stock universe before the open and publishes a frozen opening-window RVOL snapshot through the existing minute dispatcher. The authenticated read-only machine endpoint is `/api/internal/cc/sip-scanner`. Physical Vercel scheduling and order authority are unchanged.
++- **Durable contract:** date-scoped `cc:sip:v1:*` Redis state, owner-fenced leases and immutable seven-day snapshots distinguish pending, unavailable and valid empty results. Redis is required; no in-memory substitute. Historical malformed/incomplete window exclusions keep their specific codes. Lease contention remains visible as HTTP 202 busy/skipped and does not trigger a cron failure; storage/provider failures remain failures.
++- **Release and acceptance:** `docs/runbooks/CC-SIP-SCANNER.md` describes dedicated machine authentication, native inputs and production deployment from the owner-merged `main` release. `docs/delivery/plans/R00-cc-sip-scanner.json` maps the bounded restoration to executable checks, limits and rollback. PR prose is informational; canonical governance and current-head checks retain authority.
++- **Evidence boundary:** local regressions prove diagnostic distinctions; they do not prove production Redis, live provider history coverage, daily publication, native scheduling or operator acceptance. PR #1260's preview was reported READY; independent review requested these corrections and must rerun on the revised head.
++- **No gate-row closure or authority change:** GATES history and requirement criteria are unchanged. No migration, portfolio capital, trading mode, strategy or order change is introduced. The native shared paper-account repair was delivered separately.
++
++
++## 2026-10-06 ET — DAY-READS-1 storage: `plan_interpretations.read_slot`
++
++- **Owner-approved migration** `20261006164647_plan_interpretations_read_slot.sql`, applied to production and recorded here so the repository matches the database.
++- **Column:** `read_slot` ('nightly' default, or 09:00 / 11:00 / 13:00 / 15:00).
++- **Guard:** the one-ok-row guard is now per read slot, so a daytime read can never replace or block the nightly graded read.
++- **Existing rows** (two failed nightly attempts) read 'nightly'. No code reads the column yet; PR 4 of the after-open plan will.
++
++## 2026-10-06 ET — After-open view follow-ups (Codex concerns on #1257)
++
++- A forming row carries no status chip before 10:00 ET; its group heading says "Range forming" (OPEN-VIEW-1: no status shown before 10:00).
++- Tickers are displayed and linked uppercase.
++- The owner-only gate is a tested helper (`src/lib/open/afterOpenGate.ts`): only the OWNER audience sees the view, and a test pins that the page renders it only behind that gate.
++
++## 2026-10-06 ET — After-open view PR 3: the owner view on /the-open (OPEN-VIEW-1/-2)
++
++- **Placement:** `/the-open` shows the owner, first, "After the open":
++  - a market strip (SPY/QQQ/IWM % and VWAP side, VIX, sector ETFs);
++  - today's qualifying single-stock setups (plan + also-qualify) grouped by tape status.
++- **Each row:** the opening range drawn against VWAP and the last price, gap, % since the open, volume share, R:R from here, stop → target, the stored Ortex short-positioning line (ORTEX-SLATE-1, zero credits), and (opened) the suggested contract and pre-market range.
++- **Order:** groups are fixed (Confirming, Waiting, Not confirming, Range forming, No tape read, Invalidated); the plan's order is kept inside a group.
++- **Readers:** new `src/lib/open/tapeReader.ts` reads the Polygon snapshot (day VWAP, volume, open, prior close), 1-minute bars and daily volumes. Caches: 60 s for bars, per session date for daily volumes.
++- **Failures:** each vendor failure is named on the page and never filled.
++- **Out of this PR:** expert read and ask box (PRs 4-5).
++
++## 2026-10-06 ET — OPEN-VIEW-2: the two open after-open cases decided
++
++- Owner decision OPEN-VIEW-2 (`docs/REVIEWER-DECISIONS.md`):
++  - through the opening range but not on the right side of VWAP is **Not confirming**;
++  - a stop hit is **Invalidated** at any time, before 10:00 ET included.
++- `src/lib/open/tapeFacts.ts` no longer returns `unclassified`. Tests cover both rules and the bearish mirror.
++
++## 2026-10-06 ET — After-open view PR 2: tape facts and status classifier (OPEN-VIEW-1)
++
++- `src/lib/open/tapeFacts.ts`: pure functions over Polygon bars, the snapshot and daily volumes.
++  - Facts: opening range (09:30-09:59 ET), pre-market range, gap %, % since the open, volume share of the 20-day average day.
++  - Status: the approved Confirming / Waiting / Not confirming / Invalidated table; "forming" before 10:00 ET.
++- Fixture tests replay real 2026-10-05 bars: MMM Confirming, MCHP Waiting, NVDA and MARA Not confirming, NBIS, PATH and BAC Invalidated.
++- Two cases the approved table does not decide are returned as `unclassified` / `forming` and flagged for an owner decision:
++  - through the range on the wrong side of VWAP;
++  - a stop hit before 10:00 ET.
++- Derivations are registered in `docs/PROJECT-GOVERNANCE.md`. No page uses this yet (PR 3).
++
+ ## 2026-10-05 ET — After-open view, daily expert reads and ask box: owner decisions and build plan
+ 
+ - **Owner decisions OPEN-VIEW-1, DAY-READS-1, ANTHROPIC-INTERPRETER-2** (`docs/REVIEWER-DECISIONS.md`). They were made after open-time research (practitioner checklist, academic evidence, a visual review of seven retail tools) and two mockups on real 2026-10-05 Polygon values.
+@@ -11,6 +62,14 @@
+ - **Plan:** `docs/AFTER-OPEN-VIEW-PLAN-2026-10-05.md`, a six-PR build order, with acceptance checks per PR in `docs/delivery/plans/R00-after-open-view.json`. No code in this entry. The `read_slot` migration needs separate owner approval.
+ - **Cross-cutting:** row ANTHROPIC-SCOPE in `CROSS-CUTTING.md` records the one-file Anthropic boundary and its non-authority constraints; the ask box adds no file to the CI waiver.
+ 
++## 2026-10-05 ET — Slate short positioning from Ortex data already bought (ORTEX-SLATE-1, step 1)
++
++- **Owner decision ORTEX-SLATE-1.** The ledger shows the daily S&P 500 positioning snapshot is about 95% of Ortex spend, yet neither the Slate plan nor the expert read used it. Step 1 puts it there at zero credits; step 2 (owner-approved, follow-up PR) refreshes names outside the snapshot.
++- **Reader (`src/lib/slate/planPositioning.ts`).** Cache-only: the latest COMPLETE bulk snapshot (short interest % of free float, days to cover, cost to borrow, and shares available to borrow ÷ shares already short; Ortex's unverified `short_availability_pct` is not shown, only its 9999 "unconstrained" sentinel is read), the snapshot five sessions back for the change, else the newest per-ticker short-interest history in `ortex_cache` (short interest only). It never calls Ortex. A store failure is `read_failed`; a name with no row is data.
++- **Board.** Each plan row and qualifying stock row carries one positioning line: values plain, the change est., the Ortex data date, and "none on file" when absent. ETF rows show none.
++- **Expert read v2.** FLOW gains positioning facts and lens guidance (context, never a forecast or a squeeze call; for a bullish card heavy and rising short interest is a concern and covering agrees; for a bearish card crowding agrees but carries squeeze risk, and high borrow cost makes puts richer; old data weakens it). `PLAN_INTERPRET_PROMPT_VERSION` is `plan-interpret.v2`. A failed positioning read fails the run closed (`PLAN_INTERPRET_POSITIONING_UNAVAILABLE`).
++- **Evidence.** New `planPositioning.test.ts`; positioning cases in `planFacts.test.ts`, `planInterpret.test.ts`, `planBoardExtras.test.ts` and `planTableLayout.test.tsx`.
++
+ ## 2026-10-05 ET — Expert-read grading pre-registration approved (EXPERT-READ-GRADING-1)
+ 
+ - **Owner decision EXPERT-READ-GRADING-1.** The grading protocol proposed in `docs/delivery/plans/R00-slate-expert-read.json` (with #1251) moves from proposed to owner-approved, text unchanged. It is fixed before any graded session: next-open entry; one, three and five sessions, five primary; daily first-touch with stop first; net of round-trip cost; paired per-session difference between the expert top five and the rule-based top five, with a bootstrap interval and a random-five null of at least two hundred draws; at least twenty sessions before any read; a prompt or model change starts a new version. Recorded in `docs/REVIEWER-DECISIONS.md` and mirrored in `CURRENT-STATE.md`. No code, schema or schedule change.
+diff --git a/docs/implementation-plan/CURRENT-STATE.md b/docs/implementation-plan/CURRENT-STATE.md
+index 337eb4da..865f24ca 100644
+--- a/docs/implementation-plan/CURRENT-STATE.md
++++ b/docs/implementation-plan/CURRENT-STATE.md
+@@ -1,12 +1,21 @@
+ # M2M Plan v2 — CURRENT STATE
+ 
+-## After-open view and daily reads (as of 2026-10-05: decided, not yet built)
+-
+-- **OPEN-VIEW-1:** `/the-open` will show today's qualifying setups grouped by tape status (opening range plus VWAP rules), with gap, volume share, option and short positioning per row. Planned, not implemented.
+-- **DAY-READS-1:** expert reads at 09:00, 11:00, 13:00 and 15:00 ET on top of the nightly plan read. Planned. The storage change (`read_slot`) awaits migration approval.
+-- **ANTHROPIC-INTERPRETER-2:** the ask box will use the expert agents on Anthropic. Planned. The current `/slate/[symbol]` drawer is still gpt-5-mini.
++## After-open view and daily reads (OPEN-VIEW-1/-2, DAY-READS-1, ANTHROPIC-INTERPRETER-2)
++
++- **OPEN-VIEW-1/-2 (implemented):**
++  - **Classifier:** `src/lib/open/tapeFacts.ts`; OPEN-VIEW-2 decided the breakout-against-VWAP and early-stop cases.
++  - **Readers and model:** `src/lib/open/tapeReader.ts`, `afterOpenModel.ts`, `afterOpenData.ts`.
++  - **Owner view:** the first section of `/the-open` (`src/app/the-open/_components/AfterOpenBoard.tsx`). It shows today's qualifying setups grouped by tape status, with the market strip, gap, volume share, option and short positioning.
++- **DAY-READS-1 (not built):** expert reads at 09:00, 11:00, 13:00 and 15:00 ET on top of the nightly plan read. The storage change is applied: `plan_interpretations.read_slot` ('nightly' default; one ok row per session, slot, prompt version and hash).
++- **ANTHROPIC-INTERPRETER-2 (not built):** the ask box will use the expert agents on Anthropic. The current `/slate/[symbol]` drawer is still gpt-5-mini.
+ - **Plan:** `docs/AFTER-OPEN-VIEW-PLAN-2026-10-05.md`.
+ 
++## Slate short positioning (2026-10-05, ORTEX-SLATE-1)
++
++- **Step 1 (zero credits):** plan rows and the expert read's FLOW facts carry Ortex short positioning read from stored data only; the expert read is at prompt version `plan-interpret.v2`.
++- **Step 2 (owner-approved, not yet built):** post-close refresh of per-name short interest for Slate-qualifying single stocks outside the S&P 500 snapshot, at most ten a session (worst case ≈ 430 credits a month).
++- Ortex's per-name borrow-rate endpoint returns 400 on this account, so names outside the snapshot carry short interest only.
++
+ ## Slate expert read (2026-10-04, #1251)
+ 
+ - **LLM-INTERPRET-1 / ANTHROPIC-INTERPRETER-1:** the Slate shows an "Expert read" of the top five qualifying setups above the unchanged rule-based plan. Three lens calls run the repo's technical-analyst, options-analyst and quant-strategy-evaluator instruction files (content-preserving, LF line endings) on deterministic facts, then a synthesis orders them; interpretation only, no numbers in model text, every attempt stored append-only in `plan_interpretations`. Anthropic is allowed only in `src/lib/slate/interpret/anthropicInterpreterClient.ts`; the rest of the runtime stays OpenAI-only.
 diff --git a/docs/runbooks/CC-SIP-SCANNER.md b/docs/runbooks/CC-SIP-SCANNER.md
 new file mode 100644
-index 00000000..01951a2f
+index 00000000..585590f9
 --- /dev/null
 +++ b/docs/runbooks/CC-SIP-SCANNER.md
 @@ -0,0 +1,31 @@
@@ -47,7 +373,7 @@ index 00000000..01951a2f
 +
 +## Deployment inputs
 +
-+Deploy the reviewed `feat/cc-sip-scanner` platform branch through the normal build/review process. Leave `SIP_SCANNER_ENABLED` unset until prerequisites and an operating morning window are available. Enable with the exact value `true` before 09:00 Eastern on a trading day.
++Production deployment uses the merged `main` commit/release artifact, after the feature PR's current-head independent review and required checks pass and the owner merges it under D-021/D-031. A feature-branch preview is build evidence, not a production release. Confirm the production deployment is READY for that merged commit. Leave `SIP_SCANNER_ENABLED` unset until prerequisites and an operating morning window are available. Enable with the exact value `true` before 09:00 Eastern on a trading day.
 +
 +Required existing platform inputs: working shared Schwab token state and its existing OAuth service; `CRON_SECRET`; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Redis is required, with no in-memory substitute. Configure a new `SIP_SCANNER_SECRET` of at least 32 random characters. It must differ from `CRON_SECRET`, `MONITOR_SECRET`, `DASHBOARD_PASSWORD`, and `SCHWAB_BROKER_SECRET`. Enter credentials securely in deployment settings, never in URLs or committed files. No database migration is required.
 +
@@ -146,12 +472,124 @@ index 00000000..1f1a56a5
 +## Verification and delivery
 +
 +TDD covers ratio/ATR/filter boundaries, completed-window coverage, holiday/DST, unknown instruments, finite numbers, auth separation, read-only endpoint paths, safe errors, Redis failure/locking/idempotence, job windows and read readiness. Command Center covers delayed readiness, retries/deadline, valid empty vs malformed, date/freshness and actual SIP paper signal/risk/fill/EOD exit. Platform focused tests, typecheck/build where available, cron/registry guards and Command Center full tests/harness run before delivery. Publish review branches/draft PR if supported; no merge or production deployment without approval. Native Windows installation remains a separate verified transfer step. Portfolio capital configuration remains pending and unchanged.
+diff --git a/scripts/ci/rti-migration-proof-manifest.txt b/scripts/ci/rti-migration-proof-manifest.txt
+index efdf8e32..b421ff74 100644
+--- a/scripts/ci/rti-migration-proof-manifest.txt
++++ b/scripts/ci/rti-migration-proof-manifest.txt
+@@ -28,3 +28,4 @@ at06b-journal-atomic-append|supabase/migrations/20260929230000_at06b_journal_ato
+ plan-flow-side|supabase/migrations/20261004220000_plan_flow_side.sql
+ plan-interpretations|supabase/migrations/20261005030000_plan_interpretations.sql
+ plan-interpretations-guard|supabase/migrations/20261005040000_plan_interpretations_guard.sql
++plan-interpretations-read-slot|supabase/migrations/20261006164647_plan_interpretations_read_slot.sql
+diff --git a/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
+new file mode 100644
+index 00000000..e5759927
+--- /dev/null
++++ b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
+@@ -0,0 +1,97 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import type { Redis } from "@upstash/redis";
++import { SipStore } from "@/lib/sip/store";
++import { SchwabSipData } from "@/lib/sip/schwab";
++import { SipUnavailable } from "@/lib/sip/contract";
++import { sessionTime } from "@/lib/sip/calendar";
++import { GET } from "../route";
++
++// Persisted cron telemetry is the external boundary; scanner and lease handling
++// remain real. No production Redis or provider request is made by these tests.
++const telemetry = vi.hoisted(() => ({
++  start: vi.fn().mockResolvedValue(17),
++  finish: vi.fn().mockResolvedValue(undefined),
++}));
++vi.mock("@/lib/cronRunLog", () => ({
++  startCronRun: telemetry.start,
++  finishCronRun: telemetry.finish,
++}));
++
++describe("SIP cron outcome reporting", () => {
++  const request = () => new Request("https://test.invalid/api/cron/cc-sip-scanner", {
++    headers: { Authorization: "Bearer fixture-cron-secret" },
++  });
++
++  beforeEach(() => {
++    vi.clearAllMocks();
++    vi.useFakeTimers();
++    vi.setSystemTime(sessionTime("2026-10-06", 545));
++    vi.stubEnv("CRON_SECRET", "fixture-cron-secret");
++    vi.stubEnv("SIP_SCANNER_ENABLED", "true");
++  });
++  afterEach(() => {
++    vi.restoreAllMocks();
++    vi.unstubAllEnvs();
++    vi.useRealTimers();
++  });
++
++  it.each([545, 575])("records lease contention as skipped without a failure at minute %i", async (minute) => {
++    vi.setSystemTime(sessionTime("2026-10-06", minute));
++    const redis = {
++      set: vi.fn<Redis["set"]>().mockResolvedValue(null),
++      get: vi.fn<Redis["get"]>().mockResolvedValue(null),
++      eval: vi.fn<Redis["eval"]>(),
++    };
++    vi.spyOn(SipStore, "fromEnvironment").mockReturnValue(new SipStore(redis));
++
++    const response = await GET(request());
++    expect(response.status).toBe(202);
++    expect(telemetry.finish).toHaveBeenCalledWith(17, "success", expect.objectContaining({
++      status: "busy",
++    }));
++    expect(await response.json()).toMatchObject({ status: "busy", skipped: true });
++    expect(redis.eval).not.toHaveBeenCalled();
++  });
++
++  it("keeps Redis outages as failures rather than mislabeling them contention", async () => {
++    const redis = {
++      set: vi.fn<Redis["set"]>().mockRejectedValue(new Error("storage unavailable")),
++      get: vi.fn<Redis["get"]>().mockResolvedValue(null),
++      eval: vi.fn<Redis["eval"]>(),
++    };
++    vi.spyOn(SipStore, "fromEnvironment").mockReturnValue(new SipStore(redis));
++    const response = await GET(request());
++    expect(response.status).toBe(503);
++    expect(await response.json()).toEqual({ error: "SIP_STORAGE_FAILED" });
++    expect(telemetry.finish).toHaveBeenCalledWith(17, "failure", {
++      phase: "prepare", error: "SIP_STORAGE_FAILED",
++    });
++  });
++
++  it("keeps incomplete preparation as a failure when provider history is unavailable", async () => {
++    const redis = {
++      set: vi.fn<Redis["set"]>().mockResolvedValue("OK"),
++      get: vi.fn<Redis["get"]>().mockResolvedValue(null),
++      eval: vi.fn<Redis["eval"]>().mockResolvedValue(1),
++    };
++    vi.spyOn(SipStore, "fromEnvironment").mockReturnValue(new SipStore(redis));
++    vi.spyOn(SchwabSipData.prototype, "dailyBars").mockRejectedValue(
++      new SipUnavailable("SCHWAB_HTTP_429"),
++    );
++    const response = await GET(request());
++    expect(response.status).toBe(503);
++    const summary = await response.json();
++    expect(summary.status).toBe("pending");
++    expect(summary.failures).toBeGreaterThan(0);
++    expect(summary.skipped).toBeUndefined();
++    expect(telemetry.finish).toHaveBeenCalledWith(17, "failure", expect.objectContaining({
++      status: "pending", failures: summary.failures,
++    }));
++  });
++
++  it("refuses unauthenticated work before opening a cron run", async () => {
++    const response = await GET(new Request("https://test.invalid/api/cron/cc-sip-scanner"));
++    expect(response.status).toBe(401);
++    expect(telemetry.start).not.toHaveBeenCalled();
++  });
++});
 diff --git a/src/app/api/cron/cc-sip-scanner/route.ts b/src/app/api/cron/cc-sip-scanner/route.ts
 new file mode 100644
-index 00000000..470d2ce5
+index 00000000..0ec7bde2
 --- /dev/null
 +++ b/src/app/api/cron/cc-sip-scanner/route.ts
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,65 @@
 +import { ALL_SYMBOLS } from "@/config/watchlist";
 +import { SYMBOL_SECTOR } from "@/config/universeSectors";
 +import { startCronRun, finishCronRun } from "@/lib/cronRunLog";
@@ -193,13 +631,16 @@ index 00000000..470d2ce5
 +    const summary = {
 +      phase,
 +      status: !result ? "busy" : complete ? "ready" : "pending",
++      ...(!result ? { skipped: true } : {}),
 +      universe: universe.length,
 +      classificationExcluded: ALL_SYMBOLS.length - universe.length,
 +      coverage: result && "coverage" in result ? result.coverage : null,
 +      failures: result && "failures" in result ? result.failures.length : 0,
 +    };
 +    console.info("[cc-sip]", JSON.stringify(summary));
-+    await finishCronRun(runId, complete ? "success" : "failure", summary);
++    // An owned overlapping run is already doing the work. Keep contention
++    // visible as busy/skipped without triggering the cron failure feed.
++    await finishCronRun(runId, !result || complete ? "success" : "failure", summary);
 +    return Response.json(summary, {
 +      status: !result ? 202 : complete ? 200 : 503,
 +      headers: NO_STORE,
@@ -232,6 +673,563 @@ index 00000000..80586e17
 +    new Date(),
 +  );
 +}
+diff --git a/src/app/the-open/_components/AfterOpenBoard.tsx b/src/app/the-open/_components/AfterOpenBoard.tsx
+new file mode 100644
+index 00000000..bcf4e2cf
+--- /dev/null
++++ b/src/app/the-open/_components/AfterOpenBoard.tsx
+@@ -0,0 +1,172 @@
++/**
++ * After-open view (owner, /the-open; OPEN-VIEW-1/-2). Presentational only: renders an AfterOpenModel.
++ *
++ * Measured values (prices, VWAP, ranges, plan levels) render plain; derived values (gap %, % since the
++ * open, volume share, R:R from here, the suggested contract) render in the dotted-amber est. style
++ * (Rule 1). The status is tape context, not edge: no open-time signal has a tested record on these
++ * setups, and the footer says so. No client JavaScript: rows are native <details>.
++ */
++
++import Link from 'next/link';
++import { symbolHref } from '@/components/navGroups';
++import { DERIVED, PLAN_LEVEL, px, sideClass } from '@/components/slate/PlanCard';
++import { PositioningLine } from '@/components/slate/PlanRows';
++import type { AfterOpenModel, AfterOpenRow, StripItem } from '@/lib/open/afterOpenModel';
++import type { TapeStatus } from '@/lib/open/tapeFacts';
++
++const TONE: Record<TapeStatus, string> = {
++  confirming: 'text-green-400 border-green-500/40',
++  waiting: 'text-m2m-ink border-m2m-rule',
++  not_confirming: 'text-amber-300 border-amber-500/40',
++  forming: 'text-m2m-ink-mute border-m2m-rule',
++  unknown: 'text-m2m-ink-mute border-m2m-rule',
++  invalidated: 'text-red-400 border-red-500/40',
++};
++
++const RULE: Record<TapeStatus, string> = {
++  confirming: 'Through the 30-min opening range in the card’s direction, on the right side of VWAP',
++  waiting: 'Inside the opening range, on the card’s side of VWAP',
++  not_confirming: 'Wrong side of VWAP (inside the range, or through it against VWAP)',
++  forming: 'Opening range forms 09:30–10:00 ET; no status before 10:00 unless the stop is hit',
++  unknown: 'Tape inputs missing for this name',
++  invalidated: 'Through the opening range against the card, or at/through the stop',
++};
++
++/** Sector chip tone only (display, no decision): leaders at ≥ +0.9%, laggards below +0.3%, as in the approved mockup. */
++const SECTOR_LEAD_PCT = 0.9;
++const SECTOR_LAG_PCT = 0.3;
++
++const signed = (n: number | null, digits = 2) => (n === null ? '—' : `${n > 0 ? '+' : ''}${n.toFixed(digits)}%`);
++
++function StripTile({ s }: { s: StripItem }) {
++  return (
++    <div className="rounded border border-m2m-rule px-2 py-1" data-strip={s.symbol}>
++      <div className="text-[10px] text-m2m-ink-mute">{s.symbol}</div>
++      <div className="text-[12px] text-m2m-ink">
++        <span style={DERIVED}>{signed(s.changePct)}</span>
++        <span className="ml-1 text-m2m-ink-mute">{s.vsVwap ? `${s.vsVwap} VWAP` : 'VWAP —'}</span>
++      </div>
++    </div>
++  );
++}
++
++function SectorChip({ s }: { s: StripItem }) {
++  const tone = s.changePct === null ? 'text-m2m-ink-mute' : s.changePct >= SECTOR_LEAD_PCT ? 'text-green-400' : s.changePct < SECTOR_LAG_PCT ? 'text-amber-300' : 'text-m2m-ink';
++  return <span className={`rounded border border-m2m-rule px-1.5 text-[10px] ${tone}`} data-sector={s.symbol}>{s.symbol} <span style={DERIVED}>{signed(s.changePct)}</span></span>;
++}
++
++/** The opening range drawn as a bar with VWAP (line) and the last price (block). */
++function RangeBar({ r }: { r: AfterOpenRow }) {
++  const { openingRange: or, vwap, last } = r.facts;
++  if (!or || vwap === null || last === null) return null;
++  const lo = Math.min(or.low, vwap, last), hi = Math.max(or.high, vwap, last);
++  const pad = (hi - lo) * 0.08 || 0.01, a = lo - pad, b = hi + pad;
++  const p = (x: number) => `${(((x - a) / (b - a)) * 100).toFixed(1)}%`;
++  return (
++    <div className="mt-1" data-range-bar>
++      <div className="relative h-3 rounded bg-white/5">
++        <div className="absolute top-[3px] bottom-[3px] rounded bg-white/20" style={{ left: p(or.low), width: `calc(${p(or.high)} - ${p(or.low)})` }} title="30-min opening range" />
++        <div className="absolute top-0 bottom-0 w-[2px] bg-sky-400" style={{ left: p(vwap) }} title="VWAP" />
++        <div className="absolute -top-[2px] h-4 w-2 -translate-x-1/2 rounded-sm bg-m2m-ink" style={{ left: p(last) }} title="last" />
++      </div>
++      <div className="mt-0.5 flex justify-between text-[10px] text-m2m-ink-mute">
++        <span>range {px(or.low)}–{px(or.high)}</span><span className="text-sky-400">VWAP {px(vwap)}</span><span>last {px(last)}</span>
++      </div>
++    </div>
++  );
++}
++
++function ContractLine({ r }: { r: AfterOpenRow }) {
++  if (!r.contract) return <span className="text-m2m-ink-mute">contract: not read</span>;
++  if (r.contract.status !== 'ok') return <span className="text-m2m-ink-mute">contract: {r.contract.reason}</span>;
++  const c = r.contract.contract;
++  return (
++    <span>
++      <span style={DERIVED}>est. {c.expiration.slice(5)} {px(c.strike)} {c.type === 'call' ? 'C' : 'P'} · {px(c.mid)} mid · max loss ${Math.round(c.maxLoss)} · BE {px(c.breakeven)}</span>
++      {c.wide && <span className="ml-1 rounded border border-amber-500/40 px-1 text-[10px] text-amber-300">wide market {Math.round(c.spreadPct * 100)}%</span>}
++    </span>
++  );
++}
++
++function Row({ r }: { r: AfterOpenRow }) {
++  const s = r.candidate.setup;
++  const sym = s.symbol.toUpperCase();
++  const f = r.facts;
++  // `forming` is only ever returned before 10:00 ET (classifyTape), when OPEN-VIEW-1 shows no status: such a row
++  // carries no chip and its group heading says "Range forming".
++  const chip = r.read.status === 'forming' ? null : <span className={`rounded border px-1.5 text-[10px] ${TONE[r.read.status]}`} title={RULE[r.read.status]}>{r.read.status.replace('_', ' ')}</span>;
++  if (r.read.status === 'invalidated') {
++    return (
++      <div className="flex flex-wrap items-baseline gap-2 border-b border-m2m-rule py-1.5 text-[12px]" data-open-row={sym} data-status={r.read.status}>
++        <Link href={symbolHref(sym)} className="font-semibold text-m2m-ink">{sym}</Link>
++        <span className={`text-[10px] uppercase ${sideClass(s.direction)}`}>{s.direction}</span>{chip}
++        <span className="text-m2m-ink-mute">{r.read.reason} · last {px(f.last)}</span>
++      </div>
++    );
++  }
++  return (
++    <details className="border-b border-m2m-rule py-2" data-open-row={sym} data-status={r.read.status}>
++      <summary className="cursor-pointer list-none">
++        <div className="flex flex-wrap items-baseline gap-2 text-[12px]">
++          <Link href={symbolHref(sym)} className="text-[14px] font-semibold text-m2m-ink">{sym}</Link>
++          <span className={`text-[10px] uppercase ${sideClass(s.direction)}`}>{s.direction}</span>{chip}
++          {!r.inPlan && <span className="text-[10px] text-m2m-ink-mute">also qualifies</span>}
++          <span className="ml-auto text-m2m-ink"><b>{px(f.last)}</b> <span style={DERIVED}>{signed(f.sinceOpenPct)}</span> <span className="text-m2m-ink-mute">since open</span></span>
++        </div>
++        <div className="mt-0.5 text-[11px] text-m2m-ink-mute">{r.read.reason}</div>
++        <RangeBar r={r} />
++        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] sm:grid-cols-4">
++          <span>gap <span style={DERIVED}>{signed(f.gapPct)}</span></span>
++          <span>volume <span style={DERIVED}>{f.volumeShare === null ? '—' : `${Math.round(f.volumeShare * 100)}% of avg day`}</span></span>
++          <span>R:R from here <span style={DERIVED}>{r.rrLive === null ? '—' : r.rrLive.toFixed(2)}</span></span>
++          <span>stop → target <span style={PLAN_LEVEL}>{px(s.stop)} → {px(s.target)}</span></span>
++        </div>
++        <div className="mt-1 text-[11px]"><PositioningLine pos={r.positioning} /></div>
++      </summary>
++      <div className="mt-2 space-y-1 text-[11px] text-m2m-ink-mute">
++        <div><ContractLine r={r} /></div>
++        <div>pre-market {f.premarket ? `${px(f.premarket.low)}–${px(f.premarket.high)}` : '—'} · plan levels from the {s.sessionDate} card ({s.strategy})</div>
++        <div><Link href={symbolHref(sym)} className="underline">Open {sym}: chart, expert read and full card</Link></div>
++      </div>
++    </details>
++  );
++}
++
++export default function AfterOpenBoard({ model, now }: { model: AfterOpenModel; now: Date }) {
++  const time = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(now);
++  const summary = model.groups.map(g => `${g.rows.length} ${g.label.toLowerCase()}`).join(' · ');
++  return (
++    <section className="mx-auto max-w-6xl px-4 py-4" data-module="after-open" data-state={model.state}>
++      <div className="flex flex-wrap items-baseline justify-between gap-2">
++        <h2 className="text-lg font-semibold text-m2m-ink">After the open</h2>
++        <span className="text-[11px] text-m2m-ink-mute">{model.sessionDate} · {time} ET · Polygon; VIX Yahoo</span>
++      </div>
++      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
++        {model.indices.map(s => <StripTile key={s.symbol} s={s} />)}
++        <div className="rounded border border-m2m-rule px-2 py-1" data-strip="VIX">
++          <div className="text-[10px] text-m2m-ink-mute">VIX</div>
++          <div className="text-[12px] text-m2m-ink">{px(model.vix.value)} <span style={DERIVED}>{signed(model.vix.changePct)}</span></div>
++        </div>
++      </div>
++      <div className="mt-2 flex flex-wrap gap-1">{model.sectors.map(s => <SectorChip key={s.symbol} s={s} />)}</div>
++      {model.notes.length > 0 && <p className="mt-2 text-[11px] text-amber-300" data-open-notes>{model.notes.join(' ')}</p>}
++
++      {model.state === 'not_session_day' && <p className="mt-4 text-[12px] text-m2m-ink-mute">No session today. The next plan is for {model.sessionDate}; its tape read starts at the open.</p>}
++      {model.state === 'no_plan' && <p className="mt-4 text-[12px] text-m2m-ink-mute">The setup source could not be read; no claim about the tape is made.</p>}
++      {model.state === 'session' && model.groups.length === 0 && <p className="mt-4 text-[12px] text-m2m-ink-mute">No single stock qualifies for today’s plan.</p>}
++      {model.state === 'session' && model.groups.length > 0 && <p className="mt-3 text-[12px] text-m2m-ink">{summary}</p>}
++
++      {model.groups.map(g => (
++        <div key={g.status} className="mt-3" data-open-group={g.status}>
++          <div className="text-[11px] uppercase tracking-wide text-m2m-ink-mute" title={RULE[g.status]}>{g.label} ({g.rows.length}) <span className="normal-case tracking-normal">· {RULE[g.status]}</span></div>
++          {g.rows.map(r => <Row key={r.candidate.setup.id} r={r} />)}
++        </div>
++      ))}
++
++      <p className="mt-4 text-[10px] text-m2m-ink-mute">
++        Status is tape context, not edge: no open-time signal has a tested record on these setups. Dotted amber values are derived (est.);
++        plan levels are the scanner’s, not market prices. Volume share compares volume so far with a full average day, so it reads low early.
++      </p>
++    </section>
++  );
++}
+diff --git a/src/app/the-open/_components/AfterOpenView.tsx b/src/app/the-open/_components/AfterOpenView.tsx
+new file mode 100644
+index 00000000..6a9d616b
+--- /dev/null
++++ b/src/app/the-open/_components/AfterOpenView.tsx
+@@ -0,0 +1,20 @@
++/**
++ * Server wrapper for the after-open view: loads the model and renders AfterOpenBoard. A failed load is
++ * said on the page, never hidden and never filled.
++ */
++
++import AfterOpenBoard from './AfterOpenBoard';
++import { loadAfterOpen } from '@/lib/open/afterOpenData';
++import type { AfterOpenModel } from '@/lib/open/afterOpenModel';
++
++export default async function AfterOpenView() {
++  const now = new Date();
++  const model: AfterOpenModel | null = await loadAfterOpen(now).catch(() => null);
++  if (model) return <AfterOpenBoard model={model} now={now} />;
++  return (
++    <section className="mx-auto max-w-6xl px-4 py-4" data-module="after-open" data-state="failed">
++      <h2 className="text-lg font-semibold text-m2m-ink">After the open</h2>
++      <p className="mt-2 text-[12px] text-amber-300">The after-open view could not be loaded, so no tape status is shown.</p>
++    </section>
++  );
++}
+diff --git a/src/app/the-open/_components/__tests__/AfterOpenBoard.test.tsx b/src/app/the-open/_components/__tests__/AfterOpenBoard.test.tsx
+new file mode 100644
+index 00000000..f6457741
+--- /dev/null
++++ b/src/app/the-open/_components/__tests__/AfterOpenBoard.test.tsx
+@@ -0,0 +1,91 @@
++// @vitest-environment node
++import { describe, expect, it } from 'vitest';
++import { renderToStaticMarkup } from 'react-dom/server';
++import AfterOpenBoard from '../AfterOpenBoard';
++import { buildAfterOpenModel, type AfterOpenInputs } from '@/lib/open/afterOpenModel';
++import type { MondayPlan, PlanCandidate } from '@/lib/slate/mondayPlan';
++import { computeTapeFacts, type TapeFacts } from '@/lib/open/tapeFacts';
++import { readFileSync } from 'node:fs';
++import { join } from 'node:path';
++import { showAfterOpenView } from '@/lib/open/afterOpenGate';
++
++const NOW = new Date('2026-10-05T16:57:00.000Z');
++const cand = (symbol: string, direction: 'bullish' | 'bearish', stop: number, target: number): PlanCandidate => ({
++  setup: { id: `id-${symbol}`, symbol, direction, strategy: 'test', quality: 0, factors: 0, visibility: 'live', entryPrice: null, stop, target, catalystText: null, structure: '', sessionDate: '2026-10-02', entryPriceSource: null, stopLossSource: null },
++  kind: 'stock', enrich: null, notEvaluated: false, checks: [], rr: null, rrNow: null, fails: 0, unknowns: 0, rankUnknowns: 0,
++});
++const facts = (last: number, vwap: number, high: number, low: number): TapeFacts => ({
++  sessionDate: '2026-10-05', last, vwap, gapPct: -0.34, sinceOpenPct: 0.99, premarket: { high: 161.5, low: 161.5 },
++  openingRange: { high, low }, openingRangeComplete: true, avgDailyVolume: 3_000_000, volumeShare: 0.2365,
++});
++const plan = {
++  sessionDate: '2026-10-02', nextSession: '2026-10-05', source: 'setups',
++  plan: [cand('MMM', 'bullish', 157.98, 173.51)], alsoQualify: [cand('NBIS', 'bullish', 227.51, 279.83)],
++  nearMisses: [], stocks: [], etfs: [], counts: {},
++} as unknown as MondayPlan;
++const inputs = (over: Partial<AfterOpenInputs> = {}): AfterOpenInputs => ({
++  plan, sessionDate: '2026-10-05', isSessionDay: true,
++  facts: new Map([['MMM', facts(162.93, 161.4968, 161.34, 159.9201)], ['NBIS', facts(233.82, 236.5932, 244.49, 234.59)]]),
++  priceAt: new Map(), positioning: { MMM: { symbol: 'MMM', source: 'bulk', asOf: '2026-10-01', siPctFreeFloat: 2.0, siPctFreeFloatPrior: 1.96, priorAsOf: '2026-09-24', siChangePct: 2, daysToCover: 3.3, costToBorrowPct: 0.35, availVsShort: null, availabilityUnlimited: true } }, contracts: { 'id-MMM': { status: 'ok', contract: { contractSymbol: 'O:MMM', type: 'call', strike: 160, expiration: '2026-11-06', dte: 32, delta: 0.59, bid: 6.4, ask: 7.9, mid: 7.18, maxLoss: 718, breakeven: 167.18, openInterest: 100, theta: null, spreadPct: 0.2, wide: true, ruleVersion: 'plan-contract.v1' } } },
++  strip: new Map([['SPY', { last: 774.46, prevClose: 769.64, vwap: 771.82 }]]), vix: { value: 15.55, changePct: null }, notes: [], ...over,
++});
++
++describe('AfterOpenBoard', () => {
++  it('renders groups with the status rule, est. values, range bar and a compact invalidated row', () => {
++    const html = renderToStaticMarkup(<AfterOpenBoard model={buildAfterOpenModel(inputs())} now={NOW} />);
++    expect(html).toContain('data-open-group="confirming"');
++    expect(html).toContain('data-open-row="MMM" data-status="confirming"');
++    expect(html).toContain('1 confirming · 1 invalidated');
++    expect(html).toContain('data-range-bar');
++    expect(html).toContain('24% of avg day');
++    expect(html).toContain('est. 11-06 160.00 C · 7.18 mid · max loss $718 · BE 167.18');
++    expect(html).toContain('wide market 20%');
++    expect(html).toMatch(/data-open-row="NBIS" data-status="invalidated"[^>]*>(?:(?!<details).)*below the opening-range low/);
++    expect(html).toContain('data-strip="SPY"');
++    expect(html).toContain('+0.63%');
++    expect(html).toContain('above VWAP');
++    expect(html).toContain('not edge');
++    expect(html).toMatch(/data-open-row="MMM"(?:(?!data-open-row=).)*data-positioning="bulk"/);
++  });
++
++  it('says plainly when it is not a session day, when the plan is unreadable, and names read failures', () => {
++    expect(renderToStaticMarkup(<AfterOpenBoard model={buildAfterOpenModel(inputs({ isSessionDay: false }))} now={NOW} />)).toContain('No session today');
++    expect(renderToStaticMarkup(<AfterOpenBoard model={buildAfterOpenModel(inputs({ plan: { ...plan, source: 'unavailable' } as MondayPlan }))} now={NOW} />)).toContain('could not be read');
++    expect(renderToStaticMarkup(<AfterOpenBoard model={buildAfterOpenModel(inputs({ notes: ['VIX could not be read.'] }))} now={NOW} />)).toContain('VIX could not be read.');
++  });
++
++  it('at 09:45 ET (range forming) rows show no status chip; after 10:00 the same names do', () => {
++    const at945 = new Date('2026-10-05T13:45:00.000Z');
++    const early = (last: number): TapeFacts => computeTapeFacts({ sessionDate: '2026-10-05', bars: [], snapshot: { last, open: last, prevClose: last, vwap: last, volume: 1 }, dailyVolumes: [], now: at945 });
++    const html = renderToStaticMarkup(<AfterOpenBoard model={buildAfterOpenModel(inputs({ facts: new Map([['MMM', early(160)], ['NBIS', early(240)]]) }))} now={at945} />);
++    expect(html).toContain('data-open-group="forming"');
++    expect(html).toContain('Range forming (2)');
++    expect(html).not.toMatch(/>forming<\/span>/);
++    const later = renderToStaticMarkup(<AfterOpenBoard model={buildAfterOpenModel(inputs())} now={NOW} />);
++    expect(later).toMatch(/>confirming<\/span>/);
++  });
++
++  it('displays and links tickers upper case even when the plan carries lower case', () => {
++    const lower = { ...plan, plan: [{ ...plan.plan[0], setup: { ...plan.plan[0].setup, symbol: 'mmm' } }] } as MondayPlan;
++    const html = renderToStaticMarkup(<AfterOpenBoard model={buildAfterOpenModel(inputs({ plan: lower }))} now={NOW} />);
++    expect(html).toContain('data-open-row="MMM"');
++    expect(html).toContain('href="/slate/MMM"');
++    expect(html).not.toContain('>mmm<');
++  });
++});
++
++describe('/the-open after-open view audience', () => {
++  it('only the owner audience sees the view', () => {
++    expect(showAfterOpenView('OWNER')).toBe(true);
++    for (const a of ['BETA', null] as const) expect(showAfterOpenView(a)).toBe(false);
++  });
++
++  // Source pin, deliberately: the page is a server component with ~20 data dependencies, so a render test would
++  // mock almost everything it checks. This pins the one fact that matters: the view appears once, behind the gate.
++  it('the page renders the view only behind that gate', () => {
++    const page = readFileSync(join(process.cwd(), 'src/app/the-open/page.tsx'), 'utf8');
++    const uses = page.split('<AfterOpenView />').length - 1;
++    expect(uses).toBe(1);
++    expect(page).toMatch(/\{showAfterOpenView\(optionsDecisionAccess\.audience\) && \(\s*<Suspense fallback=\{<ModuleSkeleton \/>\}>\s*<AfterOpenView \/>/);
++  });
++});
+diff --git a/src/app/the-open/page.tsx b/src/app/the-open/page.tsx
+index 7103b5de..3ca0699e 100644
+--- a/src/app/the-open/page.tsx
++++ b/src/app/the-open/page.tsx
+@@ -44,6 +44,8 @@ import { PERSONAS_THE_OPEN, type Persona } from '@/lib/personaAffinity';
+ import { DecisionFunnelEvent } from '@/components/optionsDecision/DecisionFunnelEvent';
+ import { WorkflowHero, WorkflowStatus, WorkflowStepper, workflowStyles } from '@/components/optionsWorkflow/WorkflowChrome';
+ import MarketActivityBoard from './_components/MarketActivityBoard';
++import AfterOpenView from './_components/AfterOpenView';
++import { showAfterOpenView } from '@/lib/open/afterOpenGate';
+ import { loadMarketActivityScreen } from '@/lib/theOpen/marketActivityScreen';
+ import { loadRtiOwnerSnapshot } from '@/lib/rti/owner/snapshot';
+ import { formatMarketActivityStamp } from '@/lib/theOpen/marketActivityFormatting';
+@@ -167,6 +169,11 @@ export default async function TheOpenPage({ searchParams }: PageProps) {
+         ]} />
+         <Module2to10Refresher endMinET={16 * 60} />
+         <main className={workflowStyles.page}>
++          {showAfterOpenView(optionsDecisionAccess.audience) && (
++            <Suspense fallback={<ModuleSkeleton />}>
++              <AfterOpenView />
++            </Suspense>
++          )}
+           <WorkflowHero
+             eyebrow="Step 1 · Real-time market activity"
+             title="See what is moving,"
+diff --git a/src/components/slate/MondayPlanBoard.tsx b/src/components/slate/MondayPlanBoard.tsx
+index 67531bed..30194439 100644
+--- a/src/components/slate/MondayPlanBoard.tsx
++++ b/src/components/slate/MondayPlanBoard.tsx
+@@ -55,6 +55,7 @@ export default function MondayPlanBoard({ plan, today, extras = null, interpreta
+   const session = plan.sessionDate ? dateLabel(plan.sessionDate) : null;
+   const rest = plan.stocks.filter(c => !plan.plan.includes(c) && !plan.alsoQualify.includes(c) && !plan.nearMisses.includes(c));
+   const live = extras?.live ?? {};
++  const pos = extras?.positioning.bySymbol ?? {};
+   return (
+     <div data-page="slate-plan" data-plan-count={plan.plan.length} data-source={plan.source}>
+       {today && <TodayStrip ctx={today} />}
+@@ -67,6 +68,7 @@ export default function MondayPlanBoard({ plan, today, extras = null, interpreta
+               : `${plan.plan.length} of ${plan.counts.stocks} single stocks from ${session ?? 'the last session'} pass every check. Open a row for the full read.`}
+             {extras?.liveStatus === 'fetch_failed' ? ' Live prices could not be read (vendor request failed); zones are judged from the last close only.' : ''}
+             {extras?.liveStatus === 'no_prints' ? ' The live read returned no recent prints for these names; zones are judged from the last close only.' : ''}
++            {extras?.positioning.status === 'read_failed' ? <span data-positioning-outage> Short positioning could not be read (stored Ortex data unavailable); rows show none.</span> : ''}
+           </p>
+ 
+           {interpretation !== undefined && plan.plan.length + plan.alsoQualify.length > 0 && <div className="mt-3"><ExpertRead interpretation={interpretation} /></div>}
+@@ -81,7 +83,7 @@ export default function MondayPlanBoard({ plan, today, extras = null, interpreta
+               <div className={`hidden md:grid ${PLAN_GRID} px-2 py-1.5 text-[9.5px] uppercase tracking-[0.12em] text-m2m-ink-mute border-b border-m2m-rule`}>
+                 <span>Name</span><span>Last · zone</span><span>Stop → target</span><span>R:R</span><span>Suggested contract (est.)</span>
+               </div>
+-              {plan.plan.map((c, i) => <PlanRow key={c.setup.id} c={c} rank={i + 1} live={live[c.setup.symbol]} contract={extras?.contracts[c.setup.id]} />)}
++              {plan.plan.map((c, i) => <PlanRow key={c.setup.id} c={c} rank={i + 1} live={live[c.setup.symbol]} contract={extras?.contracts[c.setup.id]} pos={pos[c.setup.symbol]} />)}
+             </div>
+           )}
+ 
+@@ -103,7 +105,7 @@ export default function MondayPlanBoard({ plan, today, extras = null, interpreta
+         {plan.alsoQualify.length > 0 && (
+           <section data-module="also-qualify">
+             <SectionTitle>Also qualify, beyond the cap of {PLAN_MAX} ({plan.alsoQualify.length})</SectionTitle>
+-            <div className="border border-m2m-rule rounded">{plan.alsoQualify.map(c => <CompactRow key={c.setup.id} c={c} live={live[c.setup.symbol]} />)}</div>
++            <div className="border border-m2m-rule rounded">{plan.alsoQualify.map(c => <CompactRow key={c.setup.id} c={c} live={live[c.setup.symbol]} pos={pos[c.setup.symbol]} />)}</div>
+           </section>
+         )}
+ 
+@@ -117,7 +119,7 @@ export default function MondayPlanBoard({ plan, today, extras = null, interpreta
+         {rest.length > 0 && (
+           <section data-module="other-stocks">
+             <SectionTitle>Other single-stock setups ({rest.length})</SectionTitle>
+-            <div className="border border-m2m-rule rounded">{rest.map(c => <CompactRow key={c.setup.id} c={c} live={live[c.setup.symbol]} />)}</div>
++            <div className="border border-m2m-rule rounded">{rest.map(c => <CompactRow key={c.setup.id} c={c} live={live[c.setup.symbol]} pos={pos[c.setup.symbol]} />)}</div>
+           </section>
+         )}
+ 
+diff --git a/src/components/slate/PlanRows.tsx b/src/components/slate/PlanRows.tsx
+index 6e38032d..3857b4dd 100644
+--- a/src/components/slate/PlanRows.tsx
++++ b/src/components/slate/PlanRows.tsx
+@@ -7,7 +7,9 @@
+  *   MissRow     a near miss: one line naming the failing check(s)
+  *
+  * Live prices are measured (vendor last trade, time shown). The suggested contract is derived by
+- * the owner-approved PLAN-CONTRACT-RULE-1 and rendered in the dotted-amber "est." style.
++ * the owner-approved PLAN-CONTRACT-RULE-1 and rendered in the dotted-amber "est." style. Short
++ * positioning (ORTEX-SLATE-1) renders Ortex values plain with their data date; the change against
++ * the earlier snapshot is derived and rendered est.
+  */
+ 
+ import Link from 'next/link';
+@@ -15,6 +17,7 @@ import { symbolHref } from '@/components/navGroups';
+ import type { PlanCandidate } from '@/lib/slate/mondayPlan';
+ import type { PlanLiveRead } from '@/lib/slate/planLive';
+ import type { PlanContractResult } from '@/lib/slate/planContract';
++import { signedPct, type PlanPositioning } from '@/lib/slate/planPositioning';
+ import { DERIVED, PLAN_LEVEL, PlanCard, px, sideClass } from '@/components/slate/PlanCard';
+ 
+ const SESSION_LABEL: Record<PlanLiveRead['session'], string> = {
+@@ -56,6 +59,30 @@ export function ContractCell({ result }: { result: PlanContractResult | undefine
+   );
+ }
+ 
++function shortDate(iso: string): string {
++  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? expiryLabel(iso) : iso;
++}
++
++/** One line of Ortex short positioning; absent data is said, never filled. */
++export function PositioningLine({ pos }: { pos: PlanPositioning | undefined }) {
++  const base = 'md:col-span-5 inline-flex flex-wrap items-baseline gap-x-2 text-[10px] text-m2m-ink-mute';
++  if (!pos) return <span className={base} data-positioning="none">short positioning: none on file</span>;
++  const parts: string[] = [];
++  if (pos.daysToCover !== null) parts.push(`DTC ${pos.daysToCover.toFixed(1)}`);
++  if (pos.costToBorrowPct !== null) parts.push(`CTB ${pos.costToBorrowPct.toFixed(2)}%`);
++  if (pos.availabilityUnlimited) parts.push('borrow unconstrained');
++  return (
++    <span className={base} data-positioning={pos.source} title={pos.source === 'bulk' ? 'Ortex daily S&P 500 positioning snapshot' : 'Ortex per-name short interest (no borrow data for names outside the S&P 500 snapshot)'}>
++      <span>short</span>
++      <b className="text-m2m-ink">{pos.siPctFreeFloat !== null ? `${pos.siPctFreeFloat.toFixed(1)}% float` : 'SI —'}</b>
++      {pos.siChangePct !== null && <span style={DERIVED} title={`vs ${pos.priorAsOf}`}>{signedPct(pos.siChangePct)} since {pos.priorAsOf ? shortDate(pos.priorAsOf) : 'earlier'}</span>}
++      {parts.length > 0 && <span>{parts.join(' · ')}</span>}
++      {pos.availVsShort !== null && <span style={DERIVED} title="shares available to borrow ÷ shares sold short (Ortex)">avail {pos.availVsShort.toFixed(1)}× short</span>}
++      <span>Ortex {shortDate(pos.asOf)}</span>
++    </span>
++  );
++}
++
+ function SymbolSide({ c, rank }: { c: PlanCandidate; rank?: number }) {
+   return (
+     <span className="inline-flex items-baseline gap-2">
+@@ -76,7 +103,7 @@ const BODY = 'px-2 pb-3';
+ 
+ export const PLAN_GRID = 'grid grid-cols-1 md:grid-cols-[9rem_15rem_9rem_5rem_1fr] gap-x-3 gap-y-1 items-baseline';
+ 
+-export function PlanRow({ c, rank, live, contract }: { c: PlanCandidate; rank: number; live?: PlanLiveRead; contract?: PlanContractResult }) {
++export function PlanRow({ c, rank, live, contract, pos }: { c: PlanCandidate; rank: number; live?: PlanLiveRead; contract?: PlanContractResult; pos?: PlanPositioning }) {
+   const rr = live?.rrLive ?? null;
+   // "live" only for a print from today; an earlier session print is the "last" price.
+   const rrBasis = live && live.session !== 'earlier' ? 'live' : 'last';
+@@ -88,6 +115,7 @@ export function PlanRow({ c, rank, live, contract }: { c: PlanCandidate; rank: n
+         <Levels c={c} />
+         <span className="text-m2m-ink" data-rr={rr === null ? 'close' : rrBasis}>{rr !== null ? `${px(rr)} ${rrBasis}` : c.rrNow !== null ? `${px(c.rrNow)} close` : '—'}</span>
+         <ContractCell result={contract} />
++        {c.kind === 'stock' && <PositioningLine pos={pos} />}
+       </summary>
+       <div className={BODY}><PlanCard c={c} rank={rank} /></div>
+     </details>
+@@ -101,7 +129,7 @@ function statusOf(c: PlanCandidate): { text: string; tone: string } {
+   return { text: `✗ ${first?.label ?? 'check'}${c.fails > 1 ? ` +${c.fails - 1}` : ''}`, tone: 'text-red-400' };
+ }
+ 
+-export function CompactRow({ c, live }: { c: PlanCandidate; live?: PlanLiveRead }) {
++export function CompactRow({ c, live, pos }: { c: PlanCandidate; live?: PlanLiveRead; pos?: PlanPositioning }) {
+   const st = statusOf(c);
+   return (
+     <details className={ROW} data-compact-row={c.setup.symbol}>
+@@ -111,6 +139,7 @@ export function CompactRow({ c, live }: { c: PlanCandidate; live?: PlanLiveRead
+         <Levels c={c} />
+         <span className="text-m2m-ink">{c.rrNow !== null ? `${px(c.rrNow)} close` : c.rr !== null ? `${px(c.rr)} pub` : '—'}</span>
+         <span className={st.tone} data-status={c.fails === 0 ? 'qualifies' : 'fails'}>{st.text}</span>
++        {c.kind === 'stock' && <PositioningLine pos={pos} />}
+       </summary>
+       <div className={BODY}><PlanCard c={c} /></div>
+     </details>
+diff --git a/src/components/slate/__tests__/planTableLayout.test.tsx b/src/components/slate/__tests__/planTableLayout.test.tsx
+index ea15e6e0..c549ac9b 100644
+--- a/src/components/slate/__tests__/planTableLayout.test.tsx
++++ b/src/components/slate/__tests__/planTableLayout.test.tsx
+@@ -2,6 +2,7 @@
+ import { describe, expect, it } from 'vitest';
+ import { renderToStaticMarkup } from 'react-dom/server';
+ import MondayPlanBoard from '@/components/slate/MondayPlanBoard';
++import { CompactRow } from '@/components/slate/PlanRows';
+ import { assemblePlan, evaluate, type PlanEnrichment, type PlanSetup } from '@/lib/slate/mondayPlan';
+ import { planLiveRead } from '@/lib/slate/planLive';
+ import { pickPlanContract } from '@/lib/slate/planContract';
+@@ -34,6 +35,13 @@ function board() {
+   const plan = assemblePlan([aaa, bbb, ccc, ddd, miss], '2026-10-02', NEXT, 'setups');
+   const extras: PlanBoardExtras = {
+     asOf: NEXT, liveStatus: 'ok',
++    positioning: {
++      status: 'ok',
++      bySymbol: {
++        AAA: { symbol: 'AAA', source: 'bulk', asOf: '2026-10-01', siPctFreeFloat: 12.4, siPctFreeFloatPrior: 10, priorAsOf: '2026-09-24', siChangePct: 24, daysToCover: 3.1, costToBorrowPct: 0.56, availVsShort: 4.2, availabilityUnlimited: false },
++        BBB: { symbol: 'BBB', source: 'targeted', asOf: '2026-09-30', siPctFreeFloat: 21.5, siPctFreeFloatPrior: null, priorAsOf: null, siChangePct: null, daysToCover: null, costToBorrowPct: null, availVsShort: null, availabilityUnlimited: false },
++      },
++    },
+     live: {
+       AAA: planLiveRead(aaa, { symbol: 'AAA', price: 101.5, at: now.toISOString() }, now)!,
+       BBB: planLiveRead(bbb, { symbol: 'BBB', price: 94.2, at: now.toISOString() }, now)!,
+@@ -43,7 +51,7 @@ function board() {
+       [plan.plan.find(c => c.setup.symbol === 'BBB')!.setup.id]: { status: 'none', reason: 'option chain unavailable' },
+     },
+   };
+-  return { plan, html: renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={extras} />) };
++  return { plan, extras, html: renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={extras} />) };
+ }
+ 
+ describe('Slate plan table (one screen, rows expand to the full read)', () => {
+@@ -93,12 +101,41 @@ describe('Slate plan table (one screen, rows expand to the full read)', () => {
+     expect(html).toContain('the nearest expiry 30–45 days out; the strike with |delta| closest to 0.60');
+   });
+ 
++  it('each plan row carries a short-positioning line: Ortex values plain with the data date, the change est., absence stated', () => {
++    const { html } = board();
++    const row = (sym: string) => html.slice(html.indexOf(`data-plan-row="${sym}"`), html.indexOf('</summary>', html.indexOf(`data-plan-row="${sym}"`)));
++    expect(row('AAA')).toContain('data-positioning="bulk"');
++    expect(row('AAA')).toMatch(/12\.4% float/);
++    expect(row('AAA')).toMatch(/\+24% since/);
++    expect(row('AAA')).toMatch(/DTC 3\.1 · CTB 0\.56%/);
++    expect(row('AAA')).toMatch(/avail 4\.2× short/);
++    expect(row('BBB')).toContain('data-positioning="targeted"');
++    expect(row('BBB')).toMatch(/21\.5% float/);
++    expect(row('BBB')).not.toMatch(/DTC|CTB/);
++    expect(row('CCC')).toContain('short positioning: none on file');
++  });
++
++  it('ETF rows never carry positioning even when the data holds a row for the symbol', () => {
++    const etf = { ...evaluate(setup('SPY'), enrich(), NEXT), kind: 'etf' as const };
++    const html = renderToStaticMarkup(<CompactRow c={etf} pos={{ symbol: 'SPY', source: 'targeted', asOf: '2026-09-30', siPctFreeFloat: 1.1, siPctFreeFloatPrior: null, priorAsOf: null, siChangePct: null, daysToCover: null, costToBorrowPct: null, availVsShort: null, availabilityUnlimited: false }} />);
++    expect(html).not.toContain('data-positioning');
++  });
++
++  it('a failed positioning read is said on the board, not shown as empty coverage', () => {
++    const { plan } = board();
++    const html = renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={{ asOf: NEXT, liveStatus: 'ok', live: {}, contracts: {}, positioning: { status: 'read_failed', bySymbol: {} } }} />);
++    expect(html).toContain('data-positioning-outage');
++    expect(html).toContain('Short positioning could not be read');
++    const ok = renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={{ asOf: NEXT, liveStatus: 'ok', live: {}, contracts: {}, positioning: { status: 'ok', bySymbol: {} } }} />);
++    expect(ok).not.toContain('data-positioning-outage');
++  });
++
+   it('a print from an earlier session is labelled "last" with its date, never "live"', () => {
+     const aaa = evaluate(setup('AAA'), enrich(), NEXT);
+     const plan = assemblePlan([aaa], '2026-10-02', NEXT, 'setups');
+     const friday = new Date(Date.UTC(2026, 9, 2, 23, 59)); // Fri 19:59 ET
+     const live = { AAA: planLiveRead(aaa, { symbol: 'AAA', price: 101.5, at: friday.toISOString() }, now)! };
+-    const html = renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={{ asOf: NEXT, liveStatus: 'ok', live, contracts: {} }} />);
++    const html = renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={{ asOf: NEXT, liveStatus: 'ok', live, contracts: {}, positioning: { status: 'ok', bySymbol: {} } }} />);
+     expect(html).toContain('last Fri, Oct 2 19:59 ET');
+     expect(html).toMatch(/data-rr="last"/);
+     expect(html).not.toMatch(/data-rr="live"/);
+@@ -107,7 +144,7 @@ describe('Slate plan table (one screen, rows expand to the full read)', () => {
+   it('an empty live read is stated as such, distinct from a vendor failure', () => {
+     const aaa = evaluate(setup('AAA'), enrich(), NEXT);
+     const plan = assemblePlan([aaa], '2026-10-02', NEXT, 'setups');
+-    const empty = renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={{ asOf: NEXT, liveStatus: 'no_prints', live: {}, contracts: {} }} />);
++    const empty = renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={{ asOf: NEXT, liveStatus: 'no_prints', live: {}, contracts: {}, positioning: { status: 'ok', bySymbol: {} } }} />);
+     expect(empty).toContain('returned no recent prints');
+     expect(empty).not.toContain('vendor request failed');
+   });
+@@ -115,7 +152,7 @@ describe('Slate plan table (one screen, rows expand to the full read)', () => {
+   it('a quote outage is stated; the plan still renders from the last close', () => {
+     const aaa = evaluate(setup('AAA'), enrich(), NEXT);
+     const plan = assemblePlan([aaa], '2026-10-02', NEXT, 'setups');
+-    const html = renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={{ asOf: NEXT, liveStatus: 'fetch_failed', live: {}, contracts: {} }} />);
++    const html = renderToStaticMarkup(<MondayPlanBoard plan={plan} today={null} extras={{ asOf: NEXT, liveStatus: 'fetch_failed', live: {}, contracts: {}, positioning: { status: 'ok', bySymbol: {} } }} />);
+     expect(html).toContain('Live prices could not be read (vendor request failed)');
+     expect(html).toContain('data-plan-row="AAA"');
+     expect(html).toContain('2.40 close');
 diff --git a/src/config/controlPlaneJobPolicies.json b/src/config/controlPlaneJobPolicies.json
 index 0e932a30..4d1fcb2b 100644
 --- a/src/config/controlPlaneJobPolicies.json
@@ -298,12 +1296,961 @@ index 3602a231..e5ab5534 100644
      }
    ]
  }
+diff --git a/src/lib/open/__tests__/afterOpen.test.ts b/src/lib/open/__tests__/afterOpen.test.ts
+new file mode 100644
+index 00000000..d8156389
+--- /dev/null
++++ b/src/lib/open/__tests__/afterOpen.test.ts
+@@ -0,0 +1,208 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import fixture from './fixtures/tape-2026-10-05.json';
++import type { MondayPlan, PlanCandidate } from '@/lib/slate/mondayPlan';
++import type { MinuteBar } from '@/lib/open/tapeFacts';
++import {
++  dailyBarDate, parseDailyVolumes, parseMinuteBars, parseTapeSnapshots, readDailyVolumes, readMinuteBars, readTapeSnapshots, resetTapeCaches, tapeCacheSizes, type TapeQuote,
++} from '@/lib/open/tapeReader';
++import { stripItem } from '@/lib/open/afterOpenModel';
++import { loadAfterOpen } from '@/lib/open/afterOpenData';
++
++type Named = { side: 'bullish' | 'bearish'; stop: number; snapshot: { last: number; open: number; prevClose: number; vwap: number; volume: number }; dailyVolumes: number[]; bars: number[][] };
++const names = fixture.names as unknown as Record<string, Named>;
++const NOW = new Date(fixture.now);
++
++const cand = (symbol: string, target: number): PlanCandidate => ({
++  setup: { id: `id-${symbol}`, symbol, direction: names[symbol].side, strategy: 'test', quality: 0, factors: 0, visibility: 'live', entryPrice: null, stop: names[symbol].stop, target, catalystText: null, structure: '', sessionDate: '2026-10-02', entryPriceSource: null, stopLossSource: null },
++  kind: 'stock', enrich: null, notEvaluated: false, checks: [], rr: null, rrNow: null, fails: 0, unknowns: 0, rankUnknowns: 0,
++});
++const plan: MondayPlan = {
++  sessionDate: '2026-10-02', nextSession: '2026-10-05', source: 'setups',
++  plan: [cand('NVDA', 253.97), cand('MMM', 173.51), cand('MARA', 12.91)],
++  alsoQualify: [cand('NBIS', 279.83), cand('MCHP', 92.13), cand('PATH', 14.93), cand('BAC', 49.26)],
++  nearMisses: [], stocks: [], etfs: [],
++  counts: { published: 0, live: 0, shadow: 0, stocks: 0, etfs: 0, stocksWithFlowSide: 0, stocksWithFlowRead: 0, notEvaluated: 0 },
++};
++const bars = (s: string): MinuteBar[] => names[s].bars.map(([t, h, l, v]) => ({ t, h, l, v }));
++const snaps = () => ({ quotes: new Map<string, TapeQuote>(Object.entries(names).map(([s, n]) => [s, { symbol: s, at: NOW.toISOString(), ...n.snapshot }])), failed: [] as string[] });
++const deps = (over = {}) => ({
++  plan: async () => plan,
++  snapshots: vi.fn(async () => snaps()),
++  minuteBars: vi.fn(async (s: string) => bars(s)),
++  dailyVolumes: vi.fn(async (s: string) => names[s].dailyVolumes),
++  contracts: vi.fn(async () => ({})),
++  vix: async () => ({ value: 15.55, changePct: -1.2 }),
++  positioning: vi.fn(async () => ({ status: 'ok' as const, bySymbol: {} })),
++  ...over,
++});
++
++describe('loadAfterOpen on real 2026-10-05 data (12:57 ET)', () => {
++  it('groups today’s qualifiers by tape status in the fixed order, keeping plan order inside a group', async () => {
++    const m = await loadAfterOpen(NOW, deps());
++    expect(m.state).toBe('session');
++    expect(m.groups.map(g => [g.status, g.rows.map(r => r.candidate.setup.symbol)])).toEqual([
++      ['confirming', ['MMM']],
++      ['waiting', ['MCHP']],
++      ['not_confirming', ['NVDA', 'MARA']],
++      ['invalidated', ['NBIS', 'PATH', 'BAC']],
++    ]);
++    expect(m.counts).toMatchObject({ confirming: 1, waiting: 1, not_confirming: 2, invalidated: 3, forming: 0, unknown: 0 });
++    const mmm = m.groups[0].rows[0];
++    expect(mmm.inPlan).toBe(true);
++    expect(mmm.rrLive).toBeCloseTo((173.51 - 162.93) / (162.93 - 157.98), 6);
++    expect(m.notes).toEqual([]);
++  });
++
++  it('a failed vendor read is named and leaves names without a reading, never filled', async () => {
++    const m = await loadAfterOpen(NOW, deps({ snapshots: vi.fn(async () => { throw new Error('down'); }), vix: async () => { throw new Error('x'); } }));
++    expect(m.notes).toEqual(expect.arrayContaining(['Live prices could not be read (vendor request failed).', 'VIX could not be read.']));
++    expect(m.groups.map(g => g.status)).toEqual(['unknown']);
++    expect(m.indices.every(i => i.changePct === null)).toBe(true);
++  });
++
++  it('short positioning is attached per symbol; a failed store read is named, never filled', async () => {
++    const pos = { symbol: 'MMM', source: 'bulk' as const, asOf: '2026-10-01', siPctFreeFloat: 2.0, siPctFreeFloatPrior: 1.96, priorAsOf: '2026-09-24', siChangePct: 2, daysToCover: 3.3, costToBorrowPct: 0.35, availVsShort: null, availabilityUnlimited: true };
++    const ok = await loadAfterOpen(NOW, deps({ positioning: vi.fn(async () => ({ status: 'ok' as const, bySymbol: { MMM: pos } })) }));
++    expect(ok.groups[0].rows[0].positioning).toEqual(pos);
++    const failed = await loadAfterOpen(NOW, deps({ positioning: vi.fn(async () => ({ status: 'read_failed' as const, bySymbol: {} })) }));
++    expect(failed.notes).toContain('Short positioning could not be read (stored Ortex data unavailable).');
++    expect(failed.groups.every(g => g.rows.every(r => r.positioning === undefined))).toBe(true);
++  });
++
++  it('a failed volume-baseline read is named and leaves volume share empty', async () => {
++    const m = await loadAfterOpen(NOW, deps({ dailyVolumes: vi.fn(async (s: string) => { if (s === 'NVDA') throw new Error('x'); return names[s].dailyVolumes; }) }));
++    expect(m.notes).toContain('The 20-day volume baseline could not be read for NVDA; volume share omitted.');
++    const nvda = m.groups.flatMap(g => g.rows).find(r => r.candidate.setup.symbol === 'NVDA');
++    expect(nvda?.facts.volumeShare).toBeNull();
++    expect(nvda?.read.status).toBe('not_confirming');
++  });
++
++  it('a partly failed snapshot read names the symbols it lost', async () => {
++    const part = snaps();
++    part.quotes.delete('BAC');
++    const m = await loadAfterOpen(NOW, deps({ snapshots: vi.fn(async () => ({ quotes: part.quotes, failed: ['BAC', 'XLK'] })) }));
++    expect(m.notes).toContain('Live prices could not be read for BAC, XLK (vendor request failed).');
++    expect(m.groups.find(g => g.status === 'unknown')?.rows.map(r => r.candidate.setup.symbol)).toEqual(['BAC']);
++  });
++
++  it('one row per symbol: a name in both the plan and also-qualify keeps its plan entry', async () => {
++    const dup = { ...plan, alsoQualify: [...plan.alsoQualify, { ...cand('MMM', 173.51), setup: { ...cand('MMM', 173.51).setup, id: 'other-MMM' } }] };
++    const d = deps({ plan: async () => dup });
++    const m = await loadAfterOpen(NOW, d);
++    const mmm = m.groups.flatMap(g => g.rows).filter(r => r.candidate.setup.symbol === 'MMM');
++    expect(mmm).toHaveLength(1);
++    expect(mmm[0]).toMatchObject({ inPlan: true });
++    expect(d.minuteBars.mock.calls.filter(c => c[0] === 'MMM')).toHaveLength(1);
++  });
++
++  it('a lower-case plan symbol is normalized once and joins every read', async () => {
++    const lower = { ...plan, plan: [{ ...cand('MMM', 173.51), setup: { ...cand('MMM', 173.51).setup, symbol: 'mmm' } }], alsoQualify: [] };
++    const d = deps({ plan: async () => lower });
++    const m = await loadAfterOpen(NOW, d);
++    expect(d.minuteBars.mock.calls[0][0]).toBe('MMM');
++    expect(m.groups[0]).toMatchObject({ status: 'confirming' });
++  });
++
++  it('a plan read that throws is the same no-plan state: said plainly, nothing else read', async () => {
++    const d = deps({ plan: async () => { throw new Error('db down'); } });
++    const m = await loadAfterOpen(NOW, d);
++    expect(m.state).toBe('no_plan');
++    for (const f of [d.snapshots, d.minuteBars, d.dailyVolumes, d.contracts, d.positioning]) expect(f).not.toHaveBeenCalled();
++  });
++
++  it('an unreadable plan reads nothing else and says so', async () => {
++    const d = deps({ plan: async () => ({ ...plan, source: 'unavailable' as const, plan: [], alsoQualify: [] }) });
++    const m = await loadAfterOpen(NOW, d);
++    expect(m.state).toBe('no_plan');
++    for (const f of [d.snapshots, d.minuteBars, d.dailyVolumes, d.contracts, d.positioning]) expect(f).not.toHaveBeenCalled();
++  });
++
++  it('a name whose bars fail is listed and reads unknown; the others still classify', async () => {
++    const m = await loadAfterOpen(NOW, deps({ minuteBars: vi.fn(async (s: string) => { if (s === 'MMM') throw new Error('x'); return bars(s); }) }));
++    expect(m.notes).toContain('Intraday bars could not be read for MMM.');
++    expect(m.groups.find(g => g.status === 'unknown')?.rows.map(r => r.candidate.setup.symbol)).toEqual(['MMM']);
++  });
++
++  it('outside the session day it makes no vendor or store read at all and says so', async () => {
++    const vix = vi.fn(async () => ({ value: 1, changePct: 1 }));
++    const d = deps({ vix });
++    const m = await loadAfterOpen(new Date('2026-10-04T16:00:00.000Z'), d);
++    expect(m.state).toBe('not_session_day');
++    expect(m.groups).toEqual([]);
++    for (const f of [d.snapshots, d.minuteBars, d.dailyVolumes, d.contracts, d.positioning, vix]) expect(f).not.toHaveBeenCalled();
++    expect(m.indices.every(i => i.changePct === null)).toBe(true);
++    expect(m.notes).toEqual([]);
++  });
++});
++
++describe('tape reader parsing', () => {
++  beforeEach(() => resetTapeCaches());
++
++  it('snapshot: live price by the Slate rule; missing day fields stay missing; no price, no row', () => {
++    const m = parseTapeSnapshots({ tickers: [
++      { ticker: 'aaa', min: { c: 10, t: 1 }, day: { o: 9, vw: 9.5, v: 100 }, prevDay: { c: 8 } },
++      { ticker: 'BBB', min: { c: 5, t: 1 }, day: {} },
++      { ticker: 'CCC', day: { o: 1, vw: 1, v: 1 }, prevDay: { c: 1 } },
++    ] });
++    expect(m.get('AAA')).toMatchObject({ last: 10, open: 9, vwap: 9.5, volume: 100, prevClose: 8 });
++    expect(Number.isNaN(m.get('BBB')!.vwap)).toBe(true);
++    expect(m.has('CCC')).toBe(false);
++  });
++
++  it('daily volumes exclude the session date and later (bars stamped at midnight ET)', () => {
++    const t = (iso: string) => Date.parse(iso);
++    expect(dailyBarDate(t('2026-10-05T04:00:00.000Z'))).toBe('2026-10-05');
++    expect(parseDailyVolumes({ results: [{ t: t('2026-10-05T04:00:00.000Z'), v: 9 }, { t: t('2026-10-02T04:00:00.000Z'), v: 2 }, { t: t('2026-10-01T04:00:00.000Z'), v: 1 }] }, '2026-10-05')).toEqual([1, 2]);
++  });
++
++  it('minute bars keep time, high, low (volume 0 when absent) and drop malformed rows', () => {
++    expect(parseMinuteBars({ results: [{ t: 1, h: 2, l: 1, v: 5 }, { t: 2, h: 3, l: 2 }, { t: 3, h: 'x', l: 1 }] })).toEqual([{ t: 1, h: 2, l: 1, v: 5 }, { t: 2, h: 3, l: 2, v: 0 }]);
++  });
++
++  it('the caches stay bounded: stale and other-date entries are dropped past 500 keys', async () => {
++    const f = vi.fn(async () => ({ results: [{ t: 1, h: 2, l: 1, v: 1 }] }));
++    for (let i = 0; i < 520; i += 1) await readMinuteBars(`A${i}`, '2026-10-05', f as never, i < 300 ? 0 : 100_000);
++    expect(tapeCacheSizes().minute).toBeLessThanOrEqual(500);
++    const g = vi.fn(async () => ({ results: [] }));
++    for (let i = 0; i < 510; i += 1) await readDailyVolumes(`B${i}`, i < 400 ? '2026-10-02' : '2026-10-05', g as never);
++    expect(tapeCacheSizes().daily).toBeLessThanOrEqual(500);
++  });
++
++  it('snapshot batches of 100: a failed batch is reported by symbol, the others still read', async () => {
++    const syms = Array.from({ length: 150 }, (_, i) => `S${i}`);
++    const f = vi.fn(async (_p: string, q: Record<string, string>) => {
++      const list = q.tickers.split(',');
++      if (list.includes('S120')) throw new Error('batch down');
++      return { tickers: list.map(t => ({ ticker: t, min: { c: 10, t: 1 }, day: { o: 9, vw: 9.5, v: 1 }, prevDay: { c: 8 } })) };
++    });
++    const r = await readTapeSnapshots(syms, f as never);
++    expect(f).toHaveBeenCalledTimes(2);
++    expect(r.quotes.size).toBe(100);
++    expect(r.failed).toHaveLength(50);
++    expect(r.failed[0]).toBe('S100');
++  });
++
++  it('minute bars are cached 60 s per symbol and date; daily volumes for the date; bad input reads nothing', async () => {
++    const f = vi.fn(async () => ({ results: [{ t: 1, h: 2, l: 1, v: 1 }] }));
++    await readMinuteBars('MMM', '2026-10-05', f as never, 1_000);
++    await readMinuteBars('MMM', '2026-10-05', f as never, 50_000);
++    expect(f).toHaveBeenCalledTimes(1);
++    await readMinuteBars('MMM', '2026-10-05', f as never, 62_000);
++    expect(f).toHaveBeenCalledTimes(2);
++    expect((f.mock.calls[0] as unknown[])[0]).toBe('/v2/aggs/ticker/MMM/range/1/minute/2026-10-05/2026-10-05');
++    const g = vi.fn(async () => ({ results: [{ t: Date.parse('2026-10-02T04:00:00.000Z'), v: 7 }] }));
++    expect(await readDailyVolumes('MMM', '2026-10-05', g as never)).toEqual([7]);
++    await readDailyVolumes('MMM', '2026-10-05', g as never);
++    expect(g).toHaveBeenCalledTimes(1);
++    expect((g.mock.calls[0] as unknown[])[0]).toBe('/v2/aggs/ticker/MMM/range/1/day/2026-08-21/2026-10-04');
++    expect(await readMinuteBars('BAD SYMBOL', '2026-10-05', f as never)).toEqual([]);
++  });
++});
++
++describe('market strip', () => {
++  it('change % and VWAP side from vendor values; missing quote stays empty', () => {
++    expect(stripItem('SPY', { last: 774.46, prevClose: 769.64, vwap: 771.82 })).toEqual({ symbol: 'SPY', changePct: expect.closeTo(0.6263, 3), vsVwap: 'above' });
++    expect(stripItem('QQQ', undefined)).toEqual({ symbol: 'QQQ', changePct: null, vsVwap: null });
++    expect(stripItem('IWM', { last: 1, prevClose: Number.NaN, vwap: Number.NaN })).toEqual({ symbol: 'IWM', changePct: null, vsVwap: null });
++  });
++});
+diff --git a/src/lib/open/__tests__/fixtures/tape-2026-10-05.json b/src/lib/open/__tests__/fixtures/tape-2026-10-05.json
+new file mode 100644
+index 00000000..d1861133
+--- /dev/null
++++ b/src/lib/open/__tests__/fixtures/tape-2026-10-05.json
+@@ -0,0 +1,14 @@
++{
++  "_provenance": "Polygon (Massive) REST, read 2026-10-05/06 EDT. bars: 1-minute aggregates 08:00-09:59 ET on 2026-10-05 as [t_ms, high, low, volume] (volume rounded to whole shares). snapshot: last/open/prevClose/vwap from the stocks snapshot read at 12:57 ET (MMM, MARA, NBIS at vendor precision; MCHP, NVDA, PATH, BAC rounded to the cent when read); volume is NOT the snapshot day volume: it is the sum of 1-minute bar volume 09:30-12:56 ET (hybrid fixture). dailyVolumes: daily aggregates 2026-09-04..2026-10-02 (20 sessions), whole shares. cards: side and published stop from the 2026-10-05 Slate plan (setups table).",
++  "sessionDate": "2026-10-05",
++  "now": "2026-10-05T16:57:00.000Z",
++  "names": {
++    "MMM": {"side":"bullish","stop":157.98,"snapshot":{"last":162.93,"open":161.34,"prevClose":161.89,"vwap":161.4968,"volume":722527},"dailyVolumes":[2175371,2179682,3288827,2909289,3286006,3001062,4175028,2887190,2401311,4556072,2381036,3260871,2787374,2431010,2516244,3800202,2902791,3936289,3210722,3026393],"bars":[[1791205980000,161.5,161.5,100],[1791207000000,161.34,160.75,24691],[1791207060000,161.22,161.02,1116],[1791207120000,161.275,160.85,17356],[1791207180000,161.33,161.24,2122],[1791207240000,161.23,160.73,2223],[1791207300000,160.675,160.5,3048],[1791207360000,160.925,160.51,2030],[1791207420000,160.565,160.21,3098],[1791207480000,160.265,160.21,871],[1791207540000,160.5,160.21,5999],[1791207600000,160.615,160.49,2293],[1791207660000,160.66,160.498,1253],[1791207720000,160.6206,160.37,5969],[1791207780000,160.18,160.04,2854],[1791207840000,160.09,159.9201,4365],[1791207900000,160.3,160.13,3463],[1791207960000,160.52,160.36,2137],[1791208020000,160.66,160.565,879],[1791208080000,160.8,160.64,1851],[1791208140000,160.9312,160.7,2573],[1791208200000,161.0,160.81,3732],[1791208260000,160.8,160.65,2470],[1791208320000,160.63,160.5,1322],[1791208380000,160.48,160.3201,2027],[1791208440000,160.45,160.265,1461],[1791208500000,160.505,160.24,2413],[1791208560000,160.64,160.51,2772],[1791208620000,160.8,160.7,943],[1791208680000,160.755,160.58,3457],[1791208740000,160.83,160.5801,3194]]},
++    "MCHP": {"side":"bullish","stop":76.84,"snapshot":{"last":81.47,"open":80.95,"prevClose":81.32,"vwap":80.86,"volume":1482529},"dailyVolumes":[7673631,8728142,5104615,7596632,8770046,10437430,6745340,7333319,8556812,15934273,9677906,7458715,7724692,8726423,9748072,9394796,7690893,5727390,6805363,7822842],"bars":[[1791201720000,81.41,81.41,628],[1791201900000,82.11,82.024,393],[1791202500000,81.02,81.02,394],[1791202680000,81.0,81.0,443],[1791204120000,80.6767,80.6767,306],[1791204420000,81.4571,81.4571,430],[1791205380000,80.56,80.56,347],[1791206040000,80.59,80.58,1208],[1791206580000,80.69,80.51,1437],[1791206640000,80.89,80.67,3228],[1791206700000,80.9,80.5925,2539],[1791206820000,81.0,81.0,573],[1791206880000,81.63,81.01,8012],[1791206940000,81.19,80.98,2608],[1791207000000,81.48,80.88,110367],[1791207060000,81.15,80.8,9301],[1791207120000,80.94,80.6,8996],[1791207180000,80.88,80.6,12909],[1791207240000,81.02,80.68,9534],[1791207300000,81.05,80.69,15874],[1791207360000,80.975,80.815,11764],[1791207420000,80.88,80.56,9925],[1791207480000,80.61,80.465,11865],[1791207540000,80.77,80.515,14276],[1791207600000,80.89,80.55,20390],[1791207660000,80.7,80.59,12216],[1791207720000,80.875,80.66,20018],[1791207780000,80.695,80.58,7355],[1791207840000,80.65,80.5,13867],[1791207900000,80.62,80.324,15705],[1791207960000,80.37,80.185,11543],[1791208020000,80.335,80.21,21826],[1791208080000,80.31,80.06,11371],[1791208140000,80.185,80.1,10262],[1791208200000,80.16,80.05,9563],[1791208260000,80.26,80.14,6053],[1791208320000,80.2199,80.14,4533],[1791208380000,80.285,80.175,8968],[1791208440000,80.375,80.215,11805],[1791208500000,80.45,80.265,15101],[1791208560000,80.59,80.385,11963],[1791208620000,80.68,80.605,9872],[1791208680000,80.76,80.69,7079],[1791208740000,80.6901,80.63,3521]]},
++    "NVDA": {"side":"bullish","stop":227.86,"snapshot":{"last":236.28,"open":236.09,"prevClose":233.95,"vwap":236.79,"volume":47576169},"dailyVolumes":[135352420,122965555,82955479,105768001,89060140,132267245,88059658,96563590,94191264,190287429,109806068,95746745,89547291,77469856,89947713,142344322,101494933,121732189,98591412,135167818],"bars":[[1791201600000,235.12,234.98,9868],[1791201660000,235.07,235.05,2328],[1791201720000,235.1393,235.01,12456],[1791201780000,235.1199,235.0286,2466],[1791201840000,235.27,235.1266,7369],[1791201900000,235.3,235.25,15315],[1791201960000,235.2786,235.18,7396],[1791202020000,235.2673,235.17,19003],[1791202080000,235.2257,235.13,14293],[1791202140000,235.16,235.1,6294],[1791202200000,235.1472,235.05,6113],[1791202260000,235.2,235.07,8657],[1791202320000,235.16,235.09,4817],[1791202380000,235.2,235.11,4494],[1791202440000,235.24,235.2,3791],[1791202500000,235.2235,235.16,14181],[1791202560000,235.2148,235.14,3944],[1791202620000,235.25,235.22,4949],[1791202680000,235.22,235.16,2639],[1791202740000,235.18,235.09,10130],[1791202800000,235.18,235.07,3922],[1791202860000,235.08,235.066,2429],[1791202920000,235.1,235.02,4672],[1791202980000,235.11,234.98,13680],[1791203040000,235.0192,234.9,6287],[1791203100000,234.9876,234.9,10444],[1791203160000,234.9808,234.88,9066],[1791203220000,234.97,234.9,3669],[1791203280000,235.1,234.99,7087],[1791203340000,235.27,235.0758,15001],[1791203400000,235.29,235.2,5146],[1791203460000,235.2308,235.08,8672],[1791203520000,235.154,235.08,3745],[1791203580000,235.18,235.14,4494],[1791203640000,235.24,235.09,7979],[1791203700000,235.39,235.24,14589],[1791203760000,235.42,235.32,8352],[1791203820000,235.46,235.34,26661],[1791203880000,235.42,235.33,7909],[1791203940000,235.35,235.3,6292],[1791204000000,235.35,235.2633,6135],[1791204060000,235.3162,235.27,4424],[1791204120000,235.32,235.21,7868],[1791204180000,235.26,235.24,2051],[1791204240000,235.27,235.22,5162],[1791204300000,235.38,235.28,5653],[1791204360000,235.49,235.2886,16924],[1791204420000,235.4276,233.95,87351],[1791204480000,235.37,235.26,10937],[1791204540000,235.3142,235.2,10790],[1791204600000,235.3576,235.22,8253],[1791204660000,235.39,235.3108,5715],[1791204720000,235.38,235.24,4899],[1791204780000,235.4,235.22,5046],[1791204840000,235.47,235.38,8598],[1791204900000,235.48,235.3355,8702],[1791204960000,235.47,235.4,12208],[1791205020000,235.4443,235.4001,3858],[1791205080000,235.51,235.45,14056],[1791205140000,235.5223,235.4,13302],[1791205200000,235.471,235.3,6662],[1791205260000,235.42,235.34,4687],[1791205320000,235.35,235.31,8561],[1791205380000,235.37,235.3,9938],[1791205440000,235.349,235.2803,5335],[1791205500000,235.35,235.2,14160],[1791205560000,235.32,235.23,8654],[1791205620000,235.3,235.2,7595],[1791205680000,235.31,235.2179,5620],[1791205740000,235.3115,235.2846,3283],[1791205800000,235.45,235.32,10912],[1791205860000,235.45,235.42,6793],[1791205920000,235.45,235.38,6127],[1791205980000,235.58,235.465,43544],[1791206040000,235.6,235.45,23414],[1791206100000,235.6,235.51,8229],[1791206160000,235.5451,235.45,5354],[1791206220000,235.4454,235.32,8530],[1791206280000,235.49,235.39,4942],[1791206340000,235.7,235.38,48502],[1791206400000,235.74,235.62,20375],[1791206460000,235.7314,235.5186,15398],[1791206520000,235.7,235.52,15671],[1791206580000,235.79,235.6,22299],[1791206640000,235.66,235.51,10854],[1791206700000,235.93,235.58,45156],[1791206760000,235.93,235.72,25756],[1791206820000,236.35,235.94,102397],[1791206880000,236.52,236.07,58133],[1791206940000,236.2,235.88,63156],[1791207000000,236.51,235.15,2372194],[1791207060000,235.9,235.385,785753],[1791207120000,236.15,235.63,621072],[1791207180000,236.8,235.75,809889],[1791207240000,237.48,236.69,1445945],[1791207300000,237.78,236.94,1063999],[1791207360000,237.18,236.2,719601],[1791207420000,236.95,236.61,411228],[1791207480000,236.86,236.25,386097],[1791207540000,237.08,236.69,347215],[1791207600000,237.225,236.932,413937],[1791207660000,237.7,237.1,689032],[1791207720000,237.72,237.22,475764],[1791207780000,237.82,237.41,604480],[1791207840000,237.82,237.43,398341],[1791207900000,237.86,237.45,502396],[1791207960000,237.5696,237.14,500988],[1791208020000,237.25,236.97,439141],[1791208080000,237.27,236.9,419054],[1791208140000,237.32,236.96,347184],[1791208200000,237.28,236.8,460539],[1791208260000,237.6,237.13,452522],[1791208320000,237.65,237.37,250826],[1791208380000,237.7,237.4035,281512],[1791208440000,237.55,237.37,217231],[1791208500000,237.55,237.263,303601],[1791208560000,237.41,237.15,261917],[1791208620000,237.41,237.15,259844],[1791208680000,237.56,237.39,307131],[1791208740000,237.48,237.265,249888]]},
++    "MARA": {"side":"bullish","stop":10.58,"snapshot":{"last":10.852,"open":11.385,"prevClose":11.23,"vwap":10.9734,"volume":19951989},"dailyVolumes":[37594828,53474726,38381283,38535806,45263373,53268224,49136146,46292877,70466460,84319407,52028227,43625229,37417058,40194210,36795572,28562702,26125761,41155906,30322146,42274945],"bars":[[1791201600000,11.4,11.4,331],[1791201660000,11.4073,11.4073,980],[1791201720000,11.41,11.403,810],[1791201780000,11.3846,11.3846,1051],[1791201840000,11.3903,11.39,219],[1791201900000,11.4,11.4,552],[1791201960000,11.38,11.38,1099],[1791202020000,11.3839,11.38,2483],[1791202140000,11.38,11.36,5254],[1791202200000,11.35,11.3431,15425],[1791202260000,11.3685,11.36,2303],[1791202320000,11.346,11.34,889],[1791202380000,11.35,11.35,336],[1791202440000,11.3687,11.3687,106],[1791202500000,11.376,11.36,1439],[1791202560000,11.3697,11.3697,904],[1791202620000,11.3793,11.36,3227],[1791202680000,11.3767,11.37,595],[1791202740000,11.37,11.35,10161],[1791202800000,11.3569,11.35,1404],[1791202860000,11.3569,11.3569,1047],[1791202920000,11.36,11.36,104],[1791202980000,11.36,11.34,11691],[1791203040000,11.33,11.31,4405],[1791203100000,11.3189,11.31,3432],[1791203160000,11.3195,11.3195,708],[1791203220000,11.31,11.31,503],[1791203280000,11.32,11.32,535],[1791203400000,11.33,11.3131,1930],[1791203460000,11.32,11.31,3513],[1791203520000,11.31,11.3,1582],[1791203580000,11.302,11.302,4003],[1791203640000,11.3,11.2994,1300],[1791203700000,11.3,11.29,4040],[1791203760000,11.2995,11.2908,1196],[1791203820000,11.3086,11.3,7302],[1791203880000,11.3,11.29,483],[1791203940000,11.29,11.2893,638],[1791204000000,11.2973,11.2973,1119],[1791204120000,11.2895,11.2893,535],[1791204180000,11.2992,11.29,3214],[1791204240000,11.2992,11.2992,279],[1791204300000,11.2892,11.2809,4515],[1791204360000,11.2809,11.2809,103],[1791204420000,11.2897,11.2896,932],[1791204480000,11.2801,11.2705,7982],[1791204540000,11.28,11.28,1357],[1791204600000,11.32,11.3006,1435],[1791204660000,11.3167,11.3107,1458],[1791204720000,11.33,11.31,1020],[1791204780000,11.3299,11.3046,891],[1791204840000,11.3266,11.3266,206],[1791204900000,11.33,11.33,1758],[1791204960000,11.34,11.3299,6454],[1791205080000,11.35,11.34,783],[1791205200000,11.36,11.3408,1451],[1791205260000,11.36,11.3593,5118],[1791205320000,11.36,11.3508,638],[1791205380000,11.36,11.3585,4470],[1791205440000,11.36,11.36,442],[1791205500000,11.35,11.35,257],[1791205560000,11.36,11.36,754],[1791205620000,11.35,11.35,300],[1791205680000,11.35,11.35,1597],[1791205740000,11.36,11.35,4950],[1791205800000,11.36,11.36,395],[1791205860000,11.3695,11.3695,258],[1791205920000,11.37,11.36,1122],[1791206040000,11.3685,11.36,2228],[1791206100000,11.358,11.35,8308],[1791206160000,11.3597,11.35,2143],[1791206220000,11.3592,11.3506,655],[1791206280000,11.35,11.35,2645],[1791206340000,11.3698,11.3698,2471],[1791206400000,11.37,11.36,567],[1791206460000,11.3648,11.35,2477],[1791206520000,11.36,11.36,211],[1791206580000,11.3331,11.33,1271],[1791206700000,11.33,11.33,787],[1791206760000,11.33,11.306,5268],[1791206820000,11.33,11.33,5499],[1791206880000,11.39,11.37,1771],[1791206940000,11.42,11.38,5303],[1791207000000,11.41,11.27,419202],[1791207060000,11.33,11.255,163949],[1791207120000,11.33,11.235,405202],[1791207180000,11.235,11.11,393126],[1791207240000,11.18,11.09,239248],[1791207300000,11.125,11.05,255031],[1791207360000,11.09,10.94,556345],[1791207420000,10.99,10.92,373043],[1791207480000,11.01,10.92,163247],[1791207540000,11.02,10.965,197967],[1791207600000,11.0,10.9,383089],[1791207660000,10.92,10.82,349454],[1791207720000,10.91,10.855,164028],[1791207780000,10.92,10.88,128520],[1791207840000,10.93,10.89,100994],[1791207900000,10.915,10.85,295650],[1791207960000,10.87,10.81,196954],[1791208020000,10.87,10.82,189518],[1791208080000,10.905,10.86,184241],[1791208140000,10.89,10.855,119443],[1791208200000,10.9198,10.875,136649],[1791208260000,10.96,10.9,333887],[1791208320000,10.965,10.92,171039],[1791208380000,10.9278,10.875,178866],[1791208440000,10.875,10.845,250028],[1791208500000,10.88,10.83,119204],[1791208560000,10.89,10.84,90547],[1791208620000,10.8852,10.84,125077],[1791208680000,10.886,10.84,111614],[1791208740000,10.87,10.845,128852]]},
++    "NBIS": {"side":"bullish","stop":227.51,"snapshot":{"last":233.82,"open":244.1,"prevClose":242.81,"vwap":236.5932,"volume":7624485},"dailyVolumes":[14970671,26697328,11438960,13059379,11228341,13725145,10489034,13917864,30767648,21347716,17531105,15388960,11013375,24334964,11048832,12762124,13102154,14717718,12329187,12268427],"bars":[[1791201600000,243.0,243.0,1469],[1791201660000,242.94,242.94,505],[1791201780000,242.99,242.71,786],[1791201840000,242.99,242.98,779],[1791201900000,242.98,242.98,368],[1791201960000,243.19,243.0,653],[1791202020000,243.2171,243.2171,384],[1791202080000,243.0,243.0,1121],[1791202200000,243.1,243.1,281],[1791202260000,243.07,242.81,885],[1791202320000,243.16,243.0,1076],[1791202380000,243.0,243.0,655],[1791202500000,243.03,242.85,1342],[1791202680000,242.7418,242.7418,543],[1791202800000,242.7,242.7,730],[1791202920000,242.99,242.91,810],[1791202980000,243.0,242.976,1217],[1791203040000,242.78,242.65,610],[1791203100000,242.62,242.6,869],[1791203280000,243.0,242.85,1787],[1791203400000,243.4005,243.18,755],[1791203460000,243.0994,243.09,556],[1791203520000,243.12,243.12,303],[1791203580000,243.1,243.075,656],[1791203640000,243.05,243.05,322],[1791203700000,243.3,243.3,442],[1791203820000,243.44,243.43,462],[1791203940000,243.39,243.39,487],[1791204120000,243.54,243.49,442],[1791204300000,243.25,243.25,366],[1791204360000,243.39,243.38,600],[1791204480000,243.01,242.9,2485],[1791204540000,242.88,242.76,1086],[1791204600000,242.88,242.88,342],[1791204720000,243.0,242.9,1065],[1791204780000,243.37,243.28,804],[1791204840000,243.27,243.27,506],[1791204900000,243.3316,243.22,604],[1791205020000,243.43,243.3,1167],[1791205080000,243.62,243.5,2063],[1791205140000,243.62,243.5201,475],[1791205200000,243.83,243.69,3058],[1791205260000,243.96,243.85,2146],[1791205320000,244.05,244.0,1240],[1791205380000,244.1995,244.09,1945],[1791205440000,244.13,243.955,1525],[1791205500000,244.07,243.9,3730],[1791205560000,244.0,244.0,2334],[1791205620000,243.83,243.83,503],[1791205740000,243.82,243.82,288],[1791205800000,244.02,243.98,1330],[1791205860000,244.0,243.9788,3642],[1791205920000,243.9,243.9,415],[1791205980000,244.0,243.9,1492],[1791206040000,243.8,243.7534,1153],[1791206100000,243.9075,243.9075,508],[1791206280000,243.85,243.5854,2040],[1791206400000,243.86,243.8,1397],[1791206460000,243.8831,243.88,841],[1791206520000,243.5641,243.4991,964],[1791206580000,243.56,243.4417,1234],[1791206640000,243.585,243.5,1337],[1791206700000,243.8169,243.69,5554],[1791206760000,243.7,243.6,348],[1791206820000,243.6838,243.4,20942],[1791206880000,243.34,243.0,6842],[1791206940000,243.34,243.29,2161],[1791207000000,244.49,240.86,206208],[1791207060000,241.56,239.6,96857],[1791207120000,240.81,237.6,106585],[1791207180000,238.9921,237.32,113918],[1791207240000,239.96,237.79,101186],[1791207300000,239.8029,238.3,76824],[1791207360000,239.136,237.92,97835],[1791207420000,239.03,238.0,66069],[1791207480000,239.24,238.43,54131],[1791207540000,240.19,238.5201,59466],[1791207600000,240.53,239.26,79597],[1791207660000,240.07,239.252,63611],[1791207720000,240.0,238.81,56179],[1791207780000,239.88,238.98,54420],[1791207840000,240.2988,239.19,37889],[1791207900000,239.68,237.48,131888],[1791207960000,237.5436,234.59,246121],[1791208020000,236.25,234.63,135628],[1791208080000,235.94,235.11,74083],[1791208140000,236.0499,235.315,86029],[1791208200000,236.9985,235.65,111105],[1791208260000,237.3602,236.64,84592],[1791208320000,237.2999,236.25,68951],[1791208380000,236.89,236.25,31594],[1791208440000,236.82,236.1001,46808],[1791208500000,237.2,236.7,48155],[1791208560000,236.88,236.425,36003],[1791208620000,236.97,236.39,32302],[1791208680000,237.64,236.35,43675],[1791208740000,237.6,237.085,43983]]},
++    "PATH": {"side":"bullish","stop":12.88,"snapshot":{"last":12.88,"open":13.12,"prevClose":13.12,"vwap":12.94,"volume":11359590},"dailyVolumes":[104579701,62577072,57904845,65784060,41791957,61294673,71798276,53595403,56205176,38661740,46944952,42782841,54338086,48915731,45670206,49586288,36366668,42518697,42708215,19709658],"bars":[[1791202260000,13.14,13.14,300],[1791202440000,13.18,13.18,120],[1791202920000,13.13,13.13,120],[1791203220000,13.1599,13.14,860],[1791203520000,13.155,13.15,2079],[1791203640000,13.16,13.1503,1102],[1791203820000,13.15,13.15,903],[1791203940000,13.1595,13.1595,402],[1791204000000,13.16,13.16,5000],[1791204180000,13.15,13.15,162],[1791204540000,13.14,13.14,540],[1791204600000,13.16,13.16,186],[1791204660000,13.14,13.14,247],[1791205200000,13.15,13.14,1005],[1791205380000,13.12,13.12,250],[1791205800000,13.13,13.13,1015],[1791206040000,13.18,13.18,400],[1791206160000,13.17,13.17,100],[1791206280000,13.1362,13.1362,110],[1791206400000,13.13,13.13,295],[1791206520000,13.13,13.13,313],[1791206580000,13.13,13.12,1962],[1791206640000,13.1576,13.1576,200],[1791206880000,13.12,13.1107,754],[1791207000000,13.15,13.03,181192],[1791207060000,13.06,12.97,89645],[1791207120000,13.07,13.0,32458],[1791207180000,13.13,13.0501,31256],[1791207240000,13.16,13.0738,36499],[1791207300000,13.19,13.1511,35080],[1791207360000,13.18,13.11,48717],[1791207420000,13.195,13.1156,26856],[1791207480000,13.205,13.17,28297],[1791207540000,13.196,13.165,39031],[1791207600000,13.225,13.17,36394],[1791207660000,13.2497,13.2,106104],[1791207720000,13.21,13.16,36701],[1791207780000,13.215,13.155,17933],[1791207840000,13.21,13.115,45949],[1791207900000,13.23,13.145,45295],[1791207960000,13.22,13.145,36713],[1791208020000,13.226,13.165,19031],[1791208080000,13.18,13.1138,173269],[1791208140000,13.14,13.05,56988],[1791208200000,13.08,13.04,30069],[1791208260000,13.08,13.06,25125],[1791208320000,13.071,13.0464,11728],[1791208380000,13.0614,13.0205,15468],[1791208440000,13.07,13.03,27411],[1791208500000,13.075,13.035,47883],[1791208560000,13.0786,13.05,13799],[1791208620000,13.06,13.035,18309],[1791208680000,13.055,13.03,16858],[1791208740000,13.04,13.0201,19762]]},
++    "BAC": {"side":"bearish","stop":56.41,"snapshot":{"last":54.2,"open":54.04,"prevClose":53.75,"vwap":53.99,"volume":14565173},"dailyVolumes":[26589403,28339828,36025057,29364836,28877548,64773953,50859669,50145198,36733116,52483861,33228142,45137809,36727763,40990257,28601303,29170535,31666586,34023702,60049480,35089448],"bars":[[1791201660000,53.88,53.88,254],[1791201900000,53.908,53.908,106],[1791201960000,53.9,53.9,1160],[1791202140000,53.92,53.92,322],[1791202260000,53.95,53.95,1249],[1791202320000,53.94,53.94,652067],[1791202380000,53.94,53.9191,303],[1791202440000,53.95,53.95,142],[1791202680000,53.9077,53.9077,123],[1791203100000,53.95,53.95,514],[1791203340000,53.93,53.93,237],[1791203400000,53.91,53.91,123],[1791203460000,53.9331,53.9331,3102],[1791203700000,53.93,53.93,5062],[1791203880000,53.94,53.91,5639],[1791204180000,53.94,53.94,128],[1791204240000,53.91,53.91,247],[1791204360000,53.9043,53.9043,684],[1791204540000,53.915,53.915,400],[1791204660000,53.9269,53.9269,203],[1791204720000,53.93,53.9,1058],[1791204780000,53.93,53.93,830],[1791204840000,53.93,53.93,401],[1791204960000,53.91,53.902,254],[1791205200000,53.91,53.9,20603],[1791205320000,53.89,53.89,263],[1791205440000,53.89,53.89,612],[1791205500000,53.91,53.91,364],[1791205560000,53.94,53.94,274],[1791205680000,53.88,53.87,529],[1791205740000,53.91,53.9,208],[1791205800000,53.88,53.87,949],[1791205860000,53.95,53.9,1564],[1791205920000,53.95,53.95,411],[1791206040000,53.9,53.9,600],[1791206160000,53.91,53.91,153],[1791206220000,53.8616,53.8616,127],[1791206460000,53.9,53.9,1280],[1791206700000,53.95,53.95,2494],[1791206760000,54.02,53.99,3945],[1791206880000,53.98,53.98,1062],[1791206940000,54.0111,53.83,4099],[1791207000000,54.1485,53.99,1436705],[1791207060000,54.17,54.06,309973],[1791207120000,54.08,53.995,230195],[1791207180000,54.02,53.855,222492],[1791207240000,53.91,53.76,342158],[1791207300000,53.83,53.765,146861],[1791207360000,53.905,53.7909,337031],[1791207420000,53.905,53.73,170841],[1791207480000,53.835,53.745,92350],[1791207540000,53.84,53.755,199135],[1791207600000,53.76,53.69,199683],[1791207660000,53.78,53.7,153997],[1791207720000,53.88,53.79,137015],[1791207780000,53.91,53.78,144183],[1791207840000,53.94,53.83,126258],[1791207900000,53.905,53.83,131703],[1791207960000,53.8764,53.795,162191],[1791208020000,53.845,53.775,106155],[1791208080000,53.885,53.825,108889],[1791208140000,53.885,53.815,77843],[1791208200000,53.925,53.825,131611],[1791208260000,53.895,53.815,106495],[1791208320000,53.895,53.845,85845],[1791208380000,53.86,53.785,113385],[1791208440000,53.825,53.74,78228],[1791208500000,53.82,53.775,76909],[1791208560000,53.795,53.715,93871],[1791208620000,53.775,53.71,95849],[1791208680000,53.81,53.745,70510],[1791208740000,53.815,53.76,79784]]}
++  }
++}
+diff --git a/src/lib/open/__tests__/tapeFacts.test.ts b/src/lib/open/__tests__/tapeFacts.test.ts
+new file mode 100644
+index 00000000..18ed62e9
+--- /dev/null
++++ b/src/lib/open/__tests__/tapeFacts.test.ts
+@@ -0,0 +1,122 @@
++import { describe, expect, it } from 'vitest';
++import fixture from './fixtures/tape-2026-10-05.json';
++import { classifyTape, computeTapeFacts, type MinuteBar, type TapeFacts, type TapeSide } from '../tapeFacts';
++
++type Named = { side: TapeSide; stop: number; snapshot: { last: number; open: number; prevClose: number; vwap: number; volume: number }; dailyVolumes: number[]; bars: number[][] };
++const names = fixture.names as unknown as Record<string, Named>;
++const toBars = (rows: number[][]): MinuteBar[] => rows.map(([t, h, l, v]) => ({ t, h, l, v }));
++const factsFor = (sym: string, now = new Date(fixture.now)) => {
++  const n = names[sym];
++  return computeTapeFacts({ sessionDate: fixture.sessionDate, bars: toBars(n.bars), snapshot: n.snapshot, dailyVolumes: n.dailyVolumes, now });
++};
++const read = (sym: string, now?: Date) => classifyTape(factsFor(sym, now), names[sym].side, names[sym].stop);
++
++describe('tape facts on real 2026-10-05 Polygon bars (12:57 ET)', () => {
++  it('derives the opening range, gap, move since the open and volume share from vendor values', () => {
++    const mmm = factsFor('MMM');
++    expect(mmm.openingRange).toEqual({ high: 161.34, low: 159.9201 });
++    expect(mmm.gapPct).toBeCloseTo(-0.3397, 4);
++    expect(mmm.sinceOpenPct).toBeCloseTo(0.9855, 4);
++    expect(mmm.volumeShare).toBeCloseTo(0.2365, 4);
++    expect(factsFor('NBIS').openingRange).toEqual({ high: 244.49, low: 234.59 });
++    expect(factsFor('BAC').openingRange).toEqual({ high: 54.17, low: 53.69 });
++  });
++
++  it('reads the pre-market range from bars before 09:30 ET only', () => {
++    expect(factsFor('NVDA').premarket).toEqual({ high: 236.52, low: 233.95 });
++    expect(factsFor('MMM').premarket).toEqual({ high: 161.5, low: 161.5 });
++  });
++
++  it('classifies each card by OPEN-VIEW-1', () => {
++    expect(read('MMM')).toMatchObject({ status: 'confirming' });
++    expect(read('MCHP')).toMatchObject({ status: 'waiting' });
++    expect(read('NVDA')).toMatchObject({ status: 'not_confirming' });
++    expect(read('MARA')).toMatchObject({ status: 'not_confirming' });
++    expect(read('NBIS')).toMatchObject({ status: 'invalidated', reason: 'below the opening-range low' });
++    expect(read('PATH')).toMatchObject({ status: 'invalidated', reason: 'at or through the stop' });
++    expect(read('BAC')).toMatchObject({ status: 'invalidated', reason: 'above the opening-range high' });
++  });
++
++  it('gives no status while the range forms (before 10:00 ET), except a stop hit, which is Invalidated at once (OPEN-VIEW-2)', () => {
++    const at945 = new Date('2026-10-05T13:45:00.000Z');
++    expect(factsFor('MMM', at945).openingRange).toBeNull();
++    expect(read('MMM', at945)).toMatchObject({ status: 'forming' });
++    expect(read('PATH', at945)).toMatchObject({ status: 'invalidated', reason: 'at or through the stop' });
++    expect(read('MMM', new Date('2026-10-05T14:00:00.000Z')).status).not.toBe('forming');
++  });
++});
++
++describe('classifyTape edges', () => {
++  const f = (over: Partial<TapeFacts>): TapeFacts => ({
++    sessionDate: '2026-10-05', last: 100, vwap: 99, gapPct: 0, sinceOpenPct: 0, premarket: null,
++    openingRange: { high: 101, low: 98 }, openingRangeComplete: true, avgDailyVolume: null, volumeShare: null, ...over,
++  });
++
++  it('bearish mirrors bullish', () => {
++    expect(classifyTape(f({ last: 97, vwap: 99 }), 'bearish', 105)).toMatchObject({ status: 'confirming' });
++    expect(classifyTape(f({ last: 99, vwap: 100 }), 'bearish', 105)).toMatchObject({ status: 'waiting' });
++    expect(classifyTape(f({ last: 100, vwap: 99 }), 'bearish', 105)).toMatchObject({ status: 'not_confirming' });
++    expect(classifyTape(f({ last: 102 }), 'bearish', 105)).toMatchObject({ status: 'invalidated' });
++    expect(classifyTape(f({ last: 100 }), 'bearish', 100)).toMatchObject({ status: 'invalidated', reason: 'at or through the stop' });
++  });
++
++  it('range and VWAP boundaries: at the high is inside; at VWAP is waiting', () => {
++    expect(classifyTape(f({ last: 101, vwap: 99 }), 'bullish', null)).toMatchObject({ status: 'waiting' });
++    expect(classifyTape(f({ last: 100, vwap: 100 }), 'bullish', null)).toMatchObject({ status: 'waiting' });
++    expect(classifyTape(f({ last: 100, vwap: 100 }), 'bearish', null)).toMatchObject({ status: 'waiting' });
++    expect(classifyTape(f({ last: 101, vwap: 101 }), 'bearish', null)).toMatchObject({ status: 'waiting' });
++    expect(classifyTape(f({ last: 98, vwap: 99 }), 'bullish', null)).toMatchObject({ status: 'not_confirming' });
++  });
++
++  it('through the range on the wrong side of VWAP is Not confirming: VWAP decides a breakout (OPEN-VIEW-2)', () => {
++    expect(classifyTape(f({ last: 102, vwap: 103 }), 'bullish', null)).toMatchObject({ status: 'not_confirming', reason: 'above the range but not above VWAP' });
++    expect(classifyTape(f({ last: 102, vwap: 102 }), 'bullish', null)).toMatchObject({ status: 'not_confirming' });
++    expect(classifyTape(f({ last: 97, vwap: 96 }), 'bearish', null)).toMatchObject({ status: 'not_confirming', reason: 'below the range but not below VWAP' });
++  });
++
++  it('a stop hit is Invalidated before 10:00 ET too; without a live price it stays forming', () => {
++    expect(classifyTape(f({ openingRangeComplete: false, openingRange: null, last: 95 }), 'bullish', 96)).toMatchObject({ status: 'invalidated' });
++    expect(classifyTape(f({ openingRangeComplete: false, openingRange: null, last: 106 }), 'bearish', 105)).toMatchObject({ status: 'invalidated' });
++    expect(classifyTape(f({ openingRangeComplete: false, openingRange: null, last: null }), 'bullish', 96)).toMatchObject({ status: 'forming' });
++  });
++
++  it('missing inputs are unknown, not a reading', () => {
++    expect(classifyTape(f({ openingRange: null }), 'bullish', null)).toMatchObject({ status: 'unknown' });
++    expect(classifyTape(f({ last: null }), 'bullish', null)).toMatchObject({ status: 'unknown' });
++  });
++});
++
++describe('computeTapeFacts guards', () => {
++  const base = { sessionDate: '2026-10-05', bars: [] as MinuteBar[], now: new Date('2026-10-05T16:57:00.000Z') };
++  it('volume share needs 20 completed sessions of positive volume', () => {
++    const snap = { last: 1, open: 1, prevClose: 1, vwap: 1, volume: 50 };
++    expect(computeTapeFacts({ ...base, snapshot: snap, dailyVolumes: Array(19).fill(100) }).volumeShare).toBeNull();
++    expect(computeTapeFacts({ ...base, snapshot: snap, dailyVolumes: [...Array(19).fill(100), 0] }).volumeShare).toBeNull();
++    expect(computeTapeFacts({ ...base, snapshot: snap, dailyVolumes: [5, ...Array(20).fill(100)] }).volumeShare).toBe(0.5);
++    expect(computeTapeFacts({ ...base, snapshot: { ...snap, volume: 0 }, dailyVolumes: Array(20).fill(100) }).volumeShare).toBeNull();
++  });
++  it('no snapshot gives no price-derived facts', () => {
++    expect(computeTapeFacts({ ...base, snapshot: null, dailyVolumes: [] })).toMatchObject({ last: null, vwap: null, gapPct: null, sinceOpenPct: null, volumeShare: null });
++  });
++  it('the pre-market window is 04:00-09:29 ET inclusive of its boundaries (EDT and EST)', () => {
++    const bar = (iso: string, h: number) => ({ t: Date.parse(iso), h, l: h, v: 1 });
++    const edt = [bar('2026-10-05T07:59:00.000Z', 900), bar('2026-10-05T08:00:00.000Z', 10), bar('2026-10-05T13:29:00.000Z', 20), bar('2026-10-05T13:30:00.000Z', 900)];
++    expect(computeTapeFacts({ ...base, bars: edt, snapshot: null, dailyVolumes: [] }).premarket).toEqual({ high: 20, low: 10 });
++    const est = [bar('2026-12-07T08:59:00.000Z', 900), bar('2026-12-07T09:00:00.000Z', 30), bar('2026-12-07T14:29:00.000Z', 40), bar('2026-12-07T14:30:00.000Z', 900)];
++    expect(computeTapeFacts({ sessionDate: '2026-12-07', now: new Date('2026-12-07T17:00:00.000Z'), bars: est, snapshot: null, dailyVolumes: [] }).premarket).toEqual({ high: 40, low: 30 });
++  });
++  it('the opening range is 09:30-09:59 ET and is reported only from 10:00 ET', () => {
++    const bar = (iso: string, h: number) => ({ t: Date.parse(iso), h, l: h, v: 1 });
++    const bars = [bar('2026-10-05T13:29:00.000Z', 900), bar('2026-10-05T13:30:00.000Z', 5), bar('2026-10-05T13:59:00.000Z', 6), bar('2026-10-05T14:00:00.000Z', 900)];
++    expect(computeTapeFacts({ ...base, bars, snapshot: null, dailyVolumes: [] }).openingRange).toEqual({ high: 6, low: 5 });
++    expect(computeTapeFacts({ ...base, now: new Date('2026-10-05T13:59:59.000Z'), bars, snapshot: null, dailyVolumes: [] }).openingRange).toBeNull();
++  });
++  it('before 10:00 ET the status is forming when inputs are missing (precedence)', () => {
++    const early = computeTapeFacts({ ...base, now: new Date('2026-10-05T13:45:00.000Z'), snapshot: null, dailyVolumes: [] });
++    expect(classifyTape(early, 'bullish', null)).toMatchObject({ status: 'forming' });
++  });
++  it('bars from another session date are ignored', () => {
++    const other = { t: Date.parse('2026-10-02T13:45:00.000Z'), h: 500, l: 1, v: 1 };
++    expect(computeTapeFacts({ ...base, bars: [other], snapshot: null, dailyVolumes: [] }).openingRange).toBeNull();
++  });
++});
+diff --git a/src/lib/open/afterOpenData.ts b/src/lib/open/afterOpenData.ts
+new file mode 100644
+index 00000000..ba7bc141
+--- /dev/null
++++ b/src/lib/open/afterOpenData.ts
+@@ -0,0 +1,105 @@
++/**
++ * Loader for the after-open view: plan → tape reads → model. Each vendor read is isolated: a failure
++ * leaves that part empty and is named in `notes`, never filled.
++ *
++ * The plan is the Slate plan for the next session (`getMondayPlan`); during a trading day that is
++ * today. Outside a trading day (weekend, holiday, after 17:00 ET when the plan rolls forward) the view
++ * says so and makes no vendor or store read at all (no strip, no VIX, no positioning). The same holds when
++ * the plan itself is unreadable: the view says so and reads nothing else.
++ */
++
++import { getMondayPlan, type MondayPlan } from '@/lib/slate/mondayPlan';
++import { getPlanBoardExtras } from '@/lib/slate/planBoardExtras';
++import { fetchYahooQuotes } from '@/lib/yahoo-quotes';
++import { etDateYmd } from '@/lib/marketSession';
++import { computeTapeFacts, type TapeFacts } from '@/lib/open/tapeFacts';
++import { readDailyVolumes, readMinuteBars, readTapeSnapshots, type TapeQuote } from '@/lib/open/tapeReader';
++import {
++  buildAfterOpenModel, INDEX_SYMBOLS, qualifyingStocks, SECTOR_SYMBOLS, type AfterOpenModel, type StripQuote,
++} from '@/lib/open/afterOpenModel';
++import type { PlanContractResult } from '@/lib/slate/planContract';
++import { readPlanPositioning, type PlanPositioningRead } from '@/lib/slate/planPositioning';
++
++export interface AfterOpenDeps {
++  plan: (now: Date) => Promise<MondayPlan>;
++  snapshots: typeof readTapeSnapshots;
++  minuteBars: typeof readMinuteBars;
++  dailyVolumes: typeof readDailyVolumes;
++  contracts: (plan: MondayPlan, now: Date) => Promise<Record<string, PlanContractResult>>;
++  vix: () => Promise<{ value: number | null; changePct: number | null }>;
++  positioning: (symbols: string[]) => Promise<PlanPositioningRead>;
++}
++
++const defaultDeps: AfterOpenDeps = {
++  plan: (now) => getMondayPlan(now),
++  snapshots: (s) => readTapeSnapshots(s),
++  minuteBars: (s, d) => readMinuteBars(s, d),
++  dailyVolumes: (s, d) => readDailyVolumes(s, d),
++  contracts: async (plan, now) => (await getPlanBoardExtras(plan, now, { contractsFor: 'qualifying' })).contracts,
++  vix: async () => {
++    const q = (await fetchYahooQuotes(['^VIX']))['^VIX'];
++    return { value: q?.price ?? null, changePct: q?.change_pct ?? null };
++  },
++  positioning: (symbols) => readPlanPositioning(symbols),
++};
++
++export async function loadAfterOpen(now: Date = new Date(), overrides: Partial<AfterOpenDeps> = {}): Promise<AfterOpenModel> {
++  const d = { ...defaultDeps, ...overrides };
++  const notes: string[] = [];
++  const plan = await d.plan(now).catch((): MondayPlan => ({
++    sessionDate: null, nextSession: etDateYmd(now), plan: [], alsoQualify: [], nearMisses: [], stocks: [], etfs: [], source: 'unavailable',
++    counts: { published: 0, live: 0, shadow: 0, stocks: 0, etfs: 0, stocksWithFlowSide: 0, stocksWithFlowRead: 0, notEvaluated: 0 },
++  }));
++  const sessionDate = plan.nextSession;
++  const isSessionDay = etDateYmd(now) === sessionDate;
++  if (!isSessionDay || plan.source === 'unavailable') {
++    return buildAfterOpenModel({
++      plan, sessionDate, isSessionDay, facts: new Map(), priceAt: new Map(), contracts: {}, positioning: {},
++      strip: new Map(), vix: { value: null, changePct: null }, notes,
++    });
++  }
++  const stocks = qualifyingStocks(plan).map(x => x.c.setup.symbol.toUpperCase());
++  const stripSymbols = [...INDEX_SYMBOLS, ...SECTOR_SYMBOLS];
++
++  const [snapR, vixR, contractsR, perName, posR] = await Promise.all([
++    d.snapshots([...stocks, ...stripSymbols]).catch(() => null),
++    d.vix().catch(() => null),
++    stocks.length > 0 ? d.contracts(plan, now).catch(() => null) : Promise.resolve({}),
++    stocks.length > 0
++      ? Promise.all(stocks.map(async s => {
++        const [bars, vols] = await Promise.allSettled([d.minuteBars(s, sessionDate), d.dailyVolumes(s, sessionDate)]);
++        return { s, bars: bars.status === 'fulfilled' ? bars.value : null, vols: vols.status === 'fulfilled' ? vols.value : null };
++      }))
++      : Promise.resolve([]),
++    stocks.length > 0 ? d.positioning(stocks).catch(() => null) : Promise.resolve({ status: 'ok' as const, bySymbol: {} }),
++  ]);
++
++  const snaps: Map<string, TapeQuote> = snapR?.quotes ?? new Map();
++  if (!snapR) notes.push('Live prices could not be read (vendor request failed).');
++  else if (snapR.failed.length > 0) notes.push(`Live prices could not be read for ${snapR.failed.join(', ')} (vendor request failed).`);
++  if (!vixR) notes.push('VIX could not be read.');
++  if (!contractsR) notes.push('Suggested contracts could not be read.');
++  if (!posR || posR.status === 'read_failed') notes.push('Short positioning could not be read (stored Ortex data unavailable).');
++  const barFails = perName.filter(p => p.bars === null).map(p => p.s);
++  if (barFails.length > 0) notes.push(`Intraday bars could not be read for ${barFails.join(', ')}.`);
++  const volFails = perName.filter(p => p.vols === null).map(p => p.s);
++  if (volFails.length > 0) notes.push(`The 20-day volume baseline could not be read for ${volFails.join(', ')}; volume share omitted.`);
++
++  const facts = new Map<string, TapeFacts>();
++  const priceAt = new Map<string, string>();
++  for (const p of perName) {
++    const snap = snaps.get(p.s) ?? null;
++    facts.set(p.s, computeTapeFacts({ sessionDate, bars: p.bars ?? [], snapshot: snap, dailyVolumes: p.vols ?? [], now }));
++    if (snap) priceAt.set(p.s, snap.at);
++  }
++  const strip = new Map<string, StripQuote>();
++  for (const s of stripSymbols) {
++    const q = snaps.get(s);
++    if (q) strip.set(s, { last: q.last, prevClose: q.prevClose, vwap: q.vwap });
++  }
++
++  return buildAfterOpenModel({
++    plan, sessionDate, isSessionDay, facts, priceAt, contracts: contractsR ?? {}, positioning: posR?.bySymbol ?? {}, strip,
++    vix: vixR ?? { value: null, changePct: null }, notes,
++  });
++}
+diff --git a/src/lib/open/afterOpenGate.ts b/src/lib/open/afterOpenGate.ts
+new file mode 100644
+index 00000000..fbfc72d5
+--- /dev/null
++++ b/src/lib/open/afterOpenGate.ts
+@@ -0,0 +1,9 @@
++import type { OptionsDecisionAccess } from '@/lib/rti/owner/capability';
++
++/**
++ * Who sees the after-open view on /the-open (OPEN-VIEW-1): the owner audience only. Every other
++ * audience keeps the page it had before the view existed.
++ */
++export function showAfterOpenView(audience: OptionsDecisionAccess['audience']): boolean {
++  return audience === 'OWNER';
++}
+diff --git a/src/lib/open/afterOpenModel.ts b/src/lib/open/afterOpenModel.ts
+new file mode 100644
+index 00000000..54112cbc
+--- /dev/null
++++ b/src/lib/open/afterOpenModel.ts
+@@ -0,0 +1,128 @@
++/**
++ * Pure model for the after-open view (OPEN-VIEW-1/-2): today's qualifying single-stock setups grouped by
++ * tape status, and a market strip. No fetching here; `afterOpenData.ts` supplies the inputs.
++ *
++ * Rows come from the Slate plan for the session (plan + also-qualify, stocks only). Each row carries its
++ * tape facts and status (`tapeFacts.ts`), R:R from the live price (`riskRewardFrom`, est.), and the
++ * suggested contract when one was read (PLAN-CONTRACT-RULE-1, est.). Group order is fixed: Confirming,
++ * Waiting, Not confirming, Range forming, No tape read, Invalidated. Inside a group the plan's own rule-based
++ * order is kept; the status never re-ranks names.
++ */
++
++import { riskRewardFrom, type MondayPlan, type PlanCandidate } from '@/lib/slate/mondayPlan';
++import type { PlanContractResult } from '@/lib/slate/planContract';
++import type { PlanPositioning } from '@/lib/slate/planPositioning';
++import { classifyTape, type TapeFacts, type TapeRead, type TapeStatus } from '@/lib/open/tapeFacts';
++
++export interface AfterOpenRow {
++  candidate: PlanCandidate;
++  inPlan: boolean;
++  facts: TapeFacts;
++  read: TapeRead;
++  /** est. R:R from the live price; null outside stop→target. */
++  rrLive: number | null;
++  contract: PlanContractResult | null;
++  /** ISO time of the live price, when read. */
++  priceAt: string | null;
++  /** Stored Ortex short positioning (ORTEX-SLATE-1); undefined when none is on file. */
++  positioning: PlanPositioning | undefined;
++}
++
++export interface AfterOpenGroup { status: TapeStatus; label: string; rows: AfterOpenRow[] }
++
++export interface StripItem {
++  symbol: string;
++  /** (last − prior close) ÷ prior close × 100. */
++  changePct: number | null;
++  /** Side of the vendor day VWAP. */
++  vsVwap: 'above' | 'below' | 'at' | null;
++}
++
++export interface AfterOpenModel {
++  sessionDate: string;
++  state: 'session' | 'not_session_day' | 'no_plan';
++  groups: AfterOpenGroup[];
++  counts: Record<TapeStatus, number>;
++  indices: StripItem[];
++  sectors: StripItem[];
++  vix: { value: number | null; changePct: number | null };
++  /** Vendor read failures worth saying on the page. */
++  notes: string[];
++}
++
++export const GROUP_ORDER: Array<{ status: TapeStatus; label: string }> = [
++  { status: 'confirming', label: 'Confirming' },
++  { status: 'waiting', label: 'Waiting' },
++  { status: 'not_confirming', label: 'Not confirming' },
++  { status: 'forming', label: 'Range forming' },
++  { status: 'unknown', label: 'No tape read' },
++  { status: 'invalidated', label: 'Invalidated' },
++];
++
++export const INDEX_SYMBOLS = ['SPY', 'QQQ', 'IWM'] as const;
++export const SECTOR_SYMBOLS = ['XLK', 'XLC', 'XLY', 'XLF', 'XLV', 'XLI', 'XLE', 'XLB', 'XLU', 'XLRE', 'XLP', 'SMH'] as const;
++
++export interface StripQuote { last: number; prevClose: number; vwap: number }
++
++export function stripItem(symbol: string, q: StripQuote | undefined): StripItem {
++  if (!q) return { symbol, changePct: null, vsVwap: null };
++  const changePct = Number.isFinite(q.prevClose) && q.prevClose > 0 ? ((q.last - q.prevClose) / q.prevClose) * 100 : null;
++  const vsVwap = Number.isFinite(q.vwap) && q.vwap > 0 ? (q.last > q.vwap ? 'above' : q.last < q.vwap ? 'below' : 'at') : null;
++  return { symbol, changePct, vsVwap };
++}
++
++export interface AfterOpenInputs {
++  plan: MondayPlan;
++  sessionDate: string;
++  isSessionDay: boolean;
++  facts: Map<string, TapeFacts>;
++  priceAt: Map<string, string>;
++  contracts: Record<string, PlanContractResult>;
++  positioning: Record<string, PlanPositioning>;
++  strip: Map<string, StripQuote>;
++  vix: { value: number | null; changePct: number | null };
++  notes: string[];
++}
++
++export function qualifyingStocks(plan: MondayPlan): Array<{ c: PlanCandidate; inPlan: boolean }> {
++  const seen = new Set<string>();
++  const out: Array<{ c: PlanCandidate; inPlan: boolean }> = [];
++  // One row per symbol: a name in both lists keeps its plan entry (plan first).
++  for (const [list, inPlan] of [[plan.plan, true], [plan.alsoQualify, false]] as const) {
++    for (const c of list) {
++      const sym = c.setup.symbol.toUpperCase();
++      if (c.kind !== 'stock' || seen.has(sym)) continue;
++      seen.add(sym);
++      out.push({ c, inPlan });
++    }
++  }
++  return out;
++}
++
++export function buildAfterOpenModel(i: AfterOpenInputs): AfterOpenModel {
++  const counts = Object.fromEntries(GROUP_ORDER.map(g => [g.status, 0])) as Record<TapeStatus, number>;
++  const base = {
++    sessionDate: i.sessionDate, counts, notes: i.notes, vix: i.vix,
++    indices: INDEX_SYMBOLS.map(s => stripItem(s, i.strip.get(s))),
++    sectors: SECTOR_SYMBOLS.map(s => stripItem(s, i.strip.get(s))),
++  };
++  if (!i.isSessionDay) return { ...base, state: 'not_session_day', groups: [] };
++  if (i.plan.source === 'unavailable') return { ...base, state: 'no_plan', groups: [] };
++  const rows: AfterOpenRow[] = qualifyingStocks(i.plan).flatMap(({ c, inPlan }) => {
++    const sym = c.setup.symbol.toUpperCase();
++    const facts = i.facts.get(sym);
++    if (!facts) return [];
++    const side = c.setup.direction === 'bearish' ? 'bearish' : 'bullish';
++    return [{
++      candidate: c, inPlan, facts,
++      read: c.setup.direction === 'unknown' ? { status: 'unknown' as const, reason: 'card has no direction' } : classifyTape(facts, side, c.setup.stop),
++      rrLive: riskRewardFrom(facts.last, c.setup),
++      contract: i.contracts[c.setup.id] ?? null,
++      priceAt: i.priceAt.get(sym) ?? null,
++      positioning: i.positioning[sym] ?? i.positioning[c.setup.symbol],
++    }];
++  });
++  for (const r of rows) counts[r.read.status] += 1;
++  const groups = GROUP_ORDER.map(g => ({ ...g, rows: rows.filter(r => r.read.status === g.status) })).filter(g => g.rows.length > 0);
++  return { ...base, state: 'session', groups };
++}
+diff --git a/src/lib/open/tapeFacts.ts b/src/lib/open/tapeFacts.ts
+new file mode 100644
+index 00000000..223197fd
+--- /dev/null
++++ b/src/lib/open/tapeFacts.ts
+@@ -0,0 +1,162 @@
++/**
++ * After-open tape facts and status (owner decisions OPEN-VIEW-1, 2026-10-05, and OPEN-VIEW-2, 2026-10-06; plan
++ * docs/AFTER-OPEN-VIEW-PLAN-2026-10-05.md §3).
++ *
++ * Pure functions over vendor values: Polygon 1-minute bars for the session, the Polygon snapshot
++ * (last, open, prior close, day VWAP, day volume) and the last completed daily volumes. Nothing here
++ * fetches. Every derived value is a transparent calculation a reader can redo (Rule 3) and renders
++ * est. (Rule 1): gap %, % since the open, volume so far as a share of the 20-day average day. Percent fields are
++ * percentage points (0.99 means 0.99%); the volume share is a ratio (0.24 means 24% of an average day).
++ *
++ * Status rules (approved; bullish shown, bearish mirrored):
++ *   Confirming      last above the 30-minute opening-range high AND above VWAP
++ *   Waiting         inside the opening range AND at or above VWAP
++ *   Not confirming  inside the opening range AND below VWAP; also (OPEN-VIEW-2) above the range high while
++ *                   not above VWAP: VWAP decides a breakout
++ *   Invalidated     below the opening-range low, or at or through the stop; a stop hit is Invalidated at
++ *                   any time, before 10:00 ET included (OPEN-VIEW-2)
++ * Otherwise, before 10:00 ET the range is forming and no status is given. The status is display only: it
++ * never changes a gate, a level or the plan's rule-based order.
++ *
++ * Precedence: a stop hit (when a live price exists) → 'forming' before 10:00 ET → 'unknown' when inputs are
++ * missing (no live price/VWAP, no opening-range bars) → the table. 'unknown' is not a reading.
++ */
++
++import { etDateYmd, etMinutesOfDay } from '@/lib/marketSession';
++
++export const OPEN_MINUTE = 9 * 60 + 30;
++export const OPENING_RANGE_END_MINUTE = 10 * 60;
++export const PREMARKET_START_MINUTE = 4 * 60;
++export const VOLUME_BASELINE_SESSIONS = 20;
++
++export interface MinuteBar {
++  /** Bar start, epoch ms (Polygon `t`). */
++  t: number;
++  h: number;
++  l: number;
++  v: number;
++}
++
++export interface TapeSnapshot {
++  last: number;
++  open: number;
++  prevClose: number;
++  /** Day VWAP as the vendor reports it. */
++  vwap: number;
++  /** Day share volume so far. */
++  volume: number;
++}
++
++export interface TapeInputs {
++  /** ET session date, YYYY-MM-DD. */
++  sessionDate: string;
++  bars: MinuteBar[];
++  snapshot: TapeSnapshot | null;
++  /** Completed daily share volumes, oldest first. */
++  dailyVolumes: number[];
++  now: Date;
++}
++
++export interface Range { high: number; low: number }
++
++export interface TapeFacts {
++  sessionDate: string;
++  last: number | null;
++  vwap: number | null;
++  /** (open − prior close) ÷ prior close × 100. est. */
++  gapPct: number | null;
++  /** (last − open) ÷ open × 100. est. */
++  sinceOpenPct: number | null;
++  premarket: Range | null;
++  /** The 09:30-09:59 ET range; null until 10:00 ET or when no bar fell in the window. */
++  openingRange: Range | null;
++  openingRangeComplete: boolean;
++  /** Mean full-day volume of the last 20 completed sessions; null unless all 20 are present and positive. */
++  avgDailyVolume: number | null;
++  /** Day volume so far ÷ avgDailyVolume. est. Null while the vendor day volume is zero (before the open). */
++  volumeShare: number | null;
++}
++
++export type TapeSide = 'bullish' | 'bearish';
++export type TapeStatus = 'forming' | 'confirming' | 'waiting' | 'not_confirming' | 'invalidated' | 'unknown';
++
++export interface TapeRead {
++  status: TapeStatus;
++  reason: string;
++}
++
++const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
++const pct = (a: number, b: number) => (b > 0 ? ((a - b) / b) * 100 : null);
++
++function rangeOf(bars: MinuteBar[]): Range | null {
++  if (bars.length === 0) return null;
++  let high = -Infinity, low = Infinity;
++  for (const b of bars) { high = Math.max(high, b.h); low = Math.min(low, b.l); }
++  return { high, low };
++}
++
++/** Bars of `sessionDate` whose start falls in [fromMinute, toMinute) ET. */
++export function barsBetween(bars: MinuteBar[], sessionDate: string, fromMinute: number, toMinute: number): MinuteBar[] {
++  return bars.filter(b => {
++    if (!finite(b.t) || !finite(b.h) || !finite(b.l)) return false;
++    const d = new Date(b.t);
++    if (etDateYmd(d) !== sessionDate) return false;
++    const m = etMinutesOfDay(d);
++    return m >= fromMinute && m < toMinute;
++  });
++}
++
++export function openingRangeComplete(sessionDate: string, now: Date): boolean {
++  const today = etDateYmd(now);
++  return today > sessionDate || (today === sessionDate && etMinutesOfDay(now) >= OPENING_RANGE_END_MINUTE);
++}
++
++export function computeTapeFacts(input: TapeInputs): TapeFacts {
++  const { sessionDate, bars, snapshot: s, dailyVolumes, now } = input;
++  const complete = openingRangeComplete(sessionDate, now);
++  const last = s && finite(s.last) ? s.last : null;
++  const open = s && finite(s.open) && s.open > 0 ? s.open : null;
++  const prevClose = s && finite(s.prevClose) && s.prevClose > 0 ? s.prevClose : null;
++  const vwap = s && finite(s.vwap) && s.vwap > 0 ? s.vwap : null;
++  const recent = dailyVolumes.slice(-VOLUME_BASELINE_SESSIONS);
++  const avg = recent.length === VOLUME_BASELINE_SESSIONS && recent.every(v => finite(v) && v > 0)
++    ? recent.reduce((a, b) => a + b, 0) / VOLUME_BASELINE_SESSIONS
++    : null;
++  return {
++    sessionDate,
++    last,
++    vwap,
++    gapPct: open !== null && prevClose !== null ? pct(open, prevClose) : null,
++    sinceOpenPct: last !== null && open !== null ? pct(last, open) : null,
++    premarket: rangeOf(barsBetween(bars, sessionDate, PREMARKET_START_MINUTE, OPEN_MINUTE)),
++    openingRange: complete ? rangeOf(barsBetween(bars, sessionDate, OPEN_MINUTE, OPENING_RANGE_END_MINUTE)) : null,
++    openingRangeComplete: complete,
++    avgDailyVolume: avg,
++    volumeShare: avg !== null && s && finite(s.volume) && s.volume > 0 ? s.volume / avg : null,
++  };
++}
++
++/** OPEN-VIEW-1/-2 status for one card. `stop` is the card's published stop (null when absent). */
++export function classifyTape(f: TapeFacts, side: TapeSide, stop: number | null): TapeRead {
++  const bull = side === 'bullish';
++  if (f.last !== null && stop !== null && finite(stop) && (bull ? f.last <= stop : f.last >= stop)) {
++    return { status: 'invalidated', reason: 'at or through the stop' };
++  }
++  if (!f.openingRangeComplete) return { status: 'forming', reason: 'opening range forming until 10:00 ET' };
++  if (f.last === null || f.vwap === null) return { status: 'unknown', reason: 'no live price or VWAP' };
++  if (f.openingRange === null) return { status: 'unknown', reason: 'no bars in the opening range' };
++  const { last, vwap } = f;
++  const { high, low } = f.openingRange;
++  if (bull ? last < low : last > high) {
++    return { status: 'invalidated', reason: bull ? 'below the opening-range low' : 'above the opening-range high' };
++  }
++  const right = bull ? last >= vwap : last <= vwap;
++  if (bull ? last > high : last < low) {
++    return right && last !== vwap
++      ? { status: 'confirming', reason: bull ? 'above the opening-range high and VWAP' : 'below the opening-range low and VWAP' }
++      : { status: 'not_confirming', reason: bull ? 'above the range but not above VWAP' : 'below the range but not below VWAP' };
++  }
++  return right
++    ? { status: 'waiting', reason: bull ? 'inside the range, at or above VWAP' : 'inside the range, at or below VWAP' }
++    : { status: 'not_confirming', reason: bull ? 'inside the range, below VWAP' : 'inside the range, above VWAP' };
++}
+diff --git a/src/lib/open/tapeReader.ts b/src/lib/open/tapeReader.ts
+new file mode 100644
+index 00000000..8e267e46
+--- /dev/null
++++ b/src/lib/open/tapeReader.ts
+@@ -0,0 +1,153 @@
++/**
++ * Vendor reads behind the after-open view (OPEN-VIEW-1/-2; plan docs/AFTER-OPEN-VIEW-PLAN-2026-10-05.md).
++ *
++ * Three Polygon reads, all through `polygonFetch` (budget gate, circuit breaker, throttle):
++ *   - the stocks snapshot: live price (same rule as the Slate's live read: last trade, else the latest
++ *     1-minute bar), day open, day VWAP, day volume and prior close. A missing vendor field stays missing
++ *     (NaN → null downstream); nothing is filled from another field.
++ *   - 1-minute aggregates for the session date (pre-market included) for the opening and pre-market ranges.
++ *   - daily aggregates before the session date for the 20-day volume baseline.
++ * Short in-memory caches keep a page refresh from re-reading the same bars: minute bars 60 s, daily volumes
++ * for the session date. Nothing is written anywhere.
++ */
++
++import { polygonFetch } from '@/services/polygonService';
++import { parseSnapshotQuotes } from '@/lib/slate/planLive';
++import { addCalendarDays } from '@/lib/slate/planContract';
++import type { MinuteBar, TapeSnapshot } from '@/lib/open/tapeFacts';
++
++const SYMBOL_RE = /^[A-Z0-9]+(?:[.-][A-Z0-9]+)*$/;
++const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
++const SNAPSHOT_BATCH = 100;
++const MINUTE_TTL_MS = 60_000;
++/** Calendar days of daily bars requested to be sure of 20 completed sessions. */
++const DAILY_LOOKBACK_DAYS = 45;
++
++export interface TapeQuote extends TapeSnapshot {
++  symbol: string;
++  /** ISO time of the live price. */
++  at: string;
++}
++
++type Fetcher = typeof polygonFetch;
++
++const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : Number.NaN);
++
++/** Pure: the snapshot payload → per-symbol tape quote. A row without a live price is skipped. */
++export function parseTapeSnapshots(payload: unknown): Map<string, TapeQuote> {
++  const out = new Map<string, TapeQuote>();
++  const quotes = parseSnapshotQuotes(payload);
++  const tickers = (payload as { tickers?: unknown })?.tickers;
++  if (!Array.isArray(tickers)) return out;
++  for (const t of tickers) {
++    const row = t as { ticker?: unknown; day?: { o?: unknown; vw?: unknown; v?: unknown }; prevDay?: { c?: unknown } };
++    const symbol = typeof row.ticker === 'string' ? row.ticker.toUpperCase() : '';
++    const q = quotes.get(symbol);
++    if (!q) continue;
++    out.set(symbol, {
++      symbol, last: q.price, at: q.at,
++      open: num(row.day?.o), vwap: num(row.day?.vw), volume: num(row.day?.v), prevClose: num(row.prevDay?.c),
++    });
++  }
++  return out;
++}
++
++export interface TapeSnapshotRead {
++  quotes: Map<string, TapeQuote>;
++  /** Symbols whose snapshot batch failed (vendor error), so they have no reading at all. */
++  failed: string[];
++}
++
++/** Batched snapshot reads; a failed batch is reported by symbol, never dropped silently. */
++export async function readTapeSnapshots(symbols: string[], fetcher: Fetcher = polygonFetch): Promise<TapeSnapshotRead> {
++  const list = Array.from(new Set(symbols.map(s => s.toUpperCase()).filter(s => SYMBOL_RE.test(s))));
++  const quotes = new Map<string, TapeQuote>();
++  const failed: string[] = [];
++  if (list.length === 0) return { quotes, failed };
++  const batches: string[][] = [];
++  for (let i = 0; i < list.length; i += SNAPSHOT_BATCH) batches.push(list.slice(i, i + SNAPSHOT_BATCH));
++  const settled = await Promise.allSettled(batches.map(b => fetcher<unknown>('/v2/snapshot/locale/us/markets/stocks/tickers', { tickers: b.join(',') })));
++  settled.forEach((r, i) => {
++    if (r.status === 'fulfilled') for (const [k, v] of parseTapeSnapshots(r.value)) quotes.set(k, v);
++    else failed.push(...batches[i]);
++  });
++  return { quotes, failed };
++}
++
++/** Pure: Polygon aggregates `results` → minute bars (finite high/low/time only). */
++export function parseMinuteBars(payload: unknown): MinuteBar[] {
++  const rows = (payload as { results?: unknown })?.results;
++  if (!Array.isArray(rows)) return [];
++  const out: MinuteBar[] = [];
++  for (const r of rows) {
++    const b = r as { t?: unknown; h?: unknown; l?: unknown; v?: unknown };
++    const t = num(b.t), h = num(b.h), l = num(b.l), v = num(b.v);
++    if (Number.isFinite(t) && Number.isFinite(h) && Number.isFinite(l)) out.push({ t, h, l, v: Number.isFinite(v) ? v : 0 });
++  }
++  return out;
++}
++
++/** UTC date of a Polygon daily bar: bars are stamped at midnight ET, so read the date of t + 12 h. */
++export const dailyBarDate = (t: number) => new Date(t + 12 * 3_600_000).toISOString().slice(0, 10);
++
++/** Pure: daily aggregates → full-day volumes of sessions strictly before `sessionDate`, oldest first. */
++export function parseDailyVolumes(payload: unknown, sessionDate: string): number[] {
++  const rows = (payload as { results?: unknown })?.results;
++  if (!Array.isArray(rows)) return [];
++  return rows
++    .map(r => r as { t?: unknown; v?: unknown })
++    .filter(r => Number.isFinite(num(r.t)) && dailyBarDate(num(r.t)) < sessionDate)
++    .sort((a, b) => num(a.t) - num(b.t))
++    .map(r => num(r.v));
++}
++
++const minuteCache = new Map<string, { at: number; bars: MinuteBar[] }>();
++const dailyCache = new Map<string, number[]>();
++/** Bound on cached keys; on overflow, expired minute entries and other session dates are dropped first. */
++const CACHE_MAX_KEYS = 500;
++
++function prune(nowMs: number, sessionDate: string): void {
++  if (minuteCache.size > CACHE_MAX_KEYS) {
++    for (const [k, v] of minuteCache) if (nowMs - v.at >= MINUTE_TTL_MS || !k.endsWith(`:${sessionDate}`)) minuteCache.delete(k);
++    while (minuteCache.size > CACHE_MAX_KEYS) minuteCache.delete(minuteCache.keys().next().value as string);
++  }
++  if (dailyCache.size > CACHE_MAX_KEYS) {
++    for (const k of dailyCache.keys()) if (!k.endsWith(`:${sessionDate}`)) dailyCache.delete(k);
++    while (dailyCache.size > CACHE_MAX_KEYS) dailyCache.delete(dailyCache.keys().next().value as string);
++  }
++}
++
++export async function readMinuteBars(symbol: string, sessionDate: string, fetcher: Fetcher = polygonFetch, nowMs = Date.now()): Promise<MinuteBar[]> {
++  if (!SYMBOL_RE.test(symbol) || !DATE_RE.test(sessionDate)) return [];
++  const key = `${symbol}:${sessionDate}`;
++  const hit = minuteCache.get(key);
++  if (hit && nowMs - hit.at < MINUTE_TTL_MS) return hit.bars;
++  const bars = parseMinuteBars(await fetcher<unknown>(`/v2/aggs/ticker/${symbol}/range/1/minute/${sessionDate}/${sessionDate}`, { adjusted: 'true', sort: 'asc', limit: '50000' }));
++  minuteCache.set(key, { at: nowMs, bars });
++  prune(nowMs, sessionDate);
++  return bars;
++}
++
++export async function readDailyVolumes(symbol: string, sessionDate: string, fetcher: Fetcher = polygonFetch): Promise<number[]> {
++  if (!SYMBOL_RE.test(symbol) || !DATE_RE.test(sessionDate)) return [];
++  const key = `${symbol}:${sessionDate}`;
++  const hit = dailyCache.get(key);
++  if (hit !== undefined) return hit;
++  const from = addCalendarDays(sessionDate, -DAILY_LOOKBACK_DAYS);
++  const to = addCalendarDays(sessionDate, -1);
++  const vols = parseDailyVolumes(await fetcher<unknown>(`/v2/aggs/ticker/${symbol}/range/1/day/${from}/${to}`, { adjusted: 'true', sort: 'asc', limit: '100' }), sessionDate);
++  dailyCache.set(key, vols);
++  prune(Date.now(), sessionDate);
++  return vols;
++}
++
++/** Test seam: cached key counts. */
++export function tapeCacheSizes(): { minute: number; daily: number } {
++  return { minute: minuteCache.size, daily: dailyCache.size };
++}
++
++/** Test seam: drop the in-memory caches. */
++export function resetTapeCaches(): void {
++  minuteCache.clear();
++  dailyCache.clear();
++}
 diff --git a/src/lib/sip/__tests__/calculation.test.ts b/src/lib/sip/__tests__/calculation.test.ts
 new file mode 100644
-index 00000000..f8b6fdbe
+index 00000000..220e48e7
 --- /dev/null
 +++ b/src/lib/sip/__tests__/calculation.test.ts
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,186 @@
 +import { describe, expect, it } from "vitest";
 +import { clock, previousSessions, sessionTime } from "../calendar";
 +import {
@@ -364,7 +2311,20 @@ index 00000000..f8b6fdbe
 +  it("rejects incomplete historical opening windows instead of inventing volume", () => {
 +    expect(() =>
 +      preparationFromBars("NVDA", date, daily(), history().slice(1)),
-+    ).toThrow("OPENING_HISTORY_INCOMPLETE");
++    ).toThrow("OPENING_WINDOW_INCOMPLETE");
++  });
++  it("retains the malformed historical opening-window exclusion code", () => {
++    const invalid = history();
++    invalid[0] = { ...invalid[0], c: invalid[0].h + 1 };
++    expect(() => preparationFromBars("NVDA", date, daily(), invalid)).toThrow(
++      "OPENING_WINDOW_INVALID",
++    );
++  });
++  it("retains the duplicate historical opening-window exclusion code", () => {
++    const original = history();
++    expect(() =>
++      preparationFromBars("NVDA", date, daily(), [...original, original[0]]),
++    ).toThrow("OPENING_WINDOW_INVALID");
 +  });
 +  it("rejects duplicated bars and nonfinite volume", () => {
 +    expect(() =>
@@ -797,10 +2757,10 @@ index 00000000..81782ac1
 +});
 diff --git a/src/lib/sip/calculation.ts b/src/lib/sip/calculation.ts
 new file mode 100644
-index 00000000..b92bad41
+index 00000000..849fef38
 --- /dev/null
 +++ b/src/lib/sip/calculation.ts
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,108 @@
 +import { clock, previousSessions, sessionTime } from "./calendar";
 +import {
 +  SipExcluded,
@@ -888,7 +2848,8 @@ index 00000000..b92bad41
 +    observations = previousSessions(date, 14).map((day) =>
 +      openingVolume(minute, day),
 +    );
-+  } catch {
++  } catch (error) {
++    if (error instanceof SipExcluded) throw error;
 +    throw new SipExcluded("OPENING_HISTORY_INCOMPLETE");
 +  }
 +  const opening_mean = observations.reduce((s, n) => s + n, 0) / 14;
@@ -1027,11 +2988,12 @@ index 00000000..588624fa
 +}
 diff --git a/src/lib/sip/http.ts b/src/lib/sip/http.ts
 new file mode 100644
-index 00000000..8f8f25a6
+index 00000000..c3a00183
 --- /dev/null
 +++ b/src/lib/sip/http.ts
 @@ -0,0 +1,64 @@
 +import { timingSafeEqual } from "node:crypto";
++import { clock } from "./calendar";
 +import type { SipSnapshot } from "./contract";
 +export const NO_STORE = {
 +  "Cache-Control": "private, no-store, max-age=0",
@@ -1082,7 +3044,6 @@ index 00000000..8f8f25a6
 +  if (!safeEqual(req.headers.get("authorization"), `Bearer ${env.secret}`))
 +    return json({ error: "unauthorized" }, 401);
 +  try {
-+    const { clock } = await import("./calendar");
 +    const result = await read(clock(now).date);
 +    if (!result)
 +      return json(
@@ -1598,6 +3559,501 @@ index 00000000..21648e26
 +    }
 +  }
 +}
+diff --git a/src/lib/slate/__tests__/planBoardExtras.test.ts b/src/lib/slate/__tests__/planBoardExtras.test.ts
+index 8bfb558a..bc2f50e0 100644
+--- a/src/lib/slate/__tests__/planBoardExtras.test.ts
++++ b/src/lib/slate/__tests__/planBoardExtras.test.ts
+@@ -20,7 +20,8 @@ describe('getPlanBoardExtras', () => {
+ 
+     const quotes = vi.fn(async (symbols: string[]) => new Map(symbols.map(s => [s, { symbol: s, price: 101, at: now.toISOString() }])));
+     const chain = vi.fn(async () => []);
+-    const x = await getPlanBoardExtras(plan, now, { quotes, chain });
++    const positioning = vi.fn(async () => ({ status: 'ok' as const, bySymbol: {} }));
++    const x = await getPlanBoardExtras(plan, now, { quotes, chain, positioning });
+ 
+     expect(quotes).toHaveBeenCalledTimes(1);
+     expect(quotes.mock.calls[0][0].sort()).toEqual(['AAA', 'BBB', 'CCC', 'DDD', 'EEE']);
+@@ -30,14 +31,17 @@ describe('getPlanBoardExtras', () => {
+     expect(Object.keys(x.live).sort()).toEqual(['AAA', 'BBB', 'CCC', 'DDD', 'EEE']);
+     expect(x.asOf).toBe('2026-10-05');
+     expect(x.liveStatus).toBe('ok');
++    expect(positioning).toHaveBeenCalledTimes(1);
++    expect(positioning.mock.calls[0][0].sort()).toEqual(['AAA', 'BBB', 'CCC', 'DDD', 'EEE']);
+   });
+ 
+   it('a vendor failure and an empty read are told apart, and the plan is untouched', async () => {
+     const plan = assemblePlan([evaluate(setup('AAA'), enrich, NEXT)], '2026-10-02', NEXT, 'setups');
+-    const failed = await getPlanBoardExtras(plan, now, { quotes: async () => { throw new Error('down'); }, chain: async () => [] });
++    const failed = await getPlanBoardExtras(plan, now, { quotes: async () => { throw new Error('down'); }, chain: async () => [], positioning: async () => { throw new Error('db down'); } });
+     expect(failed.liveStatus).toBe('fetch_failed');
+     expect(failed.live).toEqual({});
+-    const empty = await getPlanBoardExtras(plan, now, { quotes: async () => new Map(), chain: async () => [] });
++    expect(failed.positioning).toEqual({ status: 'read_failed', bySymbol: {} });
++    const empty = await getPlanBoardExtras(plan, now, { quotes: async () => new Map(), chain: async () => [], positioning: async () => ({ status: 'ok', bySymbol: {} }) });
+     expect(empty.liveStatus).toBe('no_prints');
+     expect(plan.plan.map(c => c.setup.symbol)).toEqual(['AAA']);
+   });
+diff --git a/src/lib/slate/__tests__/planPositioning.test.ts b/src/lib/slate/__tests__/planPositioning.test.ts
+new file mode 100644
+index 00000000..b80ace45
+--- /dev/null
++++ b/src/lib/slate/__tests__/planPositioning.test.ts
+@@ -0,0 +1,60 @@
++import { describe, expect, it, vi } from 'vitest';
++import { fromHistory, fromSnapshot, readPlanPositioning, relChangePct } from '@/lib/slate/planPositioning';
++
++const snap = (symbol: string, over: Record<string, unknown> = {}) => ({
++  symbol, source_date: '2026-09-30', si_shares: '10000000', si_pct_free_float: '12.4000', days_to_cover: '3.1000', cost_to_borrow_all: '0.5600', short_availability_shares: '42000000', short_availability_pct: '1433.4617', ...over,
++});
++const historyRows = (vals: number[]) => vals.map((v, i) => ({ date: `2026-09-${String(10 + i).padStart(2, '0')}`, shortInterestPcFreeFloat: v, shortInterestShares: v * 1e6 }));
++
++describe('plan positioning (cache-only Ortex read, ORTEX-SLATE-1)', () => {
++  it('relative change needs a positive prior value', () => {
++    expect(relChangePct(12, 10)).toBeCloseTo(20);
++    expect(relChangePct(12, 0)).toBeNull();
++    expect(relChangePct(null, 10)).toBeNull();
++  });
++
++  it('a bulk row maps vendor values plain, derives available ÷ short from share counts, and reads only the 9999 sentinel from the unverified pct field', () => {
++    const p = fromSnapshot(snap('AAA'), { symbol: 'AAA', si_pct_free_float: '10' }, '2026-09-23');
++    expect(p).toMatchObject({ source: 'bulk', asOf: '2026-09-30', siPctFreeFloat: 12.4, daysToCover: 3.1, costToBorrowPct: 0.56, availVsShort: 4.2, availabilityUnlimited: false, priorAsOf: '2026-09-23' });
++    expect(p.siChangePct).toBeCloseTo(24);
++    const u = fromSnapshot(snap('BBB', { short_availability_pct: '9999' }), undefined, '2026-09-23');
++    expect(u).toMatchObject({ availabilityUnlimited: true, availVsShort: null, siChangePct: null, priorAsOf: null });
++    expect(fromSnapshot(snap('CCC', { si_shares: '0' }), undefined, null).availVsShort).toBeNull();
++  });
++
++  it('a per-name history gives short interest only, compared five rows back', () => {
++    const p = fromHistory('VSH', historyRows([10, 10, 11, 11, 12, 12, 15]))!;
++    expect(p).toMatchObject({ source: 'targeted', asOf: '2026-09-16', siPctFreeFloat: 15, siPctFreeFloatPrior: 10, priorAsOf: '2026-09-11', daysToCover: null, costToBorrowPct: null });
++    expect(p.siChangePct).toBeCloseTo(50);
++    expect(fromHistory('VSH', historyRows([9, 10]))).toMatchObject({ siChangePct: null, priorAsOf: null });
++    expect(fromHistory('VSH', [])).toBeNull();
++    expect(fromHistory('VSH', 'nope')).toBeNull();
++  });
++
++  it('reads the bulk snapshot first, falls back to the per-ticker cache for the rest, and never calls Ortex', async () => {
++    const rest = vi.fn(async (table: string, _m: string, opts: { query: string }) => {
++      if (table === 'ortex_positioning_manifests') return ['2026-09-30', '2026-09-29', '2026-09-26', '2026-09-25', '2026-09-24', '2026-09-23'].map(d => ({ source_date: d }));
++      if (table === 'ortex_positioning_snapshots') return opts.query.includes('2026-09-30') ? [snap('AAA')] : [{ symbol: 'AAA', si_pct_free_float: '10' }];
++      if (table === 'ortex_cache') return [
++        { ticker: 'VSH', data_json: historyRows([10, 10, 11, 11, 12, 12, 15]), fetched_at: '2026-10-05T10:00:00Z' },
++        { ticker: 'VSH', data_json: historyRows([1, 1, 1, 1, 1, 1, 1]), fetched_at: '2026-09-01T10:00:00Z' },
++      ];
++      throw new Error(`unexpected table ${table}`);
++    });
++    const r = await readPlanPositioning(['aaa', 'VSH', 'ZZZ', 'bad symbol!'], rest as never);
++    expect(r.status).toBe('ok');
++    expect(r.bySymbol.AAA).toMatchObject({ source: 'bulk', priorAsOf: '2026-09-23' });
++    expect(r.bySymbol.VSH).toMatchObject({ source: 'targeted', siPctFreeFloat: 15 }); // newest cache row wins
++    expect(r.bySymbol.ZZZ).toBeUndefined(); // no row is data, not a failure
++    const tables = rest.mock.calls.map(c => c[0]);
++    expect(tables).toEqual(['ortex_positioning_manifests', 'ortex_positioning_snapshots', 'ortex_positioning_snapshots', 'ortex_cache']);
++    expect(rest.mock.calls.every(c => c[1] === 'GET')).toBe(true);
++    expect(decodeURIComponent(rest.mock.calls[3][2].query)).toContain('ticker=in.("VSH","ZZZ")');
++  });
++
++  it('a store failure is read_failed (an outage), not an empty read', async () => {
++    const r = await readPlanPositioning(['AAA'], (async () => { throw new Error('db down'); }) as never);
++    expect(r).toEqual({ status: 'read_failed', bySymbol: {} });
++    expect(await readPlanPositioning([], (async () => { throw new Error('unused'); }) as never)).toEqual({ status: 'ok', bySymbol: {} });
++  });
++});
+diff --git a/src/lib/slate/interpret/__tests__/planFacts.test.ts b/src/lib/slate/interpret/__tests__/planFacts.test.ts
+index 9dcb05cb..597ed772 100644
+--- a/src/lib/slate/interpret/__tests__/planFacts.test.ts
++++ b/src/lib/slate/interpret/__tests__/planFacts.test.ts
+@@ -43,6 +43,25 @@ describe('buildPlanFacts (deterministic expert facts)', () => {
+     expect(bare.facts.find(f => f.id === 'AAA.live_zone')?.text).toBe('no live read');
+   });
+ 
++  it('short positioning is FLOW context: vendor values plain, the change est., names outside the snapshot say what is not supplied', () => {
++    const c = evaluate(setup('AAA'), enrich(), NEXT);
++    const bulk = buildPlanFacts(c, undefined, contract, { symbol: 'AAA', source: 'bulk', asOf: '2026-09-30', siPctFreeFloat: 12.4, siPctFreeFloatPrior: 10, priorAsOf: '2026-09-23', siChangePct: 24, daysToCover: 3.1, costToBorrowPct: 0.56, availVsShort: null, availabilityUnlimited: true });
++    const f = (k: string) => bulk.facts.find(x => x.id === `AAA.${k}`);
++    expect(f('short_interest_float')).toMatchObject({ lens: 'FLOW', value: 12.4, text: '12.4% of free float', derived: false });
++    expect(f('short_interest_change')).toMatchObject({ value: 24, text: '+24% since 2026-09-23 (10.0% → 12.4%)', derived: true });
++    expect(f('days_to_cover')).toMatchObject({ value: 3.1, derived: false });
++    expect(f('cost_to_borrow')).toMatchObject({ value: 0.56, text: '0.56%' });
++    expect(f('borrow_availability')).toMatchObject({ value: 'unlimited', derived: false });
++    const scarce = buildPlanFacts(c, undefined, contract, { symbol: 'AAA', source: 'bulk', asOf: '2026-09-30', siPctFreeFloat: 20, siPctFreeFloatPrior: 20.1, priorAsOf: '2026-09-23', siChangePct: -0.4, daysToCover: 3.7, costToBorrowPct: 0.41, availVsShort: 3.55, availabilityUnlimited: false });
++    expect(scarce.facts.find(x => x.id === 'AAA.borrow_availability')).toMatchObject({ value: 3.55, text: 'est. 3.5× the shares already short', derived: true });
++    expect(scarce.facts.find(x => x.id === 'AAA.short_interest_change')?.text).toBe('0% since 2026-09-23 (20.1% → 20.0%)');
++    const targeted = buildPlanFacts(c, undefined, contract, { symbol: 'AAA', source: 'targeted', asOf: '2026-09-30', siPctFreeFloat: 21.5, siPctFreeFloatPrior: null, priorAsOf: null, siChangePct: null, daysToCover: null, costToBorrowPct: null, availVsShort: null, availabilityUnlimited: false });
++    expect(targeted.facts.find(x => x.id === 'AAA.days_to_cover')).toMatchObject({ value: null, text: 'not supplied for names outside the S&P 500 snapshot' });
++    expect(targeted.facts.find(x => x.id === 'AAA.short_interest_change')).toMatchObject({ value: null, text: 'not on file' });
++    const none = buildPlanFacts(c, undefined, contract);
++    expect(none.facts.filter(x => x.lens === 'FLOW' && /short|borrow|cover|positioning/.test(x.id)).map(x => [x.id, x.value])).toEqual([['AAA.positioning_as_of', null]]);
++  });
++
+   it('every fact id belongs to the symbol and is unique', () => {
+     const ids = set.facts.map(f => f.id);
+     expect(new Set(ids).size).toBe(ids.length);
+diff --git a/src/lib/slate/interpret/__tests__/planInterpret.test.ts b/src/lib/slate/interpret/__tests__/planInterpret.test.ts
+index b5bf9980..8608f1eb 100644
+--- a/src/lib/slate/interpret/__tests__/planInterpret.test.ts
++++ b/src/lib/slate/interpret/__tests__/planInterpret.test.ts
+@@ -12,7 +12,7 @@ import { contract, samplePlan } from './fixtures';
+ const plan = samplePlan();
+ const qualifyingIds = [...plan.plan, ...plan.alsoQualify].map(c => c.setup.id);
+ const fullExtras = (over: Partial<PlanBoardExtras> = {}): PlanBoardExtras =>
+-  ({ asOf: '2026-10-02', live: {}, liveStatus: 'ok', contracts: Object.fromEntries(qualifyingIds.map(id => [id, contract])), ...over });
++  ({ asOf: '2026-10-02', live: {}, liveStatus: 'ok', contracts: Object.fromEntries(qualifyingIds.map(id => [id, contract])), positioning: { status: 'ok', bySymbol: {} }, ...over });
+ const sets: PlanFactSet[] = [...plan.plan, ...plan.alsoQualify].map(c => buildPlanFacts(c, undefined, contract));
+ const symbols = sets.map(s => s.symbol);
+ 
+@@ -136,6 +136,7 @@ describe('runPlanInterpretation', () => {
+       [null, 'PLAN_INTERPRET_EXTRAS_UNAVAILABLE'],
+       [fullExtras({ liveStatus: 'fetch_failed' }), 'PLAN_INTERPRET_LIVE_UNAVAILABLE'],
+       [fullExtras({ liveStatus: 'no_prints' }), 'PLAN_INTERPRET_LIVE_UNAVAILABLE'],
++      [fullExtras({ positioning: { status: 'read_failed', bySymbol: {} } }), 'PLAN_INTERPRET_POSITIONING_UNAVAILABLE'],
+       [fullExtras({ contracts: {} }), 'PLAN_INTERPRET_CONTRACT_MISSING'],
+       [fullExtras({ contracts: { ...fullExtras().contracts, [qualifyingIds[2]]: chainDown } }), 'PLAN_INTERPRET_CHAIN_UNAVAILABLE'],
+     ];
+diff --git a/src/lib/slate/interpret/planFacts.ts b/src/lib/slate/interpret/planFacts.ts
+index 580c86b3..f3cf07e5 100644
+--- a/src/lib/slate/interpret/planFacts.ts
++++ b/src/lib/slate/interpret/planFacts.ts
+@@ -18,6 +18,7 @@ import type { PlanCandidate, PlanCheck } from '@/lib/slate/mondayPlan';
+ import { PLAN_MIN_REMAINING_SHARE, PLAN_REACH_MULTIPLE } from '@/lib/slate/mondayPlan';
+ import type { PlanLiveRead } from '@/lib/slate/planLive';
+ import type { PlanContractResult } from '@/lib/slate/planContract';
++import { signedPct, type PlanPositioning } from '@/lib/slate/planPositioning';
+ 
+ export const PLAN_LENSES = ['TECHNICAL', 'OPTIONS', 'FLOW', 'QUANT'] as const;
+ export type PlanLens = (typeof PLAN_LENSES)[number];
+@@ -52,7 +53,7 @@ function checkFact(symbol: string, c: PlanCheck, lens: PlanLens): PlanFact {
+ }
+ 
+ /** Pure: every indicator result for one candidate, as citable facts. */
+-export function buildPlanFacts(c: PlanCandidate, live: PlanLiveRead | undefined, contract: PlanContractResult | undefined): PlanFactSet {
++export function buildPlanFacts(c: PlanCandidate, live: PlanLiveRead | undefined, contract: PlanContractResult | undefined, pos?: PlanPositioning): PlanFactSet {
+   const s = c.setup; const e = c.enrich; const sym = s.symbol;
+   const facts: PlanFact[] = [];
+   const add = (f: PlanFact) => facts.push(f);
+@@ -115,6 +116,26 @@ export function buildPlanFacts(c: PlanCandidate, live: PlanLiveRead | undefined,
+   const f = e?.flow ?? null;
+   add({ id: `${sym}.flow_source`, lens: 'FLOW', label: 'Flow read source', value: f?.source ?? null, text: f ? (f.source === 'plan_flow_side' ? 'post-close NBBO classification of the top contracts (est.; cannot separate hedges, closing trades or spread legs)' : 'monitor alert (a few names per run)') : 'no flow read for the session' });
+ 
++  // FLOW — short positioning (ORTEX-SLATE-1): vendor values plain, the change over sessions derived.
++  if (pos) {
++    const src = pos.source === 'bulk' ? 'Ortex daily S&P 500 snapshot' : 'Ortex per-name short interest';
++    add({ id: `${sym}.positioning_as_of`, lens: 'FLOW', label: 'Short positioning data date', value: pos.asOf, text: `${pos.asOf} (${src}; short data lags the tape)`, derived: false });
++    num('short_interest_float', 'FLOW', 'Short interest, % of free float', pos.siPctFreeFloat, x => `${x.toFixed(1)}% of free float`, false);
++    num('short_interest_change', 'FLOW', 'Change in short interest vs the earlier snapshot (relative)', pos.siChangePct,
++      x => `${signedPct(x)} since ${pos.priorAsOf} (${pos.siPctFreeFloatPrior?.toFixed(1)}% → ${pos.siPctFreeFloat?.toFixed(1)}%)`);
++    const bulkOnly = pos.source === 'bulk' ? NA : 'not supplied for names outside the S&P 500 snapshot';
++    add({ id: `${sym}.days_to_cover`, lens: 'FLOW', label: 'Days to cover', value: pos.daysToCover === null ? null : r2(pos.daysToCover), text: pos.daysToCover === null ? bulkOnly : `${pos.daysToCover.toFixed(1)} days`, derived: false });
++    add({ id: `${sym}.cost_to_borrow`, lens: 'FLOW', label: 'Cost to borrow (all loans, annualized)', value: pos.costToBorrowPct === null ? null : r2(pos.costToBorrowPct), text: pos.costToBorrowPct === null ? bulkOnly : `${pos.costToBorrowPct.toFixed(2)}%`, derived: false });
++    add({
++      id: `${sym}.borrow_availability`, lens: 'FLOW', label: 'Shares available to borrow ÷ shares already short',
++      value: pos.availabilityUnlimited ? 'unlimited' : pos.availVsShort === null ? null : r2(pos.availVsShort),
++      text: pos.availabilityUnlimited ? 'no borrow constraint (Ortex sentinel)' : pos.availVsShort === null ? bulkOnly : `est. ${pos.availVsShort.toFixed(1)}× the shares already short`,
++      derived: !pos.availabilityUnlimited,
++    });
++  } else {
++    add({ id: `${sym}.positioning_as_of`, lens: 'FLOW', label: 'Short positioning data date', value: null, text: 'no Ortex short positioning on file for this name' });
++  }
++
+   // QUANT — no pipeline score (unvalidated; withheld so it cannot contaminate the ranking test).
+   const rr = check('rr'); if (rr) add(checkFact(sym, rr, 'QUANT'));
+   num('rr_live', 'QUANT', 'R:R from the latest print (scanner-set levels; context, not edge)', live?.rrLive ?? null, x => x.toFixed(2));
+diff --git a/src/lib/slate/interpret/planInterpretPrompt.ts b/src/lib/slate/interpret/planInterpretPrompt.ts
+index 2ca799b6..d0d1e041 100644
+--- a/src/lib/slate/interpret/planInterpretPrompt.ts
++++ b/src/lib/slate/interpret/planInterpretPrompt.ts
+@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
+ import { PLAN_LENSES, type PlanFactSet, type PlanLens } from '@/lib/slate/interpret/planFacts';
+ import { EXPERT_PROMPTS } from '@/lib/slate/interpret/expertPrompts.generated';
+ 
+-export const PLAN_INTERPRET_PROMPT_VERSION = 'plan-interpret.v1';
++export const PLAN_INTERPRET_PROMPT_VERSION = 'plan-interpret.v2';
+ export const PLAN_INTERPRET_TOP = 5;
+ /** Qualifying names handed to the experts, in the rule-based order. */
+ export const PLAN_INTERPRET_MAX_CANDIDATES = 10;
+@@ -55,7 +55,10 @@ const LENS_RULES: Record<ExpertKey, string> = {
+ - Judge implied volatility ONLY against iv_rank and iv_percentile. If they are not on file, the volatility part is NEUTRAL with the reason that there is no volatility history; never judge IV30 by its absolute level.
+ - An earnings date before the contract expires (earnings_before_expiry) is a material concern for a long option even when the plan's earnings gate passed.
+ - Weigh spread, open interest, theta against the debit, breakeven against the move over the contract's own life, and the target's payoff against the debit.
+-- FLOW: classified flow cannot separate hedges, closing trades or spread legs and has no demonstrated edge. Agreeing flow is at most SUPPORTS and never makes a setup favorable on its own. Disagreeing classified flow already failed the gate, so it will not appear. No flow read is NO_READ.`,
++- FLOW: classified flow cannot separate hedges, closing trades or spread legs and has no demonstrated edge. Agreeing flow is at most SUPPORTS and never makes a setup favorable on its own. Disagreeing classified flow already failed the gate, so it will not appear.
++- FLOW also carries short positioning (Ortex): short interest as a share of free float, its change against an earlier snapshot, days to cover, cost to borrow and shares available to borrow. Read it as positioning context, never as a forecast and never as a squeeze call; it has no demonstrated edge on this platform.
++- For a bullish setup, heavy and rising short interest means informed sellers disagree with the card (a concern); crowding with long days to cover adds fuel only if the setup works; falling short interest (covering) agrees with the card. For a bearish setup, heavy short interest agrees with the card but carries squeeze risk, and a high cost to borrow or scarce shares make puts richer (a concern for a long put's cost).
++- Short data lags the tape by a session or more; an old data date weakens it. A name with neither positioning facts nor a flow read is NO_READ for FLOW.`,
+   QUANT: `QUANT LENS
+ - Reward-to-risk is computed from scanner-set levels, not validated ones. It is context, not evidence of edge; never the main reason to favour a setup, and no credit beyond passing its gate.
+ - The pipeline quality score is withheld on purpose (no demonstrated relationship to outcomes).
+diff --git a/src/lib/slate/interpret/planInterpretService.ts b/src/lib/slate/interpret/planInterpretService.ts
+index 9ee87c20..6001f03b 100644
+--- a/src/lib/slate/interpret/planInterpretService.ts
++++ b/src/lib/slate/interpret/planInterpretService.ts
+@@ -53,11 +53,14 @@ const EXPERTS = Object.keys(EXPERT_LENSES) as ExpertKey[];
+  * be incomplete because a read failed (not because the data is legitimately absent), else null:
+  * no extras at all; a live read that failed or returned no print (the candidate list fits in one
+  * quote batch, so a partial batch failure is a full one); a qualifying name with no contract result;
+- * or a contract whose chain read failed. "No contract in the 30-45 day window" is data, not a failure.
++ * a contract whose chain read failed; or a failed positioning store read. "No contract in the 30-45 day
++ * window" and "no Ortex row for this name" are data, not failures.
+  */
+ export function extrasGap(qualifyingIds: string[], extras: PlanBoardExtras | null): string | null {
+   if (!extras) return 'PLAN_INTERPRET_EXTRAS_UNAVAILABLE';
+   if (extras.liveStatus === 'fetch_failed' || extras.liveStatus === 'no_prints') return 'PLAN_INTERPRET_LIVE_UNAVAILABLE';
++  // A failed store read is an outage; a name with no Ortex row is data (no coverage).
++  if (extras.positioning.status === 'read_failed') return 'PLAN_INTERPRET_POSITIONING_UNAVAILABLE';
+   for (const id of qualifyingIds) {
+     const c = extras.contracts[id];
+     if (!c) return 'PLAN_INTERPRET_CONTRACT_MISSING';
+@@ -69,7 +72,7 @@ export function extrasGap(qualifyingIds: string[], extras: PlanBoardExtras | nul
+ export async function runPlanInterpretation(plan: MondayPlan, extras: PlanBoardExtras | null, now: Date, deps: InterpretDeps): Promise<PlanInterpretationRecord> {
+   const qualifying = [...plan.plan, ...plan.alsoQualify].slice(0, PLAN_INTERPRET_MAX_CANDIDATES);
+   const candidates: CandidateRecord[] = qualifying.map((c, i) => ({ order: i + 1, symbol: c.setup.symbol, side: c.setup.direction, entry: c.setup.entryPrice, stop: c.setup.stop, target: c.setup.target, setupId: c.setup.id }));
+-  const sets = qualifying.map(c => buildPlanFacts(c, extras?.live[c.setup.symbol], extras?.contracts[c.setup.id]));
++  const sets = qualifying.map(c => buildPlanFacts(c, extras?.live[c.setup.symbol], extras?.contracts[c.setup.id], extras?.positioning.bySymbol[c.setup.symbol]));
+   const base: PlanInterpretationRecord = {
+     session_date: plan.sessionDate ?? '', next_session: plan.nextSession, prompt_version: PLAN_INTERPRET_PROMPT_VERSION, schema_version: PLAN_INTERPRET_PROMPT_VERSION,
+     system_prompt_hash: systemPromptHash(), status: 'skipped', candidates, input_facts: sets, facts_frozen_at: now.toISOString(),
+diff --git a/src/lib/slate/planBoardExtras.ts b/src/lib/slate/planBoardExtras.ts
+index 169ff1ba..f9ec294d 100644
+--- a/src/lib/slate/planBoardExtras.ts
++++ b/src/lib/slate/planBoardExtras.ts
+@@ -10,6 +10,7 @@ import { etDateKey } from '@/lib/trading-day';
+ import type { MondayPlan } from '@/lib/slate/mondayPlan';
+ import { planLiveRead, readLiveQuotes, type LiveQuote, type PlanLiveRead } from '@/lib/slate/planLive';
+ import { readPlanContract, type PlanContractDeps, type PlanContractResult } from '@/lib/slate/planContract';
++import { readPlanPositioning, type PlanPositioningRead } from '@/lib/slate/planPositioning';
+ 
+ export interface PlanBoardExtras {
+   /** ET date the contract window is measured from. */
+@@ -23,6 +24,8 @@ export interface PlanBoardExtras {
+   liveStatus: 'ok' | 'fetch_failed' | 'no_prints' | 'none';
+   /** Suggested contract keyed by setup id (plan names only). */
+   contracts: Record<string, PlanContractResult>;
++  /** Ortex short positioning for the stock names, read from stored data only (ORTEX-SLATE-1; no credits). */
++  positioning: PlanPositioningRead;
+ }
+ 
+ export interface PlanBoardExtrasDeps {
+@@ -30,12 +33,14 @@ export interface PlanBoardExtrasDeps {
+   chain: PlanContractDeps['chain'];
+   /** Which names get a suggested contract: the plan only (page render) or every qualifier (post-close interpretation job). */
+   contractsFor: 'plan' | 'qualifying';
++  positioning: (symbols: string[]) => Promise<PlanPositioningRead>;
+ }
+ 
+ const defaultDeps: PlanBoardExtrasDeps = {
+   quotes: (symbols) => readLiveQuotes(symbols),
+   chain: (symbol, gte, lte) => getOptionsChainBothSides(symbol, gte, lte),
+   contractsFor: 'plan',
++  positioning: (symbols) => readPlanPositioning(symbols),
+ };
+ 
+ export async function getPlanBoardExtras(plan: MondayPlan, now: Date = new Date(), deps: Partial<PlanBoardExtrasDeps> = {}): Promise<PlanBoardExtras> {
+@@ -43,9 +48,10 @@ export async function getPlanBoardExtras(plan: MondayPlan, now: Date = new Date(
+   const asOf = etDateKey(now);
+   const symbols = Array.from(new Set(plan.stocks.map(c => c.setup.symbol)));
+   let fetchFailed = false;
+-  const [quotes, contractList] = await Promise.all([
++  const [quotes, contractList, positioning] = await Promise.all([
+     d.quotes(symbols).catch(() => { fetchFailed = true; return new Map<string, LiveQuote>(); }),
+     Promise.all((d.contractsFor === 'qualifying' ? [...plan.plan, ...plan.alsoQualify] : plan.plan).map(async c => [c.setup.id, await readPlanContract(c.setup.symbol, c.setup.direction, asOf, { chain: d.chain })] as const)),
++    d.positioning(symbols).catch((): PlanPositioningRead => ({ status: 'read_failed', bySymbol: {} })),
+   ]);
+   const live: Record<string, PlanLiveRead> = {};
+   for (const c of plan.stocks) {
+@@ -53,5 +59,5 @@ export async function getPlanBoardExtras(plan: MondayPlan, now: Date = new Date(
+     if (read) live[c.setup.symbol] = read;
+   }
+   const liveStatus: PlanBoardExtras['liveStatus'] = symbols.length === 0 ? 'none' : fetchFailed ? 'fetch_failed' : quotes.size === 0 ? 'no_prints' : 'ok';
+-  return { asOf, live, liveStatus, contracts: Object.fromEntries(contractList) };
++  return { asOf, live, liveStatus, contracts: Object.fromEntries(contractList), positioning };
+ }
+diff --git a/src/lib/slate/planPositioning.ts b/src/lib/slate/planPositioning.ts
+new file mode 100644
+index 00000000..5eb65239
+--- /dev/null
++++ b/src/lib/slate/planPositioning.ts
+@@ -0,0 +1,154 @@
++/**
++ * Short positioning for the Slate's stock names, read from Ortex data that is already bought (owner
++ * decision ORTEX-SLATE-1, 2026-10-05). CACHE-ONLY: this module never calls Ortex and spends no
++ * credits; the page and the interpretation job only read what other jobs stored.
++ *
++ *   bulk      the daily Ortex S&P 500 positioning snapshot (latest COMPLETE manifest): short interest
++ *             as % of free float, days to cover, cost to borrow (all loans), shares available to borrow.
++ *             Ortex's `short_availability_pct` is NOT used: it does not equal available ÷ short or a share
++ *             of float, so its meaning is unverified; only its 9999 "unconstrained" sentinel is read.
++ *   targeted  a name outside that snapshot: the newest per-ticker short-interest history in
++ *             `ortex_cache` (written by the scanner and the plan-positioning job). Short interest
++ *             only; Ortex's per-name borrow-rate endpoint is not usable on this account.
++ *
++ * Vendor values render plain. Two values are derived (Rule 3: vendor inputs, a ratio a reader can
++ * redo) and render est.: the change over POSITIONING_CHANGE_SESSIONS snapshots, and shares available
++ * to borrow ÷ shares already short.
++ */
++
++import { supabaseRest } from '@/lib/db';
++import { parseOrtexRow } from '@/services/ortexParsing';
++
++/** Compare against the snapshot this many sessions earlier. */
++export const POSITIONING_CHANGE_SESSIONS = 5;
++/** Ortex sends 9999 for "no borrow constraint"; it is not a percentage. */
++export const ORTEX_AVAILABILITY_UNLIMITED = 9999;
++
++const SYMBOL_RE = /^[A-Z0-9]+(?:[.-][A-Z0-9]+)*$/;
++
++export interface PlanPositioning {
++  symbol: string;
++  source: 'bulk' | 'targeted';
++  /** Vendor data date of the latest value. */
++  asOf: string;
++  siPctFreeFloat: number | null;
++  /** Value and date of the comparison point (POSITIONING_CHANGE_SESSIONS earlier), when on file. */
++  siPctFreeFloatPrior: number | null;
++  priorAsOf: string | null;
++  /** Relative change of short interest vs the comparison point, in percent (derived). */
++  siChangePct: number | null;
++  daysToCover: number | null;
++  costToBorrowPct: number | null;
++  /** Shares available to borrow ÷ shares sold short (derived). */
++  availVsShort: number | null;
++  availabilityUnlimited: boolean;
++}
++
++export interface PlanPositioningRead {
++  /** ok: the reads ran (a name may still have no row). read_failed: a store read threw. */
++  status: 'ok' | 'read_failed';
++  bySymbol: Record<string, PlanPositioning>;
++}
++
++type Rest = typeof supabaseRest;
++type Row = Record<string, unknown>;
++
++const num = (v: unknown): number | null => {
++  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
++  return Number.isFinite(n) ? n : null;
++};
++
++/** Whole-percent change with a sign; a change that rounds to zero is "0%", never "-0%". */
++export const signedPct = (x: number) => { const v = Math.round(x); return v === 0 ? '0%' : `${v > 0 ? '+' : ''}${v}%`; };
++
++export function relChangePct(now: number | null, prior: number | null): number | null {
++  return now !== null && prior !== null && prior > 0 ? ((now - prior) / prior) * 100 : null;
++}
++
++/** Pure: a bulk snapshot row (and the same name's row from the comparison snapshot). */
++export function fromSnapshot(row: Row, prior: Row | undefined, priorAsOf: string | null): PlanPositioning {
++  const si = num(row.si_pct_free_float);
++  const priorSi = prior ? num(prior.si_pct_free_float) : null;
++  const sentinel = num(row.short_availability_pct);
++  const unlimited = sentinel !== null && sentinel >= ORTEX_AVAILABILITY_UNLIMITED;
++  const availShares = num(row.short_availability_shares);
++  const siShares = num(row.si_shares);
++  return {
++    symbol: String(row.symbol),
++    source: 'bulk',
++    asOf: String(row.source_date),
++    siPctFreeFloat: si,
++    siPctFreeFloatPrior: priorSi,
++    priorAsOf: priorSi !== null ? priorAsOf : null,
++    siChangePct: relChangePct(si, priorSi),
++    daysToCover: num(row.days_to_cover),
++    costToBorrowPct: num(row.cost_to_borrow_all),
++    availVsShort: unlimited || availShares === null || siShares === null || siShares <= 0 ? null : availShares / siShares,
++    availabilityUnlimited: unlimited,
++  };
++}
++
++/** Pure: a per-ticker short-interest history (oldest first, as Ortex returns it). */
++export function fromHistory(symbol: string, rows: unknown): PlanPositioning | null {
++  if (!Array.isArray(rows)) return null;
++  const parsed = rows.map(r => parseOrtexRow(symbol, r)).filter((r): r is NonNullable<typeof r> => r !== null);
++  const last = parsed.at(-1);
++  if (!last) return null;
++  const prior = parsed.length > POSITIONING_CHANGE_SESSIONS ? parsed[parsed.length - 1 - POSITIONING_CHANGE_SESSIONS] : undefined;
++  return {
++    symbol,
++    source: 'targeted',
++    asOf: last.date,
++    siPctFreeFloat: last.shortInterestPct,
++    siPctFreeFloatPrior: prior?.shortInterestPct ?? null,
++    priorAsOf: prior?.date ?? null,
++    siChangePct: relChangePct(last.shortInterestPct, prior?.shortInterestPct ?? null),
++    daysToCover: null,
++    costToBorrowPct: null,
++    availVsShort: null,
++    availabilityUnlimited: false,
++  };
++}
++
++const inList = (symbols: string[]) => encodeURIComponent(`(${symbols.map(s => `"${s}"`).join(',')})`);
++
++/** Cache-only read for the given names: bulk snapshot first, then the per-ticker cache. */
++export async function readPlanPositioning(symbols: string[], rest: Rest = supabaseRest): Promise<PlanPositioningRead> {
++  const list = Array.from(new Set(symbols.map(s => s.toUpperCase()).filter(s => SYMBOL_RE.test(s))));
++  if (list.length === 0) return { status: 'ok', bySymbol: {} };
++  const bySymbol: Record<string, PlanPositioning> = {};
++  try {
++    const manifests = await rest('ortex_positioning_manifests', 'GET', {
++      query: `status=eq.COMPLETE&select=source_date&order=source_date.desc&limit=${POSITIONING_CHANGE_SESSIONS + 1}`,
++    }) as Row[];
++    const dates = (Array.isArray(manifests) ? manifests : []).map(m => m.source_date).filter((d): d is string => typeof d === 'string');
++    const latest = dates[0] ?? null;
++    const priorDate = dates[POSITIONING_CHANGE_SESSIONS] ?? null;
++    if (latest) {
++      const cols = 'symbol,source_date,si_shares,si_pct_free_float,days_to_cover,cost_to_borrow_all,short_availability_shares,short_availability_pct';
++      const [rows, priorRows] = await Promise.all([
++        rest('ortex_positioning_snapshots', 'GET', { query: `source_date=eq.${latest}&symbol=in.${inList(list)}&select=${cols}` }) as Promise<Row[]>,
++        priorDate
++          ? rest('ortex_positioning_snapshots', 'GET', { query: `source_date=eq.${priorDate}&symbol=in.${inList(list)}&select=symbol,si_pct_free_float` }) as Promise<Row[]>
++          : Promise.resolve([] as Row[]),
++      ]);
++      const prior = new Map((Array.isArray(priorRows) ? priorRows : []).map(r => [String(r.symbol), r]));
++      for (const r of Array.isArray(rows) ? rows : []) bySymbol[String(r.symbol)] = fromSnapshot(r, prior.get(String(r.symbol)), priorDate);
++    }
++    const rest2 = list.filter(s => !bySymbol[s]);
++    if (rest2.length > 0) {
++      const cached = await rest('ortex_cache', 'GET', {
++        query: `ticker=in.${inList(rest2)}&data_type=eq.history&select=ticker,data_json,fetched_at&order=fetched_at.desc`,
++      }) as Row[];
++      for (const r of Array.isArray(cached) ? cached : []) {
++        const sym = String(r.ticker);
++        if (bySymbol[sym]) continue; // newest row per ticker wins (ordered desc)
++        const p = fromHistory(sym, r.data_json);
++        if (p) bySymbol[sym] = p;
++      }
++    }
++    return { status: 'ok', bySymbol };
++  } catch {
++    return { status: 'read_failed', bySymbol: {} };
++  }
++}
+diff --git a/supabase/migrations/20261006164647_plan_interpretations_read_slot.sql b/supabase/migrations/20261006164647_plan_interpretations_read_slot.sql
+new file mode 100644
+index 00000000..389fe898
+--- /dev/null
++++ b/supabase/migrations/20261006164647_plan_interpretations_read_slot.sql
+@@ -0,0 +1,21 @@
++-- DAY-READS-1 (owner approved 2026-10-06: "approve the read_slot migration"). Which read a
++-- plan_interpretations row is: the nightly plan read (all existing rows) or one of the four daytime
++-- reads. Additive: existing rows become 'nightly'. The one-ok-row guarantee becomes per read slot, so a
++-- daytime read never replaces or blocks the nightly graded read (EXPERT-READ-GRADING-1 scores 'nightly').
++-- Applied to production 2026-10-06 as version 20261006164647 (Supabase MCP apply_migration).
++alter table public.plan_interpretations
++  add column if not exists read_slot text not null default 'nightly';
++
++alter table public.plan_interpretations
++  drop constraint if exists plan_interpretations_read_slot_check;
++alter table public.plan_interpretations
++  add constraint plan_interpretations_read_slot_check
++  check (read_slot in ('nightly', '09:00', '11:00', '13:00', '15:00'));
++
++drop index if exists public.plan_interpretations_one_ok_idx;
++create unique index plan_interpretations_one_ok_idx
++  on public.plan_interpretations (session_date, read_slot, prompt_version, system_prompt_hash)
++  where status = 'ok';
++
++create index if not exists plan_interpretations_slot_idx
++  on public.plan_interpretations (session_date desc, read_slot, created_at desc);
 diff --git a/tests/acceptance/autotrader/AT00.test.ts b/tests/acceptance/autotrader/AT00.test.ts
 index 738f01f1..b971a734 100644
 --- a/tests/acceptance/autotrader/AT00.test.ts

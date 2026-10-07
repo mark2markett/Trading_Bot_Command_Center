@@ -1,4 +1,4 @@
-param([string]$Repo)
+param([string]$Repo, [switch]$UpdatePullRequestBody)
 $ErrorActionPreference = 'Stop'
 if (!$Repo) {
     $Repo = Join-Path $env:TEMP ('m2m-sip-publish-' + [guid]::NewGuid().ToString('N'))
@@ -27,6 +27,17 @@ if ((Test-Path -LiteralPath $bodyFile) -and (Get-Command gh -ErrorAction Silentl
         if ($existing) {
             Write-Host "Existing pull request: $existing"
             Write-Host "Acceptance mapping and review description: $bodyFile"
+            if ($UpdatePullRequestBody) {
+                $previousBody = & gh pr view $existing --repo mark2markett/m2m-platform --json body
+                if ($LASTEXITCODE -eq 0) {
+                    $bodyBackup = Join-Path (Join-Path $Repo '.git') ('cc-sip-pr-body-' + [guid]::NewGuid().ToString('N') + '.json')
+                    $previousBody | Set-Content -LiteralPath $bodyBackup -Encoding UTF8
+                    & gh pr edit $existing --repo mark2markett/m2m-platform --body-file $bodyFile
+                    if ($LASTEXITCODE -ne 0) { Write-Warning 'Branch published; PR description update failed. Use the prepared description file.' }
+                    else { Write-Host "PR description updated; previous body retained at $bodyBackup" }
+                }
+                else { Write-Warning 'Could not capture the existing PR description; it was not overwritten.' }
+            }
         }
         else {
             & gh pr create --repo mark2markett/m2m-platform --base main --head feat/cc-sip-scanner --title 'Restore Command Center SIP ORB scanner input' --body-file $bodyFile

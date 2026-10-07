@@ -4,7 +4,7 @@ This dedicated scanner supplies the existing paper Stocks-in-Play ORB strategy. 
 
 ## Deployment inputs
 
-Deploy the reviewed `feat/cc-sip-scanner` platform branch through the normal build/review process. Leave `SIP_SCANNER_ENABLED` unset until prerequisites and an operating morning window are available. Enable with the exact value `true` before 09:00 Eastern on a trading day.
+Production deployment uses the owner-merged `main` commit/release artifact after current-head independent review and required checks pass. A feature-branch preview is not the production release; the READY production deployment must match the merged commit. Leave `SIP_SCANNER_ENABLED` unset until prerequisites and an operating morning window are available. Enable with the exact value `true` before 09:00 Eastern on a trading day.
 
 Required existing platform inputs: working shared Schwab token state and its existing OAuth service; `CRON_SECRET`; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Redis is required, with no in-memory substitute. Configure a new `SIP_SCANNER_SECRET` of at least 32 random characters. It must differ from `CRON_SECRET`, `MONITOR_SECRET`, `DASHBOARD_PASSWORD`, and `SCHWAB_BROKER_SECRET`. Enter credentials securely in deployment settings, never in URLs or committed files. No database migration is required.
 

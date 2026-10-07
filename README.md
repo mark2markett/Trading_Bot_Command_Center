@@ -1,55 +1,17 @@
-# Latest consolidated update
+# Current Command Center delivery
 
-Use [RUNTIME-FIXES.md](RUNTIME-FIXES.md) and APPLY-RUNTIME-FIXES.ps1 for the current repair. Older separate installers are retained for history; they are not needed for the consolidated update.
+## Runtime repair
 
-# SIP scanner delivery — 2026-10-06
+The source repair is db9b507 on fix/runtime-log-review-20261006. The operator installed it on native feat/options-m7, passed all 235 Python tests and initialized one shared $100,000 paper account. The server restarted successfully. The scanner URL/secret configuration remains unresolved; live readiness is not certified. RUNTIME-FIXES.md documents that installation. Older separate installers are retained as historical payloads and are not needed for this scanner review update.
 
-Command Center source is published on `feat/sip-scanner`, commit `9d2cbc2ed327b76c00dd7007dbc402ac7ba42380`, based on cloud pre-open repair `2f7bef3`. The native `26ea7cb` repair is patch-equivalent. Main was not changed.
+## Scanner PR #1260 review corrections
 
-Platform scanner is prepared at `f6b9413d31102b5758016025d55326089fb3d32a` on `feat/cc-sip-scanner`, base `1e32fd94646526818593713ca3c53ad52493975d`. This cloud task can read m2m-platform but its push failed with a GitHub authentication error. The incremental platform bundle and readable patch preserve all three commits for import using an authorized platform checkout. No main merge or production deployment was performed.
+The platform producer/acceptance plan was published at 1543232 and PR https://github.com/mark2markett/m2m-platform/pull/1260 was opened. Quality, delivery acceptance and its original Vercel preview passed; independent review requested changes. The current bundle advances that feature history with the review corrections and a merge of main e8d193c3 to preserve both changelog histories. No remote main merge or production deployment was performed by this task.
 
-## Retrieve the package on Windows
+The corrected source contains canonical owner-merged-main release instructions, an implementation-plan changelog entry, distinct historical exclusion diagnostics, non-failure lease-contention reporting, static calendar import and actual cron-route regression tests. SCANNER-PULL-REQUEST.md supplies the declarative review response and current validation evidence. Local review is separate from required GitHub review on the new head.
 
-```powershell
-$transfer = Join-Path $env:TEMP ('cc-sip-' + [guid]::NewGuid().ToString('N'))
-git clone --depth 1 --single-branch --branch transfer/sip-scanner https://github.com/mark2markett/Trading_Bot_Command_Center.git $transfer
-if ($LASTEXITCODE -ne 0) { throw 'GitHub retrieval failed.' }
-Get-Content (Join-Path $transfer 'TRANSFER.md')
-```
+The Windows publication helper uses the operator's working GitHub authentication and an isolated temporary platform checkout. PUBLISH-PLATFORM-SCANNER.ps1 -UpdatePullRequestBody publishes only feat/cc-sip-scanner and updates the existing PR description after retaining its prior body. It neither merges nor deploys nor changes credentials, controls, task settings or native bot source. The bundle requires 1e32fd94646526818593713ca3c53ad52493975d, available in platform main history.
 
-After bot sessions finish, install only the native scanner client:
+Production release requires current-head GitHub review/checks, owner merge and a READY deployment tied to the merged main commit. The dedicated secret and existing Redis/Schwab inputs are configured securely; the authenticated current-session snapshot remains a live morning check. See CC-SIP-SCANNER.md. This cloud environment has no platform push/API authorization or Vercel connection; a published transfer package is not a deployed scanner.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $transfer 'APPLY-SIP-SCANNER.ps1')
-```
-
-The helper validates `feat/options-m7` and the prior repair, backs up the ledger read-only, imports the new branch, applies the single scanner commit idempotently, and runs native regressions. It leaves the server and existing task schedules running and preserves unrelated changes. No sessions are started and no credentials/capital are changed. PowerShell itself still requires native validation; the patch was independently backported against the original native base plus the two production repairs in cloud, preserving the branch, log/dev changes and untracked handoff.
-
-Publish the prepared platform review branch using your native GitHub access:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $transfer 'PUBLISH-PLATFORM-SCANNER.ps1')
-```
-
-The publisher creates an isolated temporary platform checkout, validates the origin, imports the bundle, and pushes only `feat/cc-sip-scanner`. It does not merge main or change the production deployment. If you already have a local m2m-platform checkout, an optional `-Repo` parameter uses it and preserves its checked-out branch.
-
-Review/deploy the platform branch through the normal pipeline, set the dedicated secret securely on both sides, and enable the scanner before 09:00 Eastern on a trading day. See `CC-SIP-SCANNER.md` for the exact schedule, v1 contract, defaults, safe failure behavior and logs. Keep SIP_SYMBOLS blank for scanner-only mode. A fixed list is an explicit operator fallback, not a scanner.
-
-## Verification and outstanding checks
-
-- 30 platform scanner tests pass, production typecheck/lint/cron registry/size/any/client-server gates pass.
-- 201 Command Center Python tests pass.
-- Actual platform-produced fixture passes real SIP rules → risk → paper entry/fills → EOD exits.
-- Browser harness: 34 PASS / 0 FAIL / 7 NOT COVERED, isolated runtime and source cleaned.
-- Independent review: both Important findings fixed with RED/GREEN regressions, minor coverage/calendar findings fixed; follow-up found no remaining Critical/Important issues.
-- Broad platform suite: 9035 pass, 10 fail, 1 expected fail, 13 skipped, 11 todo. The six failing existing files also fail on unchanged main in this environment; timeout test identities vary across runs. These are not represented as a green release gate.
-- Next production build fails on existing Google Fonts egress 403 (four fonts). Required domains: fonts.googleapis.com and fonts.gstatic.com. No font bypass or product font changes were made.
-- Live Schwab completeness/entitlement/freshness, deployed Redis and machine auth, and native Windows scheduling remain unverified without deployment credentials/native results.
-- Portfolio capital basis remains unanswered; no equity is seeded and full portfolio risk readiness is not claimed.
-
-Bundles contain source only; no live databases, logs, backups, credential files or review ZIPs are published. SHA256.txt covers the transfer payload.
-## Scanner review handoff — October 6, 2026
-
-The native runtime installation has now passed 235 tests and initialized the approved shared $100,000 paper account. Its remaining configuration failure is the scanner URL/secret. Do not repeat the runtime installer for this handoff.
-
-The updated platform bundle advances the published producer e8146e8 to 1543232 with its required acceptance plan. Run PUBLISH-PLATFORM-SCANNER.ps1 from a fresh transfer checkout. It publishes only the feature branch and, when an authorized GitHub CLI is available, opens its review PR. Otherwise use the printed compare URL with SCANNER-PULL-REQUEST.md as the description. The separate current-head GitHub review/checks, owner merge, production deployment and secure scanner configuration are still required. The cloud environment has no platform push/API authorization or Vercel connection; it has not deployed the scanner.
+Bundles contain source only; no live databases, logs, backups, credential files or review ZIPs are published. SHA256.txt covers the current transfer payload. TRANSFER-SHA256SUMS is the retained historical closed-loop manifest.

@@ -1,9 +1,9 @@
 diff --git a/docs/delivery/plans/R00-cc-sip-scanner.json b/docs/delivery/plans/R00-cc-sip-scanner.json
 new file mode 100644
-index 00000000..1cd637a7
+index 00000000..b870017a
 --- /dev/null
 +++ b/docs/delivery/plans/R00-cc-sip-scanner.json
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,33 @@
 +{
 +  "version": 1,
 +  "stage": "implementation",
@@ -13,15 +13,16 @@ index 00000000..1cd637a7
 +  "criteria": [
 +    {
 +      "id": "R00-behavior",
-+      "expected": "Filter verified stock classifications from the existing universe; require price > $5, completed 20-session mean volume >= 1,000,000 and Wilder ATR(14) > $0.50. Rank by completed 09:30-09:34 volume divided by the same five-minute window over exactly 14 prior exchange sessions. Exclude missing history and reject malformed OHLC. Prepare before the open and publish an immutable current-session v1 snapshot only during the guarded Eastern publication window. Formula and threshold definitions: docs/runbooks/CC-SIP-SCANNER.md § Calculation contract, src/lib/sip/calculation.ts dailyEligibility/openingVolume/preparationFromEligibility/rankCandidates and src/lib/sip/service.ts publish. Dedicated machine auth and Redis owner-checked leases fail closed; pending, unavailable and valid empty results remain distinct."
++      "expected": "Filter verified stock classifications from the existing universe; require price > $5, completed 20-session mean volume >= 1,000,000 and Wilder ATR(14) > $0.50. Rank by completed 09:30-09:34 volume divided by the same five-minute window over exactly 14 prior exchange sessions. Exclude missing history and reject malformed OHLC. Prepare before the open and publish an immutable current-session v1 snapshot only during the guarded Eastern publication window. Formula and threshold definitions: docs/runbooks/CC-SIP-SCANNER.md § Calculation contract, src/lib/sip/calculation.ts dailyEligibility/openingVolume/preparationFromEligibility/rankCandidates and src/lib/sip/service.ts publish. Dedicated machine auth and Redis owner-checked leases fail closed; pending, unavailable and valid empty results remain distinct. Malformed stored v1 snapshots are unavailable, never successful ready responses."
 +    },
 +    {
 +      "id": "R00-regression",
-+      "expected": "The job is registered in the existing minute dispatcher with exchange-calendar guards; physical Vercel scheduling and existing trading authority remain unchanged. Provider/storage errors and lease loss cannot publish fabricated or stale data. Production-boundary tests scrub the new secrets and refuse production HTTP access."
++      "expected": "The job is registered in the existing minute dispatcher with exchange-calendar guards; its route execution ceiling matches the governed dispatcher timeout; physical Vercel scheduling and existing trading authority remain unchanged. Provider/storage errors and lease loss cannot publish fabricated or stale data. Production-boundary tests scrub the new secrets and refuse production HTTP access."
 +    }
 +  ],
 +  "tests": [
 +    {"runner": "vitest", "file": "src/lib/sip/__tests__/calculation.test.ts", "covers": ["R00-behavior"]},
++    {"runner": "vitest", "file": "src/lib/sip/__tests__/http.test.ts", "covers": ["R00-behavior", "R00-regression"]},
 +    {"runner": "vitest", "file": "src/lib/sip/__tests__/service.test.ts", "covers": ["R00-behavior", "R00-regression"]},
 +    {"runner": "vitest", "file": "src/lib/sip/__tests__/infrastructure.test.ts", "covers": ["R00-behavior", "R00-regression"]},
 +    {"runner": "vitest", "file": "src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts", "covers": ["R00-regression"]},
@@ -37,10 +38,10 @@ index 00000000..1cd637a7
 +  ]
 +}
 diff --git a/docs/implementation-plan/CHANGELOG.md b/docs/implementation-plan/CHANGELOG.md
-index 4ceb7f05..bc4bb7b2 100644
+index 4ceb7f05..bcabdb09 100644
 --- a/docs/implementation-plan/CHANGELOG.md
 +++ b/docs/implementation-plan/CHANGELOG.md
-@@ -1,5 +1,16 @@
+@@ -1,5 +1,17 @@
  # M2M Plan v2 — Changelog
  
 +## 2026-10-06 ET — Restore the Command Center paper SIP ORB scanner input (PR #1260)
@@ -48,6 +49,7 @@ index 4ceb7f05..bc4bb7b2 100644
 +- **Bounded integration:** `/api/cron/cc-sip-scanner` prepares the existing verified stock universe before the open and publishes a frozen opening-window RVOL snapshot through the existing minute dispatcher. The authenticated read-only machine endpoint is `/api/internal/cc/sip-scanner`. Physical Vercel scheduling and order authority are unchanged.
 +- **Durable contract:** date-scoped `cc:sip:v1:*` Redis state, owner-fenced leases and immutable seven-day snapshots distinguish pending, unavailable and valid empty results. Redis is required; no in-memory substitute. Historical malformed/incomplete window exclusions keep their specific codes. Lease contention remains visible as HTTP 202 busy/skipped and does not trigger a cron failure; storage/provider failures remain failures.
 +- **Second review corrections:** the runbook links canonical D-021 release and D-031 authorship decisions separately and cites the executable math contract. Daily eligibility is reused rather than recomputed; cron summaries distinguish `prepared` from `publish_ready`, and safe route/store logs carry run/session context.
++- **Final review concerns:** route execution and governed dispatcher ceilings both use 280 seconds; the historical Superpowers plan/spec explicitly defer to canonical governance, acceptance and operational sources. The machine read validates the stored v1 contract before returning 200, refusing malformed snapshots with bounded diagnostics; deduplicated universe counts avoid overstated classification exclusions.
 +- **Cold-build correction:** the existing JetBrains Mono font now preloads its configured Latin subset to avoid Next 16.3.5's deferred-font internal-query resolver failure, reproduced on CI's Node 20.19.5. Family, weights, fallback and CSS variable are unchanged; the additional font preload is the bounded build-unblocking change. Required build/review checks are retained.
 +- **Release and acceptance:** `docs/runbooks/CC-SIP-SCANNER.md` describes dedicated machine authentication, native inputs and production deployment from the owner-merged `main` release. `docs/delivery/plans/R00-cc-sip-scanner.json` maps the bounded restoration to executable checks, limits and rollback. PR prose is informational; canonical governance and current-head checks retain authority.
 +- **Evidence boundary:** local regressions prove diagnostic distinctions; they do not prove production Redis, live provider history coverage, daily publication, native scheduling or operator acceptance. PR #1260's preview was reported READY; independent review requested these corrections and must rerun on the revised head.
@@ -59,7 +61,7 @@ index 4ceb7f05..bc4bb7b2 100644
  - **Owner-approved migration** `20261006164647_plan_interpretations_read_slot.sql`, applied to production and recorded here so the repository matches the database.
 diff --git a/docs/runbooks/CC-SIP-SCANNER.md b/docs/runbooks/CC-SIP-SCANNER.md
 new file mode 100644
-index 00000000..cf101e44
+index 00000000..d9242781
 --- /dev/null
 +++ b/docs/runbooks/CC-SIP-SCANNER.md
 @@ -0,0 +1,42 @@
@@ -92,11 +94,11 @@ index 00000000..cf101e44
 +
 +## Runtime state
 +
-+Preparation is cached per symbol and resumes after failures. Current completed opening volumes are also cached for retry; quotes are obtained afresh before publication and must be current. Four workers share pacing of at most about 100 data requests/minute within this scanner; other platform/fleet requests share the provider’s overall limit, so 429 remains a retryable outage. Work has a 240-second budget and a 330-second ownership lease. Redis writes atomically verify the lease owner. A session snapshot is immutable, retained seven days with its coverage and exclusions. A ready result can legitimately contain zero candidates.
++Preparation is cached per symbol and resumes after failures. Current completed opening volumes are also cached for retry; quotes are obtained afresh before publication and must be current. Four workers share pacing of at most about 100 data requests/minute within this scanner; other platform/fleet requests share the provider’s overall limit, so 429 remains a retryable outage. Work has a 240-second budget and a 330-second ownership lease. The authoritative dispatcher policy is `src/config/controlPlaneJobPolicies.json` (`cc-sip-scanner.timeoutMs=280000`); the cron route has the matching static `maxDuration=280` seconds, pinned by its regression test. The work budget leaves room for completion and lease cleanup before that execution ceiling. Redis writes atomically verify the lease owner. A session snapshot is immutable, retained seven days with its coverage and exclusions. A ready result can legitimately contain zero candidates.
 +
 +`cron_runs` and safe `[cc-sip]` logs distinguish `prepared` from `publish_ready`, with `pending` for incomplete preparation and `busy`/skipped for lease contention. Route logs include the cron run ID, phase and failure code; store cleanup logs include the session date. Redis keys use `cc:sip:v1:YYYY-MM-DD:*`; inspect `preparation` for exclusions/failures and `result` for the frozen published snapshot. Native decisions record `SCANNER`, `SCANNER_PENDING`, `SCANNER_ERROR`, `SCANNER_FALLBACK`, or `SCANNER_UNAVAILABLE`; per-bot JSONL records heartbeat health. The native client validates version, date, exact window, coverage, finite rows, duplicate symbols, and a maximum 300-second age. It does not follow redirects.
 +
-+The authenticated machine GET only reads stored results: disabled 404, unauthorized 401, not-ready 202, storage/configuration error 503, ready 200. Every response is private/no-store. At 09:40 Eastern, an unresolved bot disables new entries, retains degraded heartbeat evidence, and keeps managing exits. Restarting after 09:40 does not fabricate a new universe.
++The authenticated machine GET only reads stored results: disabled 404, unauthorized 401, not-ready 202, storage/configuration error or malformed stored snapshot 503, ready 200. Before returning 200, it validates the stored v1 shape, current session, exact opening window, publication timestamp, finite qualifying metrics, unique candidates, coverage and exclusions; invalid data logs only `SIP_SNAPSHOT_INVALID` and the session date. This contract check does not expire the immutable snapshot within its session; the native consumer separately enforces freshness and the selection deadline. Every response is private/no-store. At 09:40 Eastern, an unresolved bot disables new entries, retains degraded heartbeat evidence, and keeps managing exits. Restarting after 09:40 does not fabricate a new universe.
 +
 +## Release checks
 +
@@ -107,11 +109,13 @@ index 00000000..cf101e44
 +The scanner calendar fails closed outside its covered 2026–2027 years, including lookback windows that cross into an uncovered year. This avoids pretending an unlisted holiday is a trading session; extend the shared calendar and scanner guard together before using such a window.
 diff --git a/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
 new file mode 100644
-index 00000000..27b001d1
+index 00000000..90bbc4a0
 --- /dev/null
 +++ b/docs/superpowers/plans/2026-10-06-cc-sip-scanner.md
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,33 @@
 +# SIP scanner implementation plan
++
++> **Non-canonical historical notes.** This file records the original implementation discussion; it does not grant authority, establish release readiness, or replace current requirements. Canonical release and authorship rules are in [CLAUDE.md](../../../CLAUDE.md) and [DECISIONS.md](../../implementation-plan/DECISIONS.md). Current acceptance mappings are in [R00](../../delivery/plans/R00-cc-sip-scanner.json), the implemented contract and operations are in the [runbook](../../runbooks/CC-SIP-SCANNER.md), and delivered changes are recorded in the [CHANGELOG](../../implementation-plan/CHANGELOG.md). Historical prerequisites and proposed filenames below may have changed.
 +
 +Spec: docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md. Native execution, approved in conversation. Platform base 1e32fd9, Command Center base 2f7bef3. Constraints: Schwab stock data, Redis durability, authenticated/fresh result, unchanged trading/risk capital, isolated feature branches, no production deployment/merge.
 +
@@ -144,11 +148,13 @@ index 00000000..27b001d1
 +- Pending universe never bypasses risk controls or blocks adopted-position exits; healthy zero remains distinct from unavailable data.
 diff --git a/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md b/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
 new file mode 100644
-index 00000000..1f1a56a5
+index 00000000..166397c3
 --- /dev/null
 +++ b/docs/superpowers/specs/2026-10-06-cc-sip-scanner-design.md
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,33 @@
 +# Command Center SIP scanner
++
++> **Non-canonical historical notes.** This file records the original implementation discussion; it does not grant authority, establish release readiness, or replace current requirements. Canonical release and authorship rules are in [CLAUDE.md](../../../CLAUDE.md) and [DECISIONS.md](../../implementation-plan/DECISIONS.md). Current acceptance mappings are in [R00](../../delivery/plans/R00-cc-sip-scanner.json), the implemented contract and operations are in the [runbook](../../runbooks/CC-SIP-SCANNER.md), and delivered changes are recorded in the [CHANGELOG](../../implementation-plan/CHANGELOG.md). Historical prerequisites and proposed filenames below may have changed.
 +
 +Approved intent: prepare history before open, rank completed opening-window volume after 09:35 Eastern, authenticate the Command Center read, and test the paper entry/exit loop. The owner said “please proceed”; implementation stays native in this session. Platform main and native production branches are not modified by development.
 +
@@ -181,17 +187,18 @@ index 00000000..1f1a56a5
 +TDD covers ratio/ATR/filter boundaries, completed-window coverage, holiday/DST, unknown instruments, finite numbers, auth separation, read-only endpoint paths, safe errors, Redis failure/locking/idempotence, job windows and read readiness. Command Center covers delayed readiness, retries/deadline, valid empty vs malformed, date/freshness and actual SIP paper signal/risk/fill/EOD exit. Platform focused tests, typecheck/build where available, cron/registry guards and Command Center full tests/harness run before delivery. Publish review branches/draft PR if supported; no merge or production deployment without approval. Native Windows installation remains a separate verified transfer step. Portfolio capital configuration remains pending and unchanged.
 diff --git a/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
 new file mode 100644
-index 00000000..44e205e3
+index 00000000..198a6fb7
 --- /dev/null
 +++ b/src/app/api/cron/cc-sip-scanner/__tests__/route.test.ts
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,124 @@
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 +import type { Redis } from "@upstash/redis";
 +import { SipStore } from "@/lib/sip/store";
 +import { SchwabSipData } from "@/lib/sip/schwab";
 +import { SipUnavailable } from "@/lib/sip/contract";
 +import { sessionTime } from "@/lib/sip/calendar";
-+import { GET } from "../route";
++import policies from "@/config/controlPlaneJobPolicies.json";
++import { GET, maxDuration } from "../route";
 +
 +// Persisted cron telemetry is the external boundary; scanner and lease handling
 +// remain real. No production Redis or provider request is made by these tests.
@@ -203,8 +210,14 @@ index 00000000..44e205e3
 +  startCronRun: telemetry.start,
 +  finishCronRun: telemetry.finish,
 +}));
++// Configuration boundary includes one repeated stock, a fund and an unclassified symbol.
++vi.mock("@/config/watchlist", () => ({ ALL_SYMBOLS: ["AMD", "AMD", "SPY", "UNKNOWN"] }));
++vi.mock("@/config/universeSectors", () => ({ SYMBOL_SECTOR: { AMD: "Technology", SPY: "ETF/Fund" } }));
 +
 +describe("SIP cron outcome reporting", () => {
++  it("aligns the route ceiling with the governed dispatcher timeout", () => {
++    expect(maxDuration * 1000).toBe(policies.jobs.find((job) => job.id === "cc-sip-scanner")?.timeoutMs);
++  });
 +  const request = () => new Request("https://test.invalid/api/cron/cc-sip-scanner", {
 +    headers: { Authorization: "Bearer fixture-cron-secret" },
 +  });
@@ -236,7 +249,7 @@ index 00000000..44e205e3
 +    expect(telemetry.finish).toHaveBeenCalledWith(17, "success", expect.objectContaining({
 +      status: "busy",
 +    }));
-+    expect(await response.json()).toMatchObject({ status: "busy", skipped: true });
++    expect(await response.json()).toMatchObject({ status: "busy", skipped: true, universe: 1, classificationExcluded: 2 });
 +    expect(redis.eval).not.toHaveBeenCalled();
 +  });
 +
@@ -304,10 +317,10 @@ index 00000000..44e205e3
 +});
 diff --git a/src/app/api/cron/cc-sip-scanner/route.ts b/src/app/api/cron/cc-sip-scanner/route.ts
 new file mode 100644
-index 00000000..475b99f2
+index 00000000..e7598c5a
 --- /dev/null
 +++ b/src/app/api/cron/cc-sip-scanner/route.ts
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,66 @@
 +import { ALL_SYMBOLS } from "@/config/watchlist";
 +import { SYMBOL_SECTOR } from "@/config/universeSectors";
 +import { startCronRun, finishCronRun } from "@/lib/cronRunLog";
@@ -318,7 +331,8 @@ index 00000000..475b99f2
 +import { SipExcluded, SipUnavailable } from "@/lib/sip/contract";
 +import { NO_STORE, safeEqual } from "@/lib/sip/http";
 +export const dynamic = "force-dynamic";
-+export const maxDuration = 300;
++// Keep this static route ceiling aligned with controlPlaneJobPolicies.json.
++export const maxDuration = 280;
 +export async function GET(request: Request) {
 +  const secret = process.env.CRON_SECRET;
 +  if (
@@ -351,7 +365,7 @@ index 00000000..475b99f2
 +      status: !result ? "busy" : !complete ? "pending" : phase === "prepare" ? "prepared" : "publish_ready",
 +      ...(!result ? { skipped: true } : {}),
 +      universe: universe.length,
-+      classificationExcluded: ALL_SYMBOLS.length - universe.length,
++      classificationExcluded: new Set(ALL_SYMBOLS).size - universe.length,
 +      coverage: result && "coverage" in result ? result.coverage : null,
 +      failures: result && "failures" in result ? result.failures.length : 0,
 +    };
@@ -673,6 +687,109 @@ index 00000000..f0dd5e0d
 +    "CALENDAR_UNSUPPORTED",
 +  );
 +});
+diff --git a/src/lib/sip/__tests__/http.test.ts b/src/lib/sip/__tests__/http.test.ts
+new file mode 100644
+index 00000000..954ea515
+--- /dev/null
++++ b/src/lib/sip/__tests__/http.test.ts
+@@ -0,0 +1,97 @@
++import { afterEach, describe, expect, it, vi } from "vitest";
++import snapshot from "../../../../tests/fixtures/sip/sip-v1-ready.json";
++import { machineResponse } from "../http";
++
++const date = "2026-10-06";
++const secret = "fixture-scanner-secret-32-characters";
++const env = { enabled: "true", secret, reserved: {} };
++const now = new Date(snapshot.generated_at);
++const serve = (value: unknown) => machineResponse(
++  new Request("https://test.invalid/api/internal/cc/sip-scanner", {
++    headers: { Authorization: `Bearer ${secret}` },
++  }), env, async () => value, now,
++);
++
++afterEach(() => vi.restoreAllMocks());
++
++describe("stored SIP snapshot boundary", () => {
++  it.each([
++    ["false", false], ["zero", 0], ["empty string", ""], ["array", []],
++    ["missing fields", {}],
++    ["wrong version", { ...snapshot, version: 2 }],
++    ["wrong status", { ...snapshot, status: "pending" }],
++    ["wrong date", { ...snapshot, session_date: "2026-10-05" }],
++    ["wrong window", { ...snapshot, window_start: "2026-10-06T13:31:00Z" }],
++    ["invalid timestamp", { ...snapshot, generated_at: "invalid" }],
++    ["before window close", { ...snapshot, generated_at: "2026-10-06T13:34:00Z" }],
++    ["missing candidates", { ...snapshot, candidates: null }],
++    ["missing metrics", { ...snapshot, candidates: [{ symbol: "AMD" }] }],
++    ["nonfinite metric", { ...snapshot, candidates: [{ ...snapshot.candidates[0], price: Infinity }] }],
++    ["duplicate candidate", { ...snapshot, candidates: [snapshot.candidates[0], snapshot.candidates[0]] }],
++    ["invalid coverage", { ...snapshot, coverage: { ...snapshot.coverage, observed: -1 } }],
++    ["incomplete coverage", { ...snapshot, coverage: { ...snapshot.coverage, observed: 1 } }],
++    ["missing exclusions", { ...snapshot, exclusions: null }],
++    ["wrong exclusion count", { ...snapshot, exclusions: [{ symbol: "OTHER", reason: "DAILY_LIQUIDITY" }] }],
++    ["outside publication window", { ...snapshot, generated_at: "2026-10-06T13:40:00Z" }],
++    ["fractional coverage", { ...snapshot, coverage: { ...snapshot.coverage, universe: 2.5 } }],
++    ["impossible coverage", { ...snapshot, coverage: { ...snapshot.coverage, universe: 1 } }],
++    ["unqualified metric", { ...snapshot, candidates: [{ ...snapshot.candidates[0], price: 5 }] }],
++    ["invalid exclusion", { ...snapshot, coverage: { ...snapshot.coverage, excluded: 1 }, exclusions: [{ symbol: "OTHER", reason: null }] }],
++    ["unexplained empty result", { ...snapshot, candidates: [] }],
++    ["candidate also excluded", { ...snapshot, coverage: { ...snapshot.coverage, excluded: 1 }, exclusions: [{ symbol: "AMD", reason: "PRICE_TOO_LOW" }] }],
++    ["duplicate exclusions", { ...snapshot, candidates: [], coverage: { ...snapshot.coverage, excluded: 2 },
++      exclusions: [{ symbol: "AMD", reason: "PRICE_TOO_LOW" }, { symbol: "AMD", reason: "PRICE_TOO_LOW" }] }],
++  ])("refuses %s instead of reporting ready", async (_, value) => {
++    vi.spyOn(console, "error").mockImplementation(() => {});
++    const response = await serve(value);
++    expect(response.status).toBe(503);
++    expect(await response.json()).toEqual({ error: "scanner_unavailable" });
++    expect(response.headers.get("Cache-Control")).toContain("no-store");
++  });
++
++  it("serves a valid stored snapshot unchanged", async () => {
++    const response = await serve(snapshot);
++    expect(response.status).toBe(200);
++    expect(await response.json()).toEqual(snapshot);
++  });
++
++  it("keeps valid empty and absent results distinct", async () => {
++    const empty = { ...snapshot, candidates: [], coverage: { universe: 0, eligible: 0, observed: 0, excluded: 0 } };
++    const ready = await serve(empty);
++    expect(ready.status).toBe(200);
++    expect(await ready.json()).toEqual(empty);
++    const pending = await serve(null);
++    expect(pending.status).toBe(202);
++    expect(await pending.json()).toEqual({ version: 1, status: "pending", session_date: date });
++  });
++
++  it("allows price exclusions to overlap eligible coverage and preserves same-session history", async () => {
++    const empty = { ...snapshot, candidates: [], coverage: { universe: 1, eligible: 1, observed: 1, excluded: 1 },
++      exclusions: [{ symbol: "AMD", reason: "PRICE_TOO_LOW" }] };
++    const response = await machineResponse(new Request("https://test.invalid", {
++      headers: { Authorization: `Bearer ${secret}` },
++    }), env, async () => empty, new Date("2026-10-06T20:00:00Z"));
++    expect(response.status).toBe(200);
++    expect(await response.json()).toEqual(empty);
++  });
++
++  it("accepts the top-20 cap without requiring unreturned qualifying stocks to be excluded", async () => {
++    const capped = { ...snapshot, coverage: { universe: 25, eligible: 25, observed: 25, excluded: 0 },
++      candidates: Array.from({ length: 20 }, (_, i) => ({ ...snapshot.candidates[0], symbol: `STOCK${i}` })) };
++    expect((await serve(capped)).status).toBe(200);
++  });
++
++  it("accepts preparation exclusions outside the eligible observations", async () => {
++    const result = { ...snapshot, coverage: { universe: 3, eligible: 2, observed: 2, excluded: 1 },
++      exclusions: [{ symbol: "OTHER", reason: "ATR_TOO_LOW" }] };
++    expect((await serve(result)).status).toBe(200);
++  });
++
++  it("logs only a bounded invalid-snapshot code without stored contents", async () => {
++    const log = vi.spyOn(console, "error").mockImplementation(() => {});
++    const response = await serve({ private: "private-stored-payload" });
++    expect(response.status).toBe(503);
++    expect(log).toHaveBeenCalledWith("[cc-sip]", JSON.stringify({ sessionDate: date, error: "SIP_SNAPSHOT_INVALID" }));
++    expect(await response.text()).not.toContain("private-stored-payload");
++  });
++});
 diff --git a/src/lib/sip/__tests__/infrastructure.test.ts b/src/lib/sip/__tests__/infrastructure.test.ts
 new file mode 100644
 index 00000000..cc086455
@@ -791,7 +908,7 @@ index 00000000..cc086455
 +});
 diff --git a/src/lib/sip/__tests__/service.test.ts b/src/lib/sip/__tests__/service.test.ts
 new file mode 100644
-index 00000000..81782ac1
+index 00000000..29833515
 --- /dev/null
 +++ b/src/lib/sip/__tests__/service.test.ts
 @@ -0,0 +1,196 @@
@@ -968,7 +1085,7 @@ index 00000000..81782ac1
 +    const read = vi
 +      .fn()
 +      .mockResolvedValueOnce(null)
-+      .mockResolvedValueOnce({ version: 1, status: "ready", candidates: [] });
++      .mockResolvedValueOnce({ ...readyFixture, candidates: [], coverage: { universe: 0, eligible: 0, observed: 0, excluded: 0 } });
 +    const pending = await machineResponse(req, env, read, now);
 +    expect(pending.status).toBe(202);
 +    const ready = await machineResponse(req, env, read, now);
@@ -1233,13 +1350,13 @@ index 00000000..588624fa
 +}
 diff --git a/src/lib/sip/http.ts b/src/lib/sip/http.ts
 new file mode 100644
-index 00000000..c3a00183
+index 00000000..f64c2742
 --- /dev/null
 +++ b/src/lib/sip/http.ts
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,69 @@
 +import { timingSafeEqual } from "node:crypto";
 +import { clock } from "./calendar";
-+import type { SipSnapshot } from "./contract";
++import { validSnapshot } from "./snapshot";
 +export const NO_STORE = {
 +  "Cache-Control": "private, no-store, max-age=0",
 +  Pragma: "no-cache",
@@ -1271,7 +1388,7 @@ index 00000000..c3a00183
 +export async function machineResponse(
 +  req: Request,
 +  env: SipAuthEnv,
-+  read: (date: string) => Promise<SipSnapshot | null>,
++  read: (date: string) => Promise<unknown>,
 +  now: Date,
 +): Promise<Response> {
 +  const json = (
@@ -1289,13 +1406,18 @@ index 00000000..c3a00183
 +  if (!safeEqual(req.headers.get("authorization"), `Bearer ${env.secret}`))
 +    return json({ error: "unauthorized" }, 401);
 +  try {
-+    const result = await read(clock(now).date);
-+    if (!result)
++    const date = clock(now).date;
++    const result = await read(date);
++    if (result === null)
 +      return json(
-+        { version: 1, status: "pending", session_date: clock(now).date },
++        { version: 1, status: "pending", session_date: date },
 +        202,
 +        { "Retry-After": "15" },
 +      );
++    if (!validSnapshot(result, date)) {
++      console.error("[cc-sip]", JSON.stringify({ sessionDate: date, error: "SIP_SNAPSHOT_INVALID" }));
++      return json({ error: "scanner_unavailable" }, 503, { "Retry-After": "15" });
++    }
 +    return json(result, 200);
 +  } catch {
 +    return json({ error: "scanner_unavailable" }, 503, { "Retry-After": "15" });
@@ -1665,6 +1787,67 @@ index 00000000..c44062b8
 +      return result;
 +    });
 +  }
++}
+diff --git a/src/lib/sip/snapshot.ts b/src/lib/sip/snapshot.ts
+new file mode 100644
+index 00000000..28d76058
+--- /dev/null
++++ b/src/lib/sip/snapshot.ts
+@@ -0,0 +1,55 @@
++import { sessionTime } from "./calendar";
++import type { SipSnapshot } from "./contract";
++
++function record(value: unknown): value is Record<string, unknown> {
++  return typeof value === "object" && value !== null && !Array.isArray(value);
++}
++function timestamp(value: unknown): number {
++  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)
++    ? Date.parse(value) : NaN;
++}
++function symbol(value: unknown): value is string {
++  return typeof value === "string" && /^[A-Z][A-Z0-9.]{0,9}$/.test(value);
++}
++
++/** Redis is an external boundary: a TypeScript annotation is not validation.
++ * This verifies the frozen v1 contract, not provider truth or consumer freshness.
++ */
++export function validSnapshot(value: unknown, date: string): value is SipSnapshot {
++  if (!record(value) || value.version !== 1 || value.status !== "ready" || value.session_date !== date)
++    return false;
++  const start = sessionTime(date, 570).getTime(), end = sessionTime(date, 575).getTime();
++  const generated = timestamp(value.generated_at);
++  if (timestamp(value.window_start) !== start || timestamp(value.window_end) !== end ||
++      !Number.isFinite(generated) || generated < end || generated >= sessionTime(date, 580).getTime())
++    return false;
++  if (!Array.isArray(value.candidates) || value.candidates.length > 20 ||
++      !Array.isArray(value.exclusions) || !record(value.coverage)) return false;
++  const coverage = value.coverage;
++  const counts = [coverage.universe, coverage.eligible, coverage.observed, coverage.excluded];
++  if (!counts.every((n) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0)) return false;
++  const [universe, eligible, observed, excluded] = counts as number[];
++  if (observed !== eligible || eligible > universe || excluded > universe ||
++      value.candidates.length > observed || value.exclusions.length !== excluded) return false;
++  const symbols = new Set<string>();
++  for (const row of value.candidates) {
++    if (!record(row) || !symbol(row.symbol) || symbols.has(row.symbol) ||
++        ![row.price, row.rvol, row.atr14, row.avg_vol].every((n) => typeof n === "number" && Number.isFinite(n)))
++      return false;
++    if (!(Number(row.price) > 5 && Number(row.rvol) >= 0 && Number(row.atr14) > 0.5 && Number(row.avg_vol) >= 1_000_000))
++      return false;
++    symbols.add(row.symbol);
++  }
++  const excludedSymbols = new Set<string>();
++  let priceExcluded = 0;
++  for (const row of value.exclusions) {
++    if (!record(row) || !symbol(row.symbol) || symbols.has(row.symbol) || excludedSymbols.has(row.symbol) ||
++        typeof row.reason !== "string" || row.reason.length === 0 || row.reason.length > 100) return false;
++    excludedSymbols.add(row.symbol);
++    if (row.reason === "PRICE_TOO_LOW") priceExcluded++;
++  }
++  // Preparation exclusions partition the universe with eligible rows; price
++  // exclusions occur after those eligible rows have been observed.
++  return eligible + excluded - priceExcluded === universe &&
++    value.candidates.length === Math.min(20, observed - priceExcluded);
 +}
 diff --git a/src/lib/sip/store.ts b/src/lib/sip/store.ts
 new file mode 100644

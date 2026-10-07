@@ -4,47 +4,41 @@ Delivery requirements: R00
 Acceptance plan: docs/delivery/plans/R00-cc-sip-scanner.json
 Closes gate: NONE — bounded restoration of the existing Command Center paper SIP ORB scanner input; no historical gate row is changed.
 
-SIP ORB currently has no scanner source. This change supplies its existing universe contract from the platform's verified stock universe and shared Schwab data, using the existing minute dispatcher. It prepares before the open and publishes a frozen ranked snapshot after the five-minute opening window. Missing history, provider/storage failures, stale data and a valid empty result are distinct outcomes. Machine reads require a dedicated secret; the feature is disabled unless explicitly enabled.
+SIP ORB has no configured scanner source. This change supplies its existing universe contract from the platform's verified stock universe and shared Schwab data, using the existing minute dispatcher. It prepares before the open and publishes a frozen ranked snapshot after the completed five-minute opening window. Missing history, provider/storage failures, pending publication and valid empty results remain distinct. Machine reads require a dedicated secret; the feature is disabled unless explicitly enabled.
+
+## Resulting behavior
+
+- Eligibility and RVOL follow the documented calculation contract, with exact prior-session windows and deterministic top-20 ranking. Daily eligibility is calculated once per symbol before fetching opening history.
+- Preparation and publication use durable Redis progress and owner-checked leases. Lease contention is busy/skipped rather than a cron failure; storage/provider failures remain failures. Telemetry distinguishes prepared from publish_ready and includes bounded run/session context.
+- The machine endpoint validates stored v1 data before returning 200, including session/window/publication timestamp, finite qualifying metrics, unique candidates and consistent exclusions/coverage. Absence returns 202; malformed data returns no-store 503 scanner_unavailable with only a bounded session/error-code log. Native freshness and the selection deadline remain separate.
+- The route's 280-second execution ceiling matches the authoritative dispatcher timeout; the service's work budget and lease duration retain their separate purposes. Classification telemetry uses a deduplicated configured universe.
+- The historical Superpowers plan/spec explicitly defer to canonical governance, acceptance mappings, the current runbook and changelog. They create no release authority.
 
 ## Validation
 
-The original deferred-font configuration reproduced CI's 18 internal-font-query failures in a cold production build using CI's Node 20.19.5. With JetBrains Mono Latin preloading enabled, the full cold production build and TypeScript validation completed successfully. Font family, weights, fallback and CSS variable are unchanged; the bounded tradeoff is an additional Latin font preload. No dependency, TLS setting or required check was bypassed.
+Current feature head: 118faca7429757e685824e5d06dc1da80fca8609, based on the feature history synced with main 2de673b9. Both changelog histories and the merged price-source repair are preserved.
 
-All 40 focused scanner/route tests passed. An initial three-worker Node 20 full-suite run passed 9107 tests and hit the existing inventory test's 10-second timeout while extra gates were running; that test passed in isolation. Validation was then rerun with two workers and no concurrent gates, without weakening any test or timeout. New regression tests first failed on the unqualified cron readiness statuses and absent eligibility-reuse helper, then passed with the corrections. A separate read-only local reviewer independently ran those 40 tests and found no Critical or Important issues. The final full Node 20 suite passed: 9123 passed, 1 expected failure, 13 skipped and 11 todo (941 passed files, 5 skipped). Scoped ESLint and cron/control-plane/file-size/any-count/client-server/curator gates passed; the final merged-source cold Node 20 production build and full lint ratchet passed. Local implementation acceptance also passed using the canonical delivery-gate command with a local PR-event fixture; that fixture is not GitHub readiness evidence. Local review does not replace the GitHub independent review on the revised head.
+- 74 focused scanner/route tests passed. Regression tests reproduced malformed-success and timeout inconsistencies before their correction.
+- Full Node 20.19.5 suite: 9157 passed, 1 expected failure, 13 skipped and 11 todo; 942 passed files and 5 skipped. No test, timeout or required check was weakened.
+- Node 20.19.5 production build and TypeScript validation passed. Scoped ESLint and full lint, cron, control-plane, size, any-count, client/server and curator gates passed.
+- A separate read-only local reviewer identified an additional contradictory-empty/candidate-exclusion gap. Regression cases reproduced it; the fix enforces unique/disjoint exclusions, complete partitions and correct capped candidate counts. The reviewer independently reran all 33 HTTP contract tests and found no remaining Important issue in those files. Valid price-empty, preparation exclusions, top-20 caps and later same-session reads remain accepted.
 
-Current feature head: f7f647eaa693eedf6ab779a8179e67e42af5246c. The feature branch is synced with main 2de673b9 (PR #1261); both implementation-plan changelog histories are preserved and the merge is clean. These are local results, not GitHub review, deployment, live provider or native scheduler certification. No production credentials were used by the tests.
+The existing JetBrains Mono Latin subset now preloads to avoid the previously reproduced cold Next 16.3.5 internal-font-query resolver failure. Earlier before/after cold Node 20 build evidence established this workaround; family, weights, fallback and CSS variable remain unchanged. Its bounded tradeoff is an additional font preload. No dependency or TLS setting was bypassed.
+
+These are local implementation results, not GitHub approval, production deployment, live-provider or native scheduler certification. No production credentials were used by the tests.
+
+## Final review concerns addressed
+
+[Review comment 6028911643](https://github.com/mark2markett/m2m-platform/pull/1260#issuecomment-6028911643): C-1 aligns maxDuration with the governed policy and pins the equality in a regression; C-2 marks both derivative historical notes and links their canonical authorities; C-3 validates unknown stored snapshots before success and records bounded failure diagnostics; N-1 corrects duplicate-symbol exclusion counts. The previous release, changelog, exclusion-code, contention, calculation, eligibility-reuse and phase-telemetry corrections remain in place. The revised head requires fresh independent GitHub review and checks.
 
 ## Independent review and release
 
-This description is informational, not governance authority. Canonical release requirements are in CLAUDE.md, docs/implementation-plan/DECISIONS.md § D-021 and docs/delivery/ACCEPTANCE.md. DECISIONS.md § D-031 permits Codex authorship with independent review and grants no production deployment or trading authority: separate GitHub Codex adversarial review, required checks and the preview must pass on the current head before owner merge. The canonical readiness verifier is scripts/delivery-gate.mjs; its output and external preview evidence, rather than PR prose, establish readiness. The authoring session has not self-cleared release.
+This description is informational. Canonical authority is in CLAUDE.md, docs/implementation-plan/DECISIONS.md § D-021 and docs/delivery/ACCEPTANCE.md. D-031 permits Codex authorship with independent review and grants no deployment or trading authority. The required independent GitHub review, current-head checks and preview must pass before owner merge; scripts/delivery-gate.mjs is the canonical readiness verifier. Local author review does not clear release.
 
-Production uses the owner-merged main commit/release artifact, with a READY production deployment tied to that commit. Secure dedicated scanner authentication, existing Schwab/Redis inputs and the enabled flag remain deployment prerequisites. Operational proof requires a fresh authenticated snapshot at 09:35–09:39 Eastern. Configuration details are in docs/runbooks/CC-SIP-SCANNER.md; credential values are not part of this PR.
+Production uses the owner-merged main commit/release artifact, with a READY production deployment tied to that commit. Secure dedicated scanner authentication, existing Schwab/Redis inputs and the enabled flag remain prerequisites. Operational proof requires a fresh authenticated snapshot at 09:35–09:39 Eastern. See docs/runbooks/CC-SIP-SCANNER.md; credential values are not part of this PR.
 
-## Plan and GATES impact
+## Scope, limits and rollback
 
-The R00 plan covers the bounded integration and now includes actual cron-route regressions. The dated implementation-plan CHANGELOG records the logical job, endpoints, Redis contract, runbook, acceptance plan and review corrections. Requirement outcomes/criteria, GATES history, CURRENT-STATE completion records, DECISIONS and trading authority are unchanged. No gate-row closure, product completion or live-readiness claim is recorded. The native shared $100,000 paper account repair is a separate Command Center change.
+The implementation-plan CHANGELOG and existing R00 acceptance plan record the bounded integration. Requirement outcomes/criteria, GATES history, CURRENT-STATE completion records, DECISIONS, trading strategy, execution mode and capital are unchanged. The native shared $100,000 paper account repair is a separate Command Center change.
 
-## Response to the first independent review
-
-- B-1: the runbook now identifies the owner-merged main release as the production deployment source; a feature preview is only build evidence.
-- B-2: the implementation-plan CHANGELOG records the bounded operational addition and explicitly records no gate-row closure.
-- C-1: release text is declarative and explicitly subordinate to canonical governance and current-head checks.
-- C-2: historical SipExcluded error codes are retained, with regression cases for missing, malformed and duplicated opening bars; unknown errors retain the generic history code.
-- C-3: real lease contention remains HTTP 202 busy/skipped and uses the existing non-failure cron convention. Actual storage outages and provider-incomplete preparation retain failures, tested through the real route and scanner with external persistence/provider boundaries replaced by fixtures.
-- N-1: clock is a static import; the existing machine-response tests verify the behavior.
-
-These responses are implementation evidence, not independent approval. The revised head requires a fresh GitHub review.
-
-## Response to the second independent review (comment 6028191354)
-
-- B-1: D-031 already exists on the canonical main base e8d193c3 in docs/implementation-plan/DECISIONS.md § D-031. The runbook now links its section explicitly and distinguishes its authorship/review scope from D-021's feature-PR-to-owner-merged-main protocol. No new decision or release authority was added.
-- C-1: the runbook's Calculation contract defines RVOL windowing, Wilder ATR seeding/updates and exact thresholds, with links to the executable calculation/publication functions and their boundary regressions. The R00 expected behavior cites that contract and those definitions.
-- C-2: the service evaluates daily eligibility once before obtaining intraday history and passes the validated result to preparationFromEligibility. The existing preparationFromBars wrapper retains its validation behavior; output equivalence and incomplete-window refusal are tested. This removes redundant computation without claiming live budget adequacy.
-- C-3: cron summaries use prepared for completed preparation and publish_ready for publication. Stored machine snapshots retain their v1 ready status; pending, contention and failure handling remain distinct. Real-route regression tests cover both phases.
-- N-1: safe route logs include the cron run ID and phase; lease cleanup logs include the session date and a bounded failure code, without secrets or upstream error contents.
-
-The separate quality failure was an existing cold Next.js font resolver failure. The source correction preloads the existing JetBrains Mono Latin subset, with before/after cold-build evidence on Node 20.19.5. New-head GitHub review, quality and preview remain required.
-
-## Risks and rollback
-
-Shared provider quota and real 14-session opening-window coverage still need live observation. Redis is required; there is no in-memory substitute. Calendar coverage is 2026–2027 and fails closed outside that range. Disable SIP_SCANNER_ENABLED to stop production and refuse scanner reads, or revert this PR to remove the logical job and endpoints. The native client continues exit management when scanner input is unavailable. No orders or database migrations are introduced.
+Live provider entitlement, shared quota, 14-session opening-history coverage, deployed Redis health and daily native scheduling still require observation. Calendar coverage is 2026–2027 and fails closed outside that range. Disable SIP_SCANNER_ENABLED to stop publication and refuse machine reads, or revert this PR to remove the logical job and endpoints. Native exit management continues when scanner input is unavailable. No orders or database migrations are introduced.

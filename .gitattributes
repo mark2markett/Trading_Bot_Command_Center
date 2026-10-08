@@ -5,3 +5,9 @@
 /DASHBOARD-SHA256.txt text eol=lf
 /command-center-dashboard-fix.bundle -text
 /command-center-dashboard-dist.zip -text
+/CC-MONITOR.py text eol=lf
+/CC-MONITOR.ps1 text eol=lf
+/INSTALL-CC-MONITOR.ps1 text eol=lf
+/test_cc_monitor.py text eol=lf
+/CC-MONITOR.md text eol=lf
+/MONITOR-SHA256.txt text eol=lf

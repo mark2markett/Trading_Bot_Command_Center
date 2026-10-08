@@ -1,0 +1,25 @@
+{
+  "source_commit": "ff9a16f937d960fbc41cc21ea0ee6dfadd19b104",
+  "files": [
+    {
+      "path": "assets/index-CNT8cujl.css",
+      "sha256": "1e1dc92541aadcba89a301f6b5fadae674750e98e13b9380c2c01b061fce1929"
+    },
+    {
+      "path": "assets/index-Kj_0qCDc.js",
+      "sha256": "0a04011c880c928f6e09c671a76709c014920ba0699ac5bceda1fdcb1993b879"
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66"
+    },
+    {
+      "path": "icons.svg",
+      "sha256": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a"
+    },
+    {
+      "path": "index.html",
+      "sha256": "bdd51a65ef7c79150aff78f3f138444c4adaee7f8699f453f04025cbb3f32add"
+    }
+  ]
+}

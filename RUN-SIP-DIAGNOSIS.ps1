@@ -12,7 +12,8 @@ foreach ($name in @('DIAGNOSE-SIP-OPENING.py', 'SIP-DIAGNOSTIC-UNIVERSE.json', '
 }
 $sandbox = Join-Path $env:TEMP ('cc-sip-probe-tests-' + [guid]::NewGuid().ToString('N'))
 try {
-    & $python -B -m pytest -q (Join-Path $PSScriptRoot 'test_sip_opening_probe.py') --basetemp $sandbox -o "cache_dir=$sandbox\cache" -o "pythonpath=$Repo\cc_sdk"
+    # Pass the SDK directory as argv: pytest's ini-path parser treats Windows backslashes as escapes.
+    & $python -B -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); import pytest; raise SystemExit(pytest.main(sys.argv[1:]))' (Join-Path $Repo 'cc_sdk') -q (Join-Path $PSScriptRoot 'test_sip_opening_probe.py') --basetemp $sandbox -o "cache_dir=$sandbox\cache"
     if ($LASTEXITCODE -ne 0) { throw 'Opening diagnostic regression tests failed.' }
 } finally { Remove-Item -LiteralPath $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 $eastern = [TimeZoneInfo]::FindSystemTimeZoneById('Eastern Standard Time')

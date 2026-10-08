@@ -13,6 +13,7 @@ import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 sys.dont_write_bytecode = True
@@ -34,6 +35,69 @@ def backup(source, target):
             src.backup(dst, pages=256, progress=progress)
             if dst.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                 raise RuntimeError("backup integrity check failed")
+
+
+def platform_enrich_probe(root):
+    """Bounded GET-only telemetry using existing shared credentials, kept in memory."""
+    import httpx
+    from dotenv import dotenv_values
+
+    values = dotenv_values(Path(root) / '.env.local')
+    url = (os.getenv('SUPABASE_URL') or values.get('SUPABASE_URL') or '').strip()
+    key = (os.getenv('SUPABASE_SERVICE_ROLE_KEY') or values.get('SUPABASE_SERVICE_ROLE_KEY') or '').strip()
+    parsed = urlparse(url)
+    if (not key or parsed.scheme != 'https' or not (parsed.hostname or '').endswith('.supabase.co')
+            or parsed.username or parsed.password or parsed.path not in ('', '/') or parsed.query or parsed.fragment):
+        return {'probe_performed': False, 'reason': 'Existing shared database configuration absent or unsupported'}
+    output = {'probe_performed': True, 'probe_status': {}, 'cron_runs': [], 'latest_enriched_at': None, 'eligibility_reads': {}}
+
+    def timestamp(value):
+        try:
+            at = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            return at.isoformat() if at.tzinfo else None
+        except (AttributeError, ValueError, TypeError):
+            return None
+
+    with httpx.Client(timeout=8, follow_redirects=False) as client:
+        def read(table, query):
+            try:
+                response = client.get(url.rstrip('/') + '/rest/v1/' + table,
+                                      params=query, headers={'apikey': key, 'Authorization': 'Bearer ' + key})
+                output['probe_status'][table] = response.status_code
+                data = response.json() if response.status_code == 200 else []
+                return data if isinstance(data, list) else []
+            except (httpx.RequestError, ValueError) as error:
+                output['probe_status'][table] = type(error).__name__
+                return []
+
+        rows = read('cron_runs', {'cron_name': 'eq.enrich', 'order': 'started_at.desc', 'limit': '8',
+                                 'select': 'status,started_at,finished_at,details'})
+        fields = ('trades', 'enriched', 'upsertErrors', 'chartNewsFetched', 'aiPlansGenerated', 'durationMs', 'skippedFresh')
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            details = row.get('details')
+            details = details if isinstance(details, dict) else {}
+            counts = {name: details[name] for name in fields if type(details.get(name)) in (int, float) and math.isfinite(details[name])}
+            output['cron_runs'].append({'status': row.get('status') if row.get('status') in ('started', 'success', 'failure', 'degraded') else None,
+                                       'started_at': timestamp(row.get('started_at')), 'finished_at': timestamp(row.get('finished_at')),
+                                       'counts': counts, 'error_present': bool(details.get('error'))})
+        rows = read('trade_enrichments', {'order': 'enriched_at.desc', 'limit': '1', 'select': 'enriched_at'})
+        if rows and isinstance(rows[0], dict):
+            output['latest_enriched_at'] = timestamp(rows[0].get('enriched_at'))
+        from datetime import timedelta, timezone
+        since = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
+        # Match the enrich route's published score/status/date predicates.
+        queries = {
+            'scanner_picks': {'status': 'in.(new,active)', 'quality_score': 'gte.80', 'signal_date': 'gte.' + since},
+            'flow_alerts': {'outcome': 'eq.open', 'squeeze_score': 'gte.80', 'trigger_time': 'gte.' + since + 'T00:00:00Z'},
+            'setups': {'status': 'eq.open', 'quality_score_total': 'gte.80', 'date_published': 'gte.' + since},
+        }
+        for table, query in queries.items():
+            rows = read(table, {**query, 'select': 'id', 'limit': '1'})
+            status = output['probe_status'][table]
+            output['eligibility_reads'][table] = {'http_status': status, 'eligible_row_seen': bool(rows) if status == 200 else None}
+    return output
 
 
 def main(root, review):
@@ -118,6 +182,10 @@ def main(root, review):
     else:
         result["probe_performed"] = False
     save(review / "scanner-status.json", result)
+    save(review / "platform-enrich.json", platform_enrich_probe(root))
+    monitor_report = root / 'var' / 'monitor' / 'latest.json'
+    if monitor_report.is_file():
+        save(review / 'native-monitor.json', json.loads(monitor_report.read_text(encoding='utf-8')))
 
 
 if __name__ == "__main__":

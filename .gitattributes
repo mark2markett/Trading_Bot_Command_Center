@@ -11,3 +11,6 @@
 /test_cc_monitor.py text eol=lf
 /CC-MONITOR.md text eol=lf
 /MONITOR-SHA256.txt text eol=lf
+/COLLECT-CC-REVIEW.py text eol=lf
+/COLLECT-CC-REVIEW.ps1 text eol=lf
+/test_platform_enrich_probe.py text eol=lf

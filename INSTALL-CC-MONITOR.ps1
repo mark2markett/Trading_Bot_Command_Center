@@ -4,7 +4,7 @@ $Repo = (Resolve-Path -LiteralPath $Repo).Path
 $python = Join-Path $Repo '.venv\Scripts\python.exe'
 if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Repository Python is missing.' }
 $files = @('CC-MONITOR.py', 'CC-MONITOR.ps1', 'test_cc_monitor.py', 'CC-MONITOR.md')
-foreach ($name in $files) {
+foreach ($name in ($files + @('COLLECT-CC-REVIEW.py', 'COLLECT-CC-REVIEW.ps1', 'test_platform_enrich_probe.py'))) {
     $entry = @(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'MONITOR-SHA256.txt') |
         Where-Object { $_ -match ('^[a-fA-F0-9]{64}\s+\*?' + [regex]::Escape($name) + '$') })
     if ($entry.Count -ne 1 -or (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $name) -Algorithm SHA256).Hash -ne ($entry[0] -split '\s+')[0]) {
@@ -24,7 +24,7 @@ if ($existing) {
 }
 $sandbox = Join-Path $env:TEMP ('cc-monitor-tests-' + [guid]::NewGuid().ToString('N'))
 try {
-    & $python -B -m pytest -q (Join-Path $PSScriptRoot 'test_cc_monitor.py') --basetemp $sandbox -o "cache_dir=$sandbox\cache"
+    & $python -B -m pytest -q (Join-Path $PSScriptRoot 'test_cc_monitor.py') (Join-Path $PSScriptRoot 'test_platform_enrich_probe.py') --basetemp $sandbox -o "cache_dir=$sandbox\cache"
     if ($LASTEXITCODE -ne 0) { throw 'Monitor regression tests failed.' }
 } finally { Remove-Item -LiteralPath $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Path $root -Force | Out-Null

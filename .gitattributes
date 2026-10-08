@@ -1,0 +1,7 @@
+# Keep checksummed dashboard payloads byte-identical on Windows checkouts.
+/APPLY-DASHBOARD-FIX.ps1 text eol=lf
+/DASHBOARD-FIX.md text eol=lf
+/DASHBOARD-RELEASE.json text eol=lf
+/DASHBOARD-SHA256.txt text eol=lf
+/command-center-dashboard-fix.bundle -text
+/command-center-dashboard-dist.zip -text

@@ -12,12 +12,12 @@ foreach ($name in @('DIAGNOSE-SIP-OPENING.py', 'SIP-DIAGNOSTIC-UNIVERSE.json', '
 }
 $sandbox = Join-Path $env:TEMP ('cc-sip-probe-tests-' + [guid]::NewGuid().ToString('N'))
 try {
-    & $python -B -m pytest -q (Join-Path $PSScriptRoot 'test_sip_opening_probe.py') --basetemp $sandbox -o "cache_dir=$sandbox\cache"
+    & $python -B -m pytest -q (Join-Path $PSScriptRoot 'test_sip_opening_probe.py') --basetemp $sandbox -o "cache_dir=$sandbox\cache" -o "pythonpath=$Repo\cc_sdk"
     if ($LASTEXITCODE -ne 0) { throw 'Opening diagnostic regression tests failed.' }
 } finally { Remove-Item -LiteralPath $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 $eastern = [TimeZoneInfo]::FindSystemTimeZoneById('Eastern Standard Time')
 $etNow = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $eastern)
-Write-Host 'This checks market data only. Existing broker authentication may refresh its access token; bots, orders and controls are preserved.'
+Write-Host 'This uses the bots'' existing SDK connection (shared Schwab state or token broker). Existing OAuth handling and its issued-time sidecar may update; bots, orders and controls are preserved.'
 Write-Host 'If preparation-cache access is absent, the probe checks 411 classified stocks at no more than one request per second, for at most ten minutes.'
 if ($etNow.TimeOfDay -lt [TimeSpan]::FromHours(16.25)) {
     $server = Get-ScheduledTask -TaskName 'CC server' -ErrorAction Stop

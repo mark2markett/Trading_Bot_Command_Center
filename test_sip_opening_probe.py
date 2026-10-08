@@ -1,6 +1,8 @@
 import importlib.util
 import json
 import sqlite3
+import sys
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -92,3 +94,99 @@ def test_overnight_daily_position_does_not_block_after_close_probe(tmp_path):
         connection.execute('CREATE TABLE positions(bot_id TEXT,qty REAL)')
         connection.execute("INSERT INTO positions VALUES('spy_mr',50)")
     assert probe.positions_clear(path)
+
+
+def test_probe_uses_working_shared_sdk_auth_when_broker_is_disabled(tmp_path, monkeypatch):
+    from cc_sdk import schwab_feed
+    monkeypatch.setattr(schwab_feed, 'REPO_ROOT', tmp_path)
+    for key, value in {
+        'SCHWAB_CLIENT_ID': 'fixture-id', 'SCHWAB_CLIENT_SECRET': 'fixture-client-secret',
+        'SUPABASE_URL': 'https://example.supabase.co', 'SUPABASE_SERVICE_ROLE_KEY': 'fixture-service-key',
+        'CC_TOKEN_BROKER_URL': 'https://disabled.example/broker', 'CC_TOKEN_BROKER_SECRET': 'b'*32,
+    }.items():
+        monkeypatch.setenv(key, value)
+    start = probe.opening_start('2026-10-08')
+    def handler(request):
+        if request.url.host == 'disabled.example':
+            return httpx.Response(404)
+        if request.url.host == 'example.supabase.co':
+            return httpx.Response(200, json=[{'schwab_token_state': {'refresh_token': 'fixture-refresh'}}])
+        if request.url.path == '/v1/oauth/token':
+            return httpx.Response(200, json={'access_token': 'a'*40, 'expires_in': 1800})
+        return httpx.Response(200, json=bars(start, range(5)))
+    feed = probe.connect_feed(tmp_path, transport=httpx.MockTransport(handler))
+    assert probe.window_summary(probe.read_market_bars(feed, 'AMD', start, start), start)['complete']
+
+
+def test_failed_http_stage_is_recorded_without_url_or_credentials(tmp_path, monkeypatch):
+    class AfterClose(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 8, 17, 0, tzinfo=probe.ET)
+    monkeypatch.setattr(probe, 'datetime', AfterClose)
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.setattr(sys, 'argv', ['probe', '--repo', str(tmp_path), '--date', '2026-10-08'])
+    (tmp_path/'Desktop').mkdir()
+    (tmp_path/'.env.local').write_text('CC_TOKEN_BROKER_URL=https://disabled.example/broker\nCC_TOKEN_BROKER_SECRET=' + 'b'*32)
+    for key in ('CC_TOKEN_BROKER_URL','CC_TOKEN_BROKER_SECRET'):
+        monkeypatch.delenv(key, raising=False)
+    original = httpx.Client
+    monkeypatch.setattr(httpx, 'Client', lambda **kwargs: original(transport=httpx.MockTransport(
+        lambda request: httpx.Response(404, json={'error': 'secret-never-in-report'})), **kwargs))
+    assert probe.main() == 1
+    report = json.loads(next((tmp_path/'Desktop').glob('CC-sip-opening-*.json')).read_text())
+    assert report['failed_stage'] == 'server_health'
+    assert report['http_status'] == 404
+    assert 'secret-never-in-report' not in json.dumps(report)
+
+
+def test_full_probe_completes_with_shared_auth_and_unavailable_broker(tmp_path, monkeypatch):
+    from cc_sdk import schwab_feed
+    class AfterClose(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 8, 17, 0, tzinfo=probe.ET)
+    monkeypatch.setattr(probe, 'datetime', AfterClose)
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.setattr(sys, 'argv', ['probe', '--repo', str(tmp_path), '--date', '2026-10-08'])
+    monkeypatch.setattr(schwab_feed, 'REPO_ROOT', tmp_path)
+    for key, value in {
+        'SCHWAB_CLIENT_ID': 'fixture-id', 'SCHWAB_CLIENT_SECRET': 'fixture-client-secret',
+        'SUPABASE_URL': 'https://example.supabase.co', 'SUPABASE_SERVICE_ROLE_KEY': 'fixture-service-key',
+        'CC_TOKEN_BROKER_URL': 'https://disabled.example/broker', 'CC_TOKEN_BROKER_SECRET': 'b'*32,
+        'UPSTASH_REDIS_REST_URL': 'https://example.upstash.io', 'UPSTASH_REDIS_REST_TOKEN': 'fixture-redis-secret',
+    }.items():
+        monkeypatch.setenv(key, value)
+    (tmp_path/'Desktop').mkdir()
+    ledger = tmp_path/'cc.db'
+    with sqlite3.connect(ledger) as connection:
+        connection.execute('CREATE TABLE positions(bot_id TEXT,qty REAL)')
+    before = ledger.read_bytes()
+    start = probe.opening_start('2026-10-08')
+    def handler(request):
+        if request.url.host == '127.0.0.1':
+            return httpx.Response(200, json={'db': str(ledger)})
+        if request.url.host == 'disabled.example':
+            return httpx.Response(404)
+        if request.url.host == 'example.supabase.co':
+            return httpx.Response(200, json=[{'schwab_token_state': {'refresh_token': 'fixture-refresh'}}])
+        if request.url.host == 'example.upstash.io':
+            if '/get/' in request.url.path:
+                return httpx.Response(200, json={'result': json.dumps({
+                    'session_date': '2026-10-08', 'complete': True, 'rows': [{'symbol': 'NVDA'}]})})
+            return httpx.Response(200, json={'result': [None]})
+        if request.url.path == '/v1/oauth/token':
+            return httpx.Response(200, json={'access_token': 'a'*40, 'expires_in': 1800})
+        return httpx.Response(200, json=bars(start, range(5)))
+    original = httpx.Client
+    def client(**kwargs):
+        if kwargs.get('transport') is None:
+            kwargs['transport'] = httpx.MockTransport(handler)
+        return original(**kwargs)
+    monkeypatch.setattr(httpx, 'Client', client)
+    assert probe.main() == 0
+    report = json.loads(next((tmp_path/'Desktop').glob('CC-sip-opening-*.json')).read_text())
+    assert report['scan_complete'] and report['authentication'] == 'shared_state'
+    assert report['results'][0]['finding'] == 'COMPLETE_NOW'
+    assert ledger.read_bytes() == before
+    assert 'fixture-client-secret' not in json.dumps(report)

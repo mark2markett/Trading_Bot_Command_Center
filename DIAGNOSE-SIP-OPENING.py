@@ -6,6 +6,7 @@ import json
 import math
 import os
 import sqlite3
+import sys
 import time
 from contextlib import closing
 from datetime import datetime, timedelta
@@ -77,6 +78,20 @@ def positions_clear(path):
         return connection.execute("SELECT 1 FROM positions WHERE bot_id IN ('gap_go','gap_go_spread','nr7','sip_orb') AND qty<>0 LIMIT 1").fetchone() is None
 
 
+def connect_feed(root, *, transport=None):
+    """Use the installed bot SDK's existing shared-state/broker preference."""
+    sys.path.insert(0, str(root/'cc_sdk'))
+    from cc_sdk.schwab_feed import SchwabFeed
+    return SchwabFeed.connect(root/'bots/sip_orb', transport=transport)
+
+
+def read_market_bars(feed, symbol, begin, end):
+    response = feed.c.get_price_history_every_minute(symbol, start_datetime=begin, end_datetime=end,
+                                                    need_extended_hours_data=False)
+    response.raise_for_status()
+    return response.json()
+
+
 def targets(values, client, day, fallback):
     """Prefer eligible symbols with missing publication cache, using only Redis GET/MGET."""
     url, token = values.get('UPSTASH_REDIS_REST_URL', ''), values.get('UPSTASH_REDIS_REST_TOKEN', '')
@@ -120,26 +135,26 @@ def main():
         parser.error('Run after 16:10 ET; this diagnostic does not add provider load during the trading session.')
     root = args.repo.resolve()
     values = configuration(root)
-    url, secret = values.get('CC_TOKEN_BROKER_URL', ''), values.get('CC_TOKEN_BROKER_SECRET', '')
     output = {'collected_at': datetime.now(ET).isoformat(), 'session_date': args.date, 'results': [],
               'note': 'Later data cannot prove what the provider returned at 09:35. No watchlist is published or bot restarted.'}
+    stage = 'configuration'
     code = 0
     try:
-        if not private_url(url) or len(secret) < 32:
-            raise ValueError('Existing token broker configuration required')
         fallback = json.loads(Path(__file__).with_name('SIP-DIAGNOSTIC-UNIVERSE.json').read_text())['symbols']
         with httpx.Client(timeout=12, follow_redirects=False) as client:
+            stage = 'server_health'
             health = client.get('http://127.0.0.1:8585/api/health')
             health.raise_for_status()
+            stage = 'position_safety'
             if not positions_clear(Path(health.json()['db'])):
                 output['blocked_reason'] = 'OPEN_INTRADAY_POSITION'
                 raise ValueError('Open position; defer market-data diagnosis')
-            response = client.get(url, headers={'Authorization': 'Bearer ' + secret, 'X-CC-Bot': 'sip_orb'})
-            response.raise_for_status()
-            body = response.json()
-            token = body.get('access_token') if isinstance(body, dict) else None
-            if not isinstance(token, str) or len(token) < 20:
-                raise ValueError('Broker response schema')
+            stage = 'feed_configuration'
+            feed = connect_feed(root)
+            output['authentication'] = {'_SharedStateSession': 'shared_state', '_BrokerSession': 'token_broker'}.get(type(feed.c).__name__, 'sdk')
+            stage = 'feed_authentication'
+            feed.c.access_token()  # Existing SDK OAuth handling; never export the returned token.
+            stage = 'preparation_cache'
             try:
                 symbols, evidence = targets(values, client, args.date, fallback)
             except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
@@ -154,14 +169,9 @@ def main():
                     raise TimeoutError('Diagnostic deadline')
                 time.sleep(max(0, 1.0 - (time.monotonic() - last_request)))
                 last_request = time.monotonic()
-                response = client.get('https://api.schwabapi.com/marketdata/v1/pricehistory',
-                    headers={'Authorization': 'Bearer ' + token}, params={
-                        'symbol': symbol, 'periodType': 'day', 'frequencyType': 'minute', 'frequency': '1',
-                        'startDate': str(int(begin.timestamp()*1000)), 'endDate': str(int(end.timestamp()*1000)),
-                        'needExtendedHoursData': 'false'})
-                response.raise_for_status()  # Stop on throttling; never loop past a 429.
-                return response.json()
+                return read_market_bars(feed, symbol, begin, end)  # Stop on throttling; never loop past a 429.
             for symbol in symbols:
+                stage = 'market_data'
                 result = inspect_symbol(symbol, start, read)
                 output['results'].append(result)
                 if result['finding'] != 'COMPLETE_NOW':
@@ -169,8 +179,8 @@ def main():
                 if len(output['results']) % 25 == 0:
                     print(f"Checked {len(output['results'])}/{len(symbols)} stocks", flush=True)
             output['scan_complete'] = True
-    except (httpx.HTTPError, sqlite3.Error, OSError, ValueError, KeyError, TypeError) as error:
-        output.update(scan_complete=False, error_type=type(error).__name__)
+    except (httpx.HTTPError, sqlite3.Error, OSError, ValueError, KeyError, TypeError, RuntimeError, ImportError) as error:
+        output.update(scan_complete=False, error_type=type(error).__name__, failed_stage=stage)
         if isinstance(error, httpx.HTTPStatusError):
             output['http_status'] = error.response.status_code
         code = 1

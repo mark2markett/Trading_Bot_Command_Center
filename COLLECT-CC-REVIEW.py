@@ -37,11 +37,13 @@ def backup(source, target):
                 raise RuntimeError("backup integrity check failed")
 
 
-def platform_enrich_probe(root):
+def platform_enrich_probe(root, *, cron_name="enrich"):
     """Bounded GET-only telemetry using existing shared credentials, kept in memory."""
     import httpx
     from dotenv import dotenv_values
 
+    if cron_name not in ("enrich", "cc-sip-scanner"):
+        raise ValueError("Unsupported telemetry job")
     values = dotenv_values(Path(root) / '.env.local')
     url = (os.getenv('SUPABASE_URL') or values.get('SUPABASE_URL') or '').strip()
     key = (os.getenv('SUPABASE_SERVICE_ROLE_KEY') or values.get('SUPABASE_SERVICE_ROLE_KEY') or '').strip()
@@ -70,9 +72,21 @@ def platform_enrich_probe(root):
                 output['probe_status'][table] = type(error).__name__
                 return []
 
-        rows = read('cron_runs', {'cron_name': 'eq.enrich', 'order': 'started_at.desc', 'limit': '8',
-                                 'select': 'status,started_at,finished_at,details'})
+        query = {'cron_name': 'eq.' + cron_name, 'order': 'started_at.desc', 'limit': '8',
+                 'select': 'status,started_at,finished_at,details'}
+        if cron_name == 'cc-sip-scanner':
+            today = datetime.now(ZoneInfo('America/New_York')).replace(hour=0, minute=0, second=0, microsecond=0)
+            query.update({'started_at': 'gte.' + today.isoformat(), 'limit': '40'})
+        rows = read('cron_runs', query)
         fields = ('trades', 'enriched', 'upsertErrors', 'chartNewsFetched', 'aiPlansGenerated', 'durationMs', 'skippedFresh')
+        if cron_name == 'cc-sip-scanner':
+            fields = ('universe', 'classificationExcluded', 'failures')
+        safe_codes = {'SIP_SCANNER_CONFIGURATION', 'SIP_SCANNER_FAILED', 'SIP_TELEMETRY_FAILED',
+                      'SIP_LOCK_LOST', 'SIP_LOCK_RELEASE_FAILED', 'SIP_STORAGE_FAILED', 'SIP_STORAGE_UNCONFIGURED',
+                      'SIP_SNAPSHOT_INVALID', 'PREPARATION_INCOMPLETE', 'PREPARATION_BUDGET', 'PREPARATION_FAILED',
+                      'PUBLICATION_BUDGET', 'PUBLICATION_TOO_LATE', 'OUTSIDE_PUBLISH_WINDOW', 'CALENDAR_UNSUPPORTED',
+                      'SCHWAB_AUTH_FAILED', 'SCHWAB_REQUEST_FAILED', 'SCHWAB_SCHEMA', 'SCHWAB_QUOTE_STALE',
+                      'OPENING_WINDOW_INCOMPLETE', 'OPENING_WINDOW_INVALID'}
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -82,6 +96,14 @@ def platform_enrich_probe(root):
             output['cron_runs'].append({'status': row.get('status') if row.get('status') in ('started', 'success', 'failure', 'degraded') else None,
                                        'started_at': timestamp(row.get('started_at')), 'finished_at': timestamp(row.get('finished_at')),
                                        'counts': counts, 'error_present': bool(details.get('error'))})
+            if cron_name == 'cc-sip-scanner':
+                output['cron_runs'][-1].update({
+                    'phase': details.get('phase') if details.get('phase') in ('prepare', 'publish') else None,
+                    'producer_status': details.get('status') if details.get('status') in ('busy', 'pending', 'prepared', 'publish_ready') else None,
+                    'error_code': details.get('error') if isinstance(details.get('error'), str) and details['error'] in safe_codes else None,
+                })
+        if cron_name == 'cc-sip-scanner':
+            return output
         rows = read('trade_enrichments', {'order': 'enriched_at.desc', 'limit': '1', 'select': 'enriched_at'})
         if rows and isinstance(rows[0], dict):
             output['latest_enriched_at'] = timestamp(rows[0].get('enriched_at'))
@@ -183,6 +205,7 @@ def main(root, review):
         result["probe_performed"] = False
     save(review / "scanner-status.json", result)
     save(review / "platform-enrich.json", platform_enrich_probe(root))
+    save(review / "platform-sip.json", platform_enrich_probe(root, cron_name='cc-sip-scanner'))
     monitor_report = root / 'var' / 'monitor' / 'latest.json'
     if monitor_report.is_file():
         save(review / 'native-monitor.json', json.loads(monitor_report.read_text(encoding='utf-8')))

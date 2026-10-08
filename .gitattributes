@@ -14,3 +14,8 @@
 /COLLECT-CC-REVIEW.py text eol=lf
 /COLLECT-CC-REVIEW.ps1 text eol=lf
 /test_platform_enrich_probe.py text eol=lf
+/DIAGNOSE-SIP-OPENING.py text eol=lf
+/SIP-DIAGNOSTIC-UNIVERSE.json text eol=lf
+/test_sip_opening_probe.py text eol=lf
+/RUN-SIP-DIAGNOSIS.ps1 text eol=lf
+/SIP-PROBE-SHA256.txt text eol=lf

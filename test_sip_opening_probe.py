@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 import httpx
+import pytest
 
 spec = importlib.util.spec_from_file_location('probe', Path(__file__).with_name('DIAGNOSE-SIP-OPENING.py'))
 probe = importlib.util.module_from_spec(spec)
@@ -140,7 +141,8 @@ def test_failed_http_stage_is_recorded_without_url_or_credentials(tmp_path, monk
     assert 'secret-never-in-report' not in json.dumps(report)
 
 
-def test_full_probe_completes_with_shared_auth_and_unavailable_broker(tmp_path, monkeypatch):
+@pytest.mark.parametrize('provider_status', [200, 404])
+def test_full_probe_uses_shared_auth_and_identifies_market_errors(tmp_path, monkeypatch, provider_status):
     from cc_sdk import schwab_feed
     class AfterClose(datetime):
         @classmethod
@@ -177,16 +179,20 @@ def test_full_probe_completes_with_shared_auth_and_unavailable_broker(tmp_path, 
             return httpx.Response(200, json={'result': [None]})
         if request.url.path == '/v1/oauth/token':
             return httpx.Response(200, json={'access_token': 'a'*40, 'expires_in': 1800})
-        return httpx.Response(200, json=bars(start, range(5)))
+        return httpx.Response(provider_status, json=bars(start, range(5)))
     original = httpx.Client
     def client(**kwargs):
         if kwargs.get('transport') is None:
             kwargs['transport'] = httpx.MockTransport(handler)
         return original(**kwargs)
     monkeypatch.setattr(httpx, 'Client', client)
-    assert probe.main() == 0
+    assert probe.main() == (0 if provider_status == 200 else 1)
     report = json.loads(next((tmp_path/'Desktop').glob('CC-sip-opening-*.json')).read_text())
-    assert report['scan_complete'] and report['authentication'] == 'shared_state'
-    assert report['results'][0]['finding'] == 'COMPLETE_NOW'
+    assert report['authentication'] == 'shared_state'
+    if provider_status == 200:
+        assert report['scan_complete'] and report['results'][0]['finding'] == 'COMPLETE_NOW'
+    else:
+        assert not report['scan_complete'] and report['failed_stage'] == 'market_data'
+        assert report['http_status'] == 404 and report['failed_symbol'] == 'NVDA'
     assert ledger.read_bytes() == before
     assert 'fixture-client-secret' not in json.dumps(report)

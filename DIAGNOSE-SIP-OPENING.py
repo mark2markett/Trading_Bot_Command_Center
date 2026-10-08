@@ -169,6 +169,7 @@ def main():
                     raise TimeoutError('Diagnostic deadline')
                 time.sleep(max(0, 1.0 - (time.monotonic() - last_request)))
                 last_request = time.monotonic()
+                output['last_request'] = {'symbol': symbol, 'window': 'exact' if begin == start else 'wider'}
                 return read_market_bars(feed, symbol, begin, end)  # Stop on throttling; never loop past a 429.
             for symbol in symbols:
                 stage = 'market_data'
@@ -183,6 +184,8 @@ def main():
         output.update(scan_complete=False, error_type=type(error).__name__, failed_stage=stage)
         if isinstance(error, httpx.HTTPStatusError):
             output['http_status'] = error.response.status_code
+        if stage == 'market_data' and 'last_request' in output:
+            output['failed_symbol'] = output['last_request']['symbol']
         code = 1
     desktop = Path.home()/'Desktop'
     path = (desktop if desktop.is_dir() else root/'var')/('CC-sip-opening-' + datetime.now(ET).strftime('%Y%m%d-%H%M%S') + '.json')

@@ -7,6 +7,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -35,6 +36,51 @@ def backup(source, target):
             src.backup(dst, pages=256, progress=progress)
             if dst.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                 raise RuntimeError("backup integrity check failed")
+
+
+def opening_context(details):
+    """Export only bounded, typed public-symbol/minute diagnostics."""
+    count, failures = details.get('opening_failure_count'), details.get('opening_failures')
+    if type(count) is not int or count < 0 or not isinstance(failures, list):
+        return {}
+    clean = []
+    for row in failures[:10]:
+        if not isinstance(row, dict):
+            continue
+        symbol, date = row.get('symbol'), row.get('session_date')
+        if not isinstance(symbol, str) or not re.fullmatch(r'[A-Z][A-Z0-9.]{0,9}', symbol):
+            continue
+        if not isinstance(date, str) or not re.fullmatch(r'202[5-7]-\d{2}-\d{2}', date):
+            continue
+        if row.get('reason') not in ('OPENING_WINDOW_INCOMPLETE', 'OPENING_WINDOW_INVALID'):
+            continue
+        try:
+            from datetime import timedelta, timezone
+            start = datetime.fromisoformat(date).replace(hour=9, minute=30, tzinfo=ZoneInfo('America/New_York')).astimezone(timezone.utc)
+            end = start + timedelta(minutes=5)
+            def minute(value):
+                if not isinstance(value, str) or len(value) > 40:
+                    return None
+                try:
+                    at = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    return at.astimezone(timezone.utc).isoformat() if at.tzinfo and start <= at < end else None
+                except (ValueError, TypeError, OverflowError):
+                    return None
+            returned = row.get('returned_minutes')
+            missing = row.get('missing_minutes')
+            amount = row.get('returned_window_count')
+            if (type(amount) is not int or amount < 0 or not isinstance(returned, list)
+                    or not isinstance(missing, list) or type(row.get('returned_minutes_truncated')) is not bool):
+                continue
+            clean.append({'symbol': symbol, 'session_date': date, 'reason': row['reason'],
+                          'window_start': start.isoformat(), 'window_end': end.isoformat(),
+                          'returned_window_count': amount,
+                          'returned_minutes': [at for value in returned[:10] if (at := minute(value))],
+                          'returned_minutes_truncated': row['returned_minutes_truncated'],
+                          'missing_minutes': [at for value in missing[:5] if (at := minute(value))]})
+        except (ValueError, TypeError, OverflowError):
+            continue
+    return {'opening_failure_count': count, 'opening_failures': clean}
 
 
 def platform_enrich_probe(root, *, cron_name="enrich"):
@@ -67,7 +113,10 @@ def platform_enrich_probe(root, *, cron_name="enrich"):
                                       params=query, headers={'apikey': key, 'Authorization': 'Bearer ' + key})
                 output['probe_status'][table] = response.status_code
                 data = response.json() if response.status_code == 200 else []
-                return data if isinstance(data, list) else []
+                if not isinstance(data, list):
+                    output['probe_status'][table] = 'INVALID_RESPONSE'
+                    return []
+                return data
             except (httpx.RequestError, ValueError) as error:
                 output['probe_status'][table] = type(error).__name__
                 return []
@@ -86,7 +135,9 @@ def platform_enrich_probe(root, *, cron_name="enrich"):
                       'SIP_SNAPSHOT_INVALID', 'PREPARATION_INCOMPLETE', 'PREPARATION_BUDGET', 'PREPARATION_FAILED',
                       'PUBLICATION_BUDGET', 'PUBLICATION_TOO_LATE', 'OUTSIDE_PUBLISH_WINDOW', 'CALENDAR_UNSUPPORTED',
                       'SCHWAB_AUTH_FAILED', 'SCHWAB_REQUEST_FAILED', 'SCHWAB_SCHEMA', 'SCHWAB_QUOTE_STALE',
-                      'OPENING_WINDOW_INCOMPLETE', 'OPENING_WINDOW_INVALID'}
+                      'OPENING_WINDOW_INCOMPLETE', 'OPENING_WINDOW_INVALID',
+                      'SIP_TESTING_BYPASS_INVALID_PREPARATION', 'SIP_TESTING_BYPASS_INVALID_SYMBOL',
+                      'SIP_TESTING_BYPASS_NOT_ACTIVE', 'SIP_TESTING_BYPASS_EXPIRED'}
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -100,8 +151,10 @@ def platform_enrich_probe(root, *, cron_name="enrich"):
                 output['cron_runs'][-1].update({
                     'phase': details.get('phase') if details.get('phase') in ('prepare', 'publish') else None,
                     'producer_status': details.get('status') if details.get('status') in ('busy', 'pending', 'prepared', 'publish_ready') else None,
-                    'error_code': details.get('error') if isinstance(details.get('error'), str) and details['error'] in safe_codes else None,
+                    'error_code': details.get('error') if isinstance(details.get('error'), str) and
+                    (details['error'] in safe_codes or re.fullmatch(r'SCHWAB_HTTP_[1-5]\d{2}', details['error'])) else None,
                 })
+                output['cron_runs'][-1].update(opening_context(details))
         if cron_name == 'cc-sip-scanner':
             return output
         rows = read('trade_enrichments', {'order': 'enriched_at.desc', 'limit': '1', 'select': 'enriched_at'})

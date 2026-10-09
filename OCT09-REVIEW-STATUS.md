@@ -1,5 +1,7 @@
 # October 9 Command Center repairs
 
+Status update, October 9 after close: PR #1287 is now merged and production release 2d0598bd5578b89fd81e3221a9d0594725b7f464 was verified healthy. The text below retains the earlier pre-merge review and its evidence; its references to pending owner merge are historical. Current findings and the separate after-hours health repair are in OCT09-AFTER-CLOSE-REVIEW.md.
+
 The 10:03 ET native archive captured two current failures. SIP preparation completed, but publication repeatedly returned OPENING_WINDOW_INCOMPLETE through the 09:40 deadline; no universe was acquired. Public platform health returned 503 solely for enrich_recent despite the fresh zero-work job and current empty eligibility sets. These are separate from historical recovered alerts. Four other bots, server/riskd, shared paper valuation and controls were healthy at capture. Native state after capture is not continuously accessible from this cloud chat.
 
 Combined PR: https://github.com/mark2markett/m2m-platform/pull/1287 . It supersedes standalone health PR 1286, which is closed without merging. Current combined head is bc70dcd5bf3bfd299493a64a0187088d34e0b08a and includes platform main f8162fd0.

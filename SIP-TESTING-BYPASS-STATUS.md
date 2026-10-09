@@ -13,7 +13,13 @@ Fresh local verification: 130 SIP tests passed and source typecheck passed on 88
 
 Current-head acceptance and Vercel preview passed. Independent Codex review returned APPROVE_WITH_CONCERNS, no blockers:
 https://github.com/mark2markett/m2m-platform/pull/1280#issuecomment-6079737534
-All required current-head checks passed; PR merge state is CLEAN and mergeability is MERGEABLE. Quality passed the complete unit suite, production build and validation gates. Verified successful pull_request_target workflows on this head: quality 37922092840, delivery-acceptance 37922092732, Codex review 37922093016. Production activation is pending owner merge and verification of the resulting production deployment.
+All required release-head checks passed. Quality passed the complete unit suite, production build and validation gates. Verified successful pull_request_target workflows: quality 37922092840, delivery-acceptance 37922092732, Codex review 37922093016.
+
+Owner merge completed October 9 at 07:33:38 Eastern. PR 1280 is MERGED; actual main merge commit is 7f9f082f67ff83854dc2dc33b2541476cc19c0cb. Native owner canonical readiness verified the reviewed head, trusted required workflows and strict branch protection enforced for administrators before the normal squash merge.
+
+Production verification: Vercel commit status for the actual merge SHA is success (deployment https://vercel.com/mark2marketts-projects/m2m-platform/A61mATBrL6JPsEQeLnbxUMT1G5xH). A fresh HTTPS request to https://www.mark2markets.com/api/healthcheck returned HTTP 200, ok=true, release.state=known and release.sha exactly 7f9f082f67ff83854dc2dc33b2541476cc19c0cb; every reported check passed. GitHub deployments API is unavailable to the cloud integration, so verification uses Vercel's commit status and the actual production-host release response. No new secret, native installation or manual deployment was performed.
+
+Native readiness for October 9 and live 09:35–09:39 Eastern publication remain to be observed. The October 8 one-time readiness task does not establish an October 9 schedule; current native task output is requested. Deployment success is not a completed clean paper testing day.
 
 Review disposition for owner acknowledgement:
 - C-1: Duplicate cached testing exclusions are refused by strict snapshot validation and never saved or silently deduplicated. Detection happens after provider reads, which wastes reads in a corrupted-cache case; the existing regression proves refusal and preservation of original evidence. Earlier rejection remains an optimization, not a publication bypass.

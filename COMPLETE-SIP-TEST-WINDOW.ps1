@@ -1,9 +1,9 @@
 # Owner release step for reviewed PR 1280. Invoke only after Mark reviews:
-# https://github.com/mark2markett/m2m-platform/pull/1280#issuecomment-6071492853
+# https://github.com/mark2markett/m2m-platform/pull/1280#issuecomment-6079737534
 # No Windows bot source, tasks, controls, capital or positions are changed.
 $ErrorActionPreference = 'Stop'
 $repo = 'mark2markett/m2m-platform'
-$expected = 'e24a29fbf42ac60b8ef4917384ebbd5cf9d9c8f1'
+$expected = '88967dc555ba4c5cd938dde04638c12983b6b75d'
 $release = Join-Path $env:TEMP ('cc-sip-owner-release-' + [guid]::NewGuid().ToString('N'))
 
 git clone --depth 1 --single-branch --branch fix/sip-testing-four-exclusions "https://github.com/$repo.git" $release
@@ -24,6 +24,13 @@ try {
     $owner = & gh api user --jq '.login'
     if ($LASTEXITCODE -ne 0 -or $owner.Trim() -ne 'mark2markett') {
         throw 'Repository rules require Mark to perform this owner merge.'
+    }
+    $pullJson = & gh pr view 1280 --repo $repo --json headRefOid,mergeable,mergeStateStatus
+    if ($LASTEXITCODE -ne 0) { throw 'Could not verify current PR mergeability. No merge was attempted.' }
+    $pull = $pullJson | ConvertFrom-Json
+    if ($pull.headRefOid -ne $expected) { throw 'PR head changed. Current-head review is required.' }
+    if ($pull.mergeable -ne 'MERGEABLE') {
+        throw "PR is not currently mergeable ($($pull.mergeable)); resolve conflicts or retry after GitHub finishes computing it. No merge was attempted."
     }
     & node scripts/delivery-gate.mjs readiness 1280
     if ($LASTEXITCODE -ne 0) { throw 'Canonical readiness failed. No merge was attempted.' }

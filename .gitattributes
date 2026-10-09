@@ -19,3 +19,6 @@
 /test_sip_opening_probe.py text eol=lf
 /RUN-SIP-DIAGNOSIS.ps1 text eol=lf
 /SIP-PROBE-SHA256.txt text eol=lf
+/COMPLETE-SIP-TEST-WINDOW.ps1 text eol=lf
+/SIP-TESTING-BYPASS-STATUS.md text eol=lf
+/SIP-TEST-WINDOW-SHA256.txt text eol=lf

@@ -35,6 +35,7 @@ try {
         }
         & node scripts/delivery-gate.mjs readiness 1296
         if ($LASTEXITCODE -ne 0) { throw 'Canonical readiness failed. No merge was attempted.' }
+        Write-Host 'Review: https://github.com/mark2markett/m2m-platform/pull/1296. The current-head review has no blockers; owner merge acknowledges its two concerns: decision-ledger placement and conservative failure if a cache key appears between MGET and EXISTS. See SIP-OCT13-REPAIR.md.'
         & gh pr merge 1296 --repo $repo --squash --match-head-commit $expected
         if ($LASTEXITCODE -ne 0) { throw 'Owner merge failed; required checks were not bypassed.' }
     }

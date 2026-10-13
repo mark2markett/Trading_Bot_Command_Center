@@ -9,3 +9,7 @@ After current-head checks/review pass, Mark runs COMPLETE-SIP-HEALTH-VERIFICATIO
 SIP recorded paper-test exclusions expire after October 16 ET, with strict completeness on October 19. Tomorrow's authenticated opening-window publication and native SIP selection still need live verification; synthetic tests and after-hours health do not certify them. The previous SIP helper pins the older merge SHA and should not be used to verify a later health-repair deployment.
 
 PR1297 also consolidates the conflicting PR1288 pipeline cutoff repair: freshness monitoring ends exactly22:00UTC.94 focused health/producer/calendar tests pass. Final-head required checks and trusted review remain prerequisites; no owner merge is performed by this author. Native snapshot consumption is unchanged, but APPLY-CONTEXT-HEALTH-FIX.ps1 separately installs honest daily-context failure reporting and bounded recovery.
+
+## Current-head review acknowledgement
+
+Trusted review approved head 973d387ac with concerns and no blockers. Its UTC-helper concern is resolved by inspection: helpers remain in use for other health checks. The legacy theOpen test path imports canonical lib/marketSession directly; this is the same module used by producer and health. Minor documentation spacing is deferred. Read the review on PR1297 before owner merge; required checks are still enforced.

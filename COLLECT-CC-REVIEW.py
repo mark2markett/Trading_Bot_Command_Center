@@ -129,7 +129,9 @@ def platform_enrich_probe(root, *, cron_name="enrich"):
         rows = read('cron_runs', query)
         fields = ('trades', 'enriched', 'upsertErrors', 'chartNewsFetched', 'aiPlansGenerated', 'durationMs', 'skippedFresh')
         if cron_name == 'cc-sip-scanner':
-            fields = ('universe', 'classificationExcluded', 'failures')
+            fields = ('universe', 'classificationExcluded', 'failures',
+                      'opening_cached_count', 'opening_provider_read_count',
+                      'opening_cache_read_ms', 'publication_elapsed_ms')
         safe_codes = {'SIP_SCANNER_CONFIGURATION', 'SIP_SCANNER_FAILED', 'SIP_TELEMETRY_FAILED',
                       'SIP_LOCK_LOST', 'SIP_LOCK_RELEASE_FAILED', 'SIP_STORAGE_FAILED', 'SIP_STORAGE_UNCONFIGURED',
                       'SIP_SNAPSHOT_INVALID', 'PREPARATION_INCOMPLETE', 'PREPARATION_BUDGET', 'PREPARATION_FAILED',

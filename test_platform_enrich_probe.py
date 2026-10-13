@@ -99,11 +99,15 @@ def test_sip_probe_exports_bounded_opening_context_without_arbitrary_details(tmp
                'returned_minutes_truncated': False, 'missing_minutes': ['2026-10-09T13:34:00.000Z'],
                'provider_body': 'private-secret'}
     details = {'phase': 'publish', 'status': 'publish_ready', 'opening_failure_count': 12,
-               'opening_failures': [opening] * 12, 'secret': 'private-secret'}
+               'opening_failures': [opening] * 12, 'secret': 'private-secret',
+               'opening_cached_count': 198, 'opening_provider_read_count': 2,
+               'opening_cache_read_ms': 1350, 'publication_elapsed_ms': 3000}
     monkeypatch.setattr(httpx, 'Client', lambda **kwargs: original(transport=httpx.MockTransport(
         lambda request: httpx.Response(200, json=[{'status': 'success', 'details': details}])), **kwargs))
     row = collector.platform_enrich_probe(tmp_path, cron_name='cc-sip-scanner')['cron_runs'][0]
     assert row['opening_failure_count'] == 12
+    assert row['counts'] == {'opening_cached_count': 198, 'opening_provider_read_count': 2,
+                             'opening_cache_read_ms': 1350, 'publication_elapsed_ms': 3000}
     assert len(row['opening_failures']) == 10
     assert row['opening_failures'][0]['symbol'] == 'AAPL'
     assert row['opening_failures'][0]['missing_minutes'] == ['2026-10-09T13:34:00+00:00']

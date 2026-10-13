@@ -1,5 +1,9 @@
 # Current Command Center delivery
 
+## October 13 SIP publication repair
+
+PR #1296 replaces per-stock opening-cache HTTP reads with bounded MGET/EXISTS and records private timing. Owner-approved recorded paper-test exclusions extend through October16; strict completeness resumes October19. Run COMPLETE-SIP-PUBLICATION-REPAIR.ps1 only after current-head review/checks pass. It performs owner merge and deployment verification without native bot changes. See SIP-OCT13-REPAIR.md. A production opening-window pass remains unobserved.
+
 ## October 7 server import repair
 
 The 10:05-10:07 Eastern native snapshot shows an open NR7 paper SPY position and unavailable paper valuation: the server cannot import the quote feed from its scheduled repository-root launch. Commit 54390e0 fixes that server startup path and adds a regression that failed before the repair and passed afterward. All 236 Python tests pass. APPLY-SERVER-IMPORT-FIX.ps1 installs only the two-file server repair and restarts only CC server while bot sessions continue. Actual Windows/provider recovery still requires the native helper output. SIP ORB remains unconfigured. See SERVER-IMPORT-FIX.md; the earlier runtime-readiness statement below predates today's first open-position failure.

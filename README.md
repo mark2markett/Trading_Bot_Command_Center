@@ -1,5 +1,9 @@
 # Current Command Center delivery
 
+## October 13 after-hours release health
+
+SIP PR1296 is merged/deployed. PR1297 repairs the separate closed-session analysis freshness alarm that kept aggregate verification red. COMPLETE-SIP-HEALTH-VERIFICATION.ps1 performs the guarded owner release and checks production health; see SIP-HEALTH-VERIFICATION.md. Native morning consumption remains a separate live check.
+
 ## October 13 SIP publication repair
 
 PR #1296 replaces per-stock opening-cache HTTP reads with bounded MGET/EXISTS and records private timing. Owner-approved recorded paper-test exclusions extend through October16; strict completeness resumes October19. Run COMPLETE-SIP-PUBLICATION-REPAIR.ps1 only after current-head review/checks pass. It performs owner merge and deployment verification without native bot changes. See SIP-OCT13-REPAIR.md. A production opening-window pass remains unobserved.

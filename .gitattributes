@@ -29,3 +29,6 @@
 /COMPLETE-SIP-PUBLICATION-REPAIR.ps1 text eol=lf
 /SIP-OCT13-REPAIR.md text eol=lf
 /SIP-OCT13-SHA256.txt text eol=lf
+/COMPLETE-SIP-HEALTH-VERIFICATION.ps1 text eol=lf
+/SIP-HEALTH-VERIFICATION.md text eol=lf
+/SIP-HEALTH-SHA256.txt text eol=lf

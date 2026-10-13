@@ -3,7 +3,7 @@
 # No Windows bot source, tasks, controls, capital or positions are changed.
 $ErrorActionPreference = 'Stop'
 $repo = 'mark2markett/m2m-platform'
-$expected = 'f2808d6df4fbea68f73c1386d6e4278ee6cb329b'
+$expected = '973d387ac28aa2a8e93257edc2d05d409809ae8b'
 $previousGhToken = [Environment]::GetEnvironmentVariable('GH_TOKEN', 'Process')
 $locationChanged = $false
 try {
@@ -67,7 +67,7 @@ try {
         if ((Get-Date) -lt $deadline) { Start-Sleep -Seconds 5 }
     } while ((Get-Date) -lt $deadline)
     if (-not $verified) { throw 'Merge completed, but production release/health is still unverified. Rerun this helper to verify deployment only; it will not repeat the merge.' }
-    Write-Host 'After-hours health repair release and reported health verified; the merged SIP publication repair is included. Paper-testing exclusions end after October 16; strict completeness resumes October 19. Native v1 needs no code patch. Verify authenticated current-session publication and native SIP selection at 09:35-09:39 ET; several clean paper sessions remain to be observed.'
+    Write-Host 'After-hours health repair release and reported health verified; the merged SIP publication repair is included. Paper-testing exclusions end after October 16; strict completeness resumes October 19. Native snapshot protocol is unchanged; install the separate daily-context health repair after bot commands finish. Verify authenticated current-session publication and native SIP selection at 09:35-09:39 ET; several clean paper sessions remain to be observed.'
 }
 finally {
     [Environment]::SetEnvironmentVariable('GH_TOKEN', $previousGhToken, 'Process')

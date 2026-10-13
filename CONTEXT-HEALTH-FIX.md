@@ -1,0 +1,9 @@
+# Native daily-context health repair
+
+Review source commit8331fe68782fa55935bb18692fd6737bfa9781c3 (three allowlisted files, parentff9a16f937d960fbc41cc21ea0ee6dfadd19b104). The installer preserves feat/options-m7 and applies only this commit, not preceding bundle history. Install after16:15ET or before09:20ET, with five paper bots, no running bot commands, open positions or unresolved orders, and clean Git state. Unknown source is refused. It stages and tests the reviewed source before applying, backs up the ledger read-only and verifies installed source identity. It never restarts bots or changes schedules/controls/capital/history.
+
+The repair keeps selected stocks visible when prior-session daily history fails, records sanitized data_errors and retries missing contexts at most once per poll, after exits. Context-less symbols cannot enter. Healthy context is reused. Valid empty scanner selection remains distinct from data failure. Unresolved errors at session completion remain failed rather than being overwritten by Bot.run's normal success heartbeat.
+
+Validation:11 new behavioral tests observed10failures/1passing empty-universe control before implementation.66 focused tests,250 full native Python tests and11 existing dashboard tests passed.7 installer preflight tests cover read-only operation, CRLF, unknown source, open positions/orders, missing ledger, paper-only fleet and session-window refusal. Windows PowerShell installer execution remains owner-side verification.
+
+This improves truthful health reporting and recovery; it does not manufacture missing bars or certify current provider availability. SIP latency repair105ad8a9 is deployed; authenticated publication and native consumption at the next opening are still required. Recorded SIP exclusions expire afterOctober16; strict completeness resumesOctober19.

@@ -1,0 +1,263 @@
+diff --git a/README.md b/README.md
+index 0d0a6a5..87ce522 100644
+--- a/README.md
++++ b/README.md
+@@ -239,3 +239,13 @@ Do not expose this to the public internet; there is no login.
+ ## Layout
+ 
+ See `docs/02_ARCHITECTURE.md`. Specs in `docs/`. Decisions taken during the build in `docs/DECISIONS.md`.
++
++### Daily context health (October 13 repair)
++
++Intraday sessions retain selected stocks whose prior-session daily data fails,
++report sanitized `daily_bars` errors in heartbeats, and retry those stocks at most
++once per poll. Healthy contexts are reused. Exits run before retries; entries
++require a valid daily context. A valid empty scanner selection is still healthy.
++If errors remain when a session finishes, its final heartbeat remains failed.
++Install the source repair after bot commands finish; do not restart an active
++session or reset paper account history to clear a heartbeat.
+diff --git a/cc_sdk/cc_sdk/intraday.py b/cc_sdk/cc_sdk/intraday.py
+index 3d0f440..5cbb869 100644
+--- a/cc_sdk/cc_sdk/intraday.py
++++ b/cc_sdk/cc_sdk/intraday.py
+@@ -139,6 +139,8 @@ class SessionRunner:
+         self.log: list[str] = []
+         self._diagnostic_at: dict[str, float] = {}
+         self._poll_errors: dict[str, str] = {}
++        self._context_errors: dict[str, str] = {}
++        self._context_attempt_at: dict[str, float] = {}
+ 
+     @staticmethod
+     def _error_summary(error: Exception) -> str:
+@@ -166,16 +168,26 @@ class SessionRunner:
+                             "rules produced no signal" if bars else "no completed minute bars")
+ 
+     # ---- session lifecycle ----
+-    def prepare(self, day: datetime) -> None:
++    def _prepare_contexts(self, day: datetime) -> None:
+         for s in self.symbols:
+             if s in self.ctx:
+                 continue
++            last = self._context_attempt_at.get(s)
++            if last is not None and day.timestamp() - last < max(1, self.poll_s):
++                continue
++            self._context_attempt_at[s] = day.timestamp()
+             try:
+                 daily = [b for b in self.feed.daily_bars(s, 40) if b.t.date() < day.date()]
+                 self.ctx[s] = day_context(daily)
++                previous = self._context_errors.pop(s, None)
++                if previous is not None and self._poll_errors.get(s) == previous:
++                    self._poll_errors.pop(s)
+             except Exception as e:  # noqa: BLE001 — one bad symbol must not stop the session
+-                self.bot.L.decision(self.bot.m.id, "session", {"symbol": s}, "SKIP", f"no daily context: {e}")
+-        self.symbols = [s for s in self.symbols if s in self.ctx]
++                self._data_error(s, "daily_bars", e)
++                self._context_errors[s] = self._poll_errors[s]
++
++    def prepare(self, day: datetime) -> None:
++        self._prepare_contexts(day)
+         for p in (self.bot.positions() if self.adopt_positions else []):   # left by a crashed session: adopt so EOD flatten happens
+             if p["qty"]:
+                 self.open[p["symbol"]] = OpenPos(p["symbol"], 1 if p["side"] != "SHORT" else -1, abs(int(p["qty"])), float(p["avg_price"]),
+@@ -185,7 +197,9 @@ class SessionRunner:
+     def step(self, now: datetime) -> None:
+         """One poll. Order of operations: controls → exits (stops, flatten, EOD) → entries."""
+         mod = now.hour * 60 + now.minute
+-        self._poll_errors = {"scanner": "scanner unavailable at deadline"} if self._universe_failure else {}
++        self._poll_errors = dict(self._context_errors)
++        if self._universe_failure:
++            self._poll_errors["scanner"] = "scanner unavailable at deadline"
+         killed = self.bot.control.killed()
+         flatten = killed or self.bot.control.flatten_requested() or mod >= FLATTEN_MIN
+         for s in list(self.open):
+@@ -224,8 +238,11 @@ class SessionRunner:
+             self.bot.L.decision(self.bot.m.id, "session", {"universe": self.symbols}, "UNIVERSE", f"{len(self.symbols)} symbols selected")
+         if not self.universe_done:
+             return
++        # Exits above always run before missing daily context is retried. This
++        # loader does not re-adopt positions or reload healthy contexts.
++        self._prepare_contexts(now)
+         for s in self.symbols:
+-            if s in self.open or s in self.traded_today:
++            if s not in self.ctx or s in self.open or s in self.traded_today:
+                 continue
+             try:
+                 bars = [b for b in self.feed.minute_bars(s, now) if b.mod < mod]   # completed bars only
+@@ -267,6 +284,10 @@ class SessionRunner:
+                 last_hb = time.time()
+             time.sleep(self.poll_s)
+         self.bot.record_equity(self.equity + self.realized, source="bot")
++        if self._poll_errors:
++            # Bot.run writes a successful final heartbeat on a normal return.
++            # Preserve an unresolved input failure when the session has ended.
++            raise RuntimeError("session ended with unresolved data errors: " + json.dumps(self._poll_errors))
+ 
+     # ---- orders (paper) ----
+     def _enter(self, s: str, sig: Signal, now: datetime) -> None:
+diff --git a/cc_sdk/tests/test_daily_context_health.py b/cc_sdk/tests/test_daily_context_health.py
+new file mode 100644
+index 0000000..85cc0fe
+--- /dev/null
++++ b/cc_sdk/tests/test_daily_context_health.py
+@@ -0,0 +1,161 @@
++"""Exercise genuine runner data failures, entry suppression and heartbeat recovery."""
++import json
++from datetime import timedelta
++
++import pytest
++
++from cc_sdk.intraday import SessionRunner
++from test_session_recovery import DAY, Feed, Rules, daily_history, http_error, make_bot
++
++
++class DailyFeed(Feed):
++    def __init__(self, failed):
++        super().__init__()
++        self.failed = set(failed)
++        self.calls = []
++
++    def daily_bars(self, symbol, n):
++        self.calls.append(symbol)
++        if symbol in self.failed:
++            raise http_error(500)
++        return daily_history(DAY)
++
++
++def test_failed_daily_symbols_remain_selected_and_cannot_enter(tmp_path):
++    bot = make_bot(tmp_path)
++    feed = DailyFeed(['SPY', 'QQQ'])
++    runner = SessionRunner(bot, feed, Rules(), ['SPY', 'QQQ'])
++    runner.prepare(DAY)
++    runner.step(DAY.replace(hour=10))
++    assert runner.symbols == ['SPY', 'QQQ']
++    assert set(runner._poll_errors) == {'SPY', 'QQQ'}
++    assert not bot.L.q('SELECT id FROM orders')
++    rows = bot.L.q("SELECT reason FROM decisions WHERE action='NO_DATA'")
++    assert rows and all('HTTP 500' in r['reason'] and 'must-not-log' not in r['reason'] for r in rows)
++
++
++def test_partial_context_outage_recovers_without_reloading_healthy_symbols(tmp_path):
++    bot = make_bot(tmp_path)
++    feed = DailyFeed(['SPY'])
++    runner = SessionRunner(bot, feed, Rules(), ['SPY', 'QQQ'], risk_pct=0.005)
++    now = DAY.replace(hour=10)
++    runner.prepare(now)
++    runner.step(now)
++    assert set(runner.open) == {'QQQ'}
++    assert 'SPY' in runner._poll_errors
++    feed.failed.clear()
++    runner.step(now + timedelta(seconds=15))
++    assert set(runner.open) == {'SPY', 'QQQ'}
++    assert not runner._poll_errors
++    assert feed.calls.count('QQQ') == 1
++    assert feed.calls.count('SPY') == 2
++
++
++def test_failed_context_retry_is_bounded_by_poll_interval(tmp_path):
++    feed = DailyFeed(['SPY'])
++    runner = SessionRunner(make_bot(tmp_path), feed, Rules(), ['SPY'], poll_s=15)
++    now = DAY.replace(hour=10)
++    runner.prepare(now)
++    for second in (0, 1, 14, 15, 16):
++        runner.step(now + timedelta(seconds=second))
++    assert feed.calls == ['SPY', 'SPY']
++    assert 'SPY' in runner._poll_errors
++
++
++@pytest.mark.parametrize('operation', ['kill', 'flatten', 'eod'])
++def test_missing_context_never_blocks_adopted_position_exit(tmp_path, operation):
++    bot = make_bot(tmp_path)
++    bot.set_position('SPY', 3, avg_price=100, stop_price=90)
++    feed = DailyFeed(['SPY'])
++    runner = SessionRunner(bot, feed, Rules(), ['SPY'])
++    runner.prepare(DAY)
++    if operation == 'kill':
++        (bot.control.dir / 'KILL').write_text('{}')
++    elif operation == 'flatten':
++        (bot.control.dir / f'{bot.m.id}.flatten').write_text('{}')
++    runner.step(DAY.replace(hour=15 if operation == 'eod' else 10, minute=58 if operation == 'eod' else 0))
++    assert not runner.open and not bot.positions()
++    assert bot.L.one('SELECT exit_reason FROM trades')['exit_reason'] == operation
++    assert 'SPY' in runner._poll_errors
++    assert feed.calls == ['SPY']  # risk reduction precedes any context retry
++
++
++def test_valid_empty_scanner_selection_is_healthy(tmp_path):
++    runner = SessionRunner(make_bot(tmp_path), DailyFeed([]), Rules(), [], universe_fn=lambda now: [])
++    runner.prepare(DAY)
++    runner.step(DAY.replace(hour=9, minute=35))
++    assert runner.universe_done and not runner.symbols and not runner._poll_errors
++
++
++def test_late_bound_universe_retains_failed_selected_stock(tmp_path):
++    runner = SessionRunner(make_bot(tmp_path), DailyFeed(['SPY']), Rules(), [], universe_fn=lambda now: ['SPY'])
++    runner.prepare(DAY)
++    runner.step(DAY.replace(hour=9, minute=35))
++    assert runner.universe_done and runner.symbols == ['SPY']
++    assert 'SPY' in runner._poll_errors and not runner.open
++
++
++def test_real_loop_heartbeat_reports_daily_failure_then_recovery(tmp_path, monkeypatch):
++    import cc_sdk.intraday as module
++    bot = make_bot(tmp_path)
++    feed = DailyFeed(['SPY'])
++    rules = Rules()
++    rules.decide = lambda bars, ctx: None
++    runner = SessionRunner(bot, feed, rules, ['SPY'])
++    now = DAY.replace(hour=10)
++    times = iter([now, now + timedelta(minutes=5), DAY.replace(hour=16)])
++    class Clock:
++        @staticmethod
++        def now(tz):
++            return next(times)
++    monkeypatch.setattr(module, 'datetime', Clock)
++    clock = iter([1000., 1000., 1301., 1301.])
++    monkeypatch.setattr(module.time, 'time', lambda: next(clock))
++    monkeypatch.setattr(module.time, 'sleep', lambda seconds: feed.failed.clear())
++    runner.loop(DAY)
++    rows = bot.L.q('SELECT ok,detail FROM heartbeats ORDER BY id')
++    assert [r['ok'] for r in rows] == [0, 1]
++    assert 'SPY' in json.loads(rows[0]['detail'])['data_errors']
++    assert json.loads(rows[1]['detail'])['symbols'] == ['SPY']
++
++
++def test_spread_daily_context_recovery_preserves_entry_and_eod(tmp_path):
++    from cc_sdk.options_runner import SpreadSessionRunner
++    from test_options_runner import Feed as ChainFeed, Rules as SpreadRules, mk
++    class FlakyFeed(ChainFeed):
++        failed = True
++        def daily_bars(self, symbol, n):
++            if self.failed:
++                raise http_error(500)
++            return super().daily_bars(symbol, n)
++    bot, _ = mk(tmp_path)
++    feed = FlakyFeed()
++    runner = SpreadSessionRunner(bot, feed, SpreadRules(), ['SPY'], adopt_positions=False)
++    now = DAY.replace(hour=10, minute=1)
++    runner.prepare(now)
++    runner.step(now)
++    assert 'SPY' in runner._poll_errors and not bot.positions()
++    feed.failed = False
++    runner.step(now + timedelta(seconds=15))
++    assert len(bot.positions()) == 2 and not runner._poll_errors
++    runner.step(DAY.replace(hour=15, minute=58))
++    assert not bot.positions() and not runner.open
++
++
++def test_session_completion_cannot_overwrite_unresolved_data_failure(tmp_path, monkeypatch):
++    import cc_sdk.intraday as module
++    bot = make_bot(tmp_path)
++    runner = SessionRunner(bot, DailyFeed(['SPY']), Rules(), ['SPY'])
++    times = iter([DAY.replace(hour=10), DAY.replace(hour=16)])
++    class Clock:
++        @staticmethod
++        def now(tz):
++            return next(times)
++    monkeypatch.setattr(module, 'datetime', Clock)
++    monkeypatch.setattr(module.time, 'sleep', lambda seconds: None)
++    with pytest.raises(RuntimeError, match='unresolved data errors'):
++        with bot.run('session'):
++            runner.loop(DAY)
++    row = bot.L.one('SELECT ok,detail FROM heartbeats ORDER BY id DESC LIMIT 1')
++    assert row['ok'] == 0 and 'daily_bars: HTTP 500' in row['detail']
++    assert 'must-not-log' not in row['detail']

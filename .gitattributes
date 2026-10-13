@@ -32,3 +32,11 @@
 /COMPLETE-SIP-HEALTH-VERIFICATION.ps1 text eol=lf
 /SIP-HEALTH-VERIFICATION.md text eol=lf
 /SIP-HEALTH-SHA256.txt text eol=lf
+/APPLY-CONTEXT-HEALTH-FIX.ps1 text eol=lf
+/NATIVE-CONTEXT-PREFLIGHT.py text eol=lf
+/test_native_context_preflight.py text eol=lf
+/CONTEXT-HEALTH-FIX.md text eol=lf
+/CONTEXT-HEALTH-SHA256.txt text eol=lf
+/command-center-context-health.bundle -text
+/command-center-context-health.patch text eol=lf
+/COMPLETE-CC-OCT13-REPAIRS.ps1 text eol=lf

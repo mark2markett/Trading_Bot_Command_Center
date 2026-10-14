@@ -3,7 +3,7 @@
 # No Windows bot source, tasks, controls, capital or positions are changed.
 $ErrorActionPreference = 'Stop'
 $repo = 'mark2markett/m2m-platform'
-$expected = 'cf0fcb352df9b9c566b8248e36580c04ec34ad56'
+$expected = '3da48b5d6ff552d008a810594e49efa0c0043f83'
 $previousGhToken = [Environment]::GetEnvironmentVariable('GH_TOKEN', 'Process')
 $locationChanged = $false
 try {

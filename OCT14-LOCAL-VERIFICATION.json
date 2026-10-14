@@ -1,5 +1,5 @@
 {
-  "platform_head": "cf0fcb352df9b9c566b8248e36580c04ec34ad56",
+  "platform_head": "3da48b5d6ff552d008a810594e49efa0c0043f83",
   "native_tip": "dbea1523259e8c7cafd6579ed083eb40da0a7c28",
   "native_tests": {
     "passed": 257
@@ -24,13 +24,19 @@
   "lint_ratchet": "PASS:201existingproblems<=217baseline,no new offenders",
   "size_ratchet": "PASS",
   "quality_workflow": {
-    "runId": 38632789045,
+    "runId": 38641828833,
     "conclusion": "success",
     "primary_job_steps": 27,
-    "publisher_recovery": "HTTP502; only failed publishing job rerun successfully"
+    "publisher_recovery": "Current integrated-head workflow succeeded; prior implementation-head publisher HTTP502 recovered via failed-job-only rerun."
   },
   "owner_installation": "UNVERIFIED",
   "production_deployment": "UNVERIFIED",
   "next_opening_publication_and_native_consumption": "UNVERIFIED",
-  "end_of_day_activity": "NOT_IN_MIDDAY_CAPTURE"
+  "end_of_day_activity": "NOT_IN_MIDDAY_CAPTURE",
+  "integration_targeted_tests": {
+    "passed": 231,
+    "files": 9
+  },
+  "integration_typecheck": "PASS",
+  "integration_build": "PASS"
 }

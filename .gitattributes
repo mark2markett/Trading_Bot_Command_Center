@@ -40,3 +40,4 @@
 /command-center-context-health.bundle -text
 /command-center-context-health.patch text eol=lf
 /COMPLETE-CC-OCT13-REPAIRS.ps1 text eol=lf
+/test_native_context_git.py text eol=lf

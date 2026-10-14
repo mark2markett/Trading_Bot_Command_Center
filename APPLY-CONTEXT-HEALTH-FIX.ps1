@@ -6,7 +6,7 @@ $fix = '8331fe68782fa55935bb18692fd6737bfa9781c3'
 $base = 'ff9a16f937d960fbc41cc21ea0ee6dfadd19b104'
 $allowed = @('README.md','cc_sdk/cc_sdk/intraday.py','cc_sdk/tests/test_daily_context_health.py')
 if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Repository Python is missing.' }
-foreach ($name in @('command-center-context-health.bundle','NATIVE-CONTEXT-PREFLIGHT.py','test_native_context_preflight.py')) {
+foreach ($name in @('command-center-context-health.bundle','NATIVE-CONTEXT-PREFLIGHT.py','test_native_context_preflight.py','test_native_context_git.py')) {
     $rows = @(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'CONTEXT-HEALTH-SHA256.txt') |
         Where-Object { $_ -match ('^[a-fA-F0-9]{64}\s+\*?' + [regex]::Escape($name) + '$') })
     if ($rows.Count -ne 1 -or (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $name) -Algorithm SHA256).Hash -ne ($rows[0] -split '\s+')[0]) {
@@ -32,8 +32,8 @@ try {
         $path = git rev-parse --git-path $state
         if ($LASTEXITCODE -ne 0 -or (Test-Path -LiteralPath $path)) { throw 'Finish the existing Git operation first.' }
     }
-    $dirty = @(git status --porcelain)
-    if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { throw 'Checkout has local changes; preserve them before applying the repair.' }
+    & $python -B (Join-Path $PSScriptRoot 'NATIVE-CONTEXT-PREFLIGHT.py') $Repo --git-only
+    if ($LASTEXITCODE -ne 0) { throw 'Git preflight failed; local changes were preserved.' }
     Assert-NoBotCommand
     & $python -B (Join-Path $PSScriptRoot 'NATIVE-CONTEXT-PREFLIGHT.py') $Repo
     if ($LASTEXITCODE -ne 0) { throw 'Native preflight failed; no source was changed.' }
@@ -62,6 +62,8 @@ try {
         if ($null -eq $oldCCVar) { Remove-Item Env:\CC_VAR -ErrorAction SilentlyContinue } else { $env:CC_VAR = $oldCCVar }
     }
     Assert-NoBotCommand
+    & $python -B (Join-Path $PSScriptRoot 'NATIVE-CONTEXT-PREFLIGHT.py') $Repo --git-only
+    if ($LASTEXITCODE -ne 0) { throw 'Git state changed; no source was applied.' }
     & $python -B (Join-Path $PSScriptRoot 'NATIVE-CONTEXT-PREFLIGHT.py') $Repo
     if ($LASTEXITCODE -ne 0) { throw 'Native state changed; no source was applied.' }
     & $python -B -c "import os,sqlite3; from pathlib import Path; from datetime import datetime; src=(Path(os.environ.get('CC_VAR','var'))/'cc.db').resolve(); dst=src.parent/'backups'/('pre-context-health-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.db'); dst.parent.mkdir(exist_ok=True); a=sqlite3.connect(src.as_uri()+'?mode=ro',uri=True,timeout=5); b=sqlite3.connect(dst); a.backup(b); b.close(); a.close(); print(dst)"

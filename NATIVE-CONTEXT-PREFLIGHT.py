@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,23 @@ from zoneinfo import ZoneInfo
 ORIGINAL = 'e9203ffb83543debc2ad5e3381845e7dd2875ac57457b49531dde3595dd6ed9d'
 UPDATED = '934d6d1cb0004365b07e8992cd1155349a6bc3bbd7d0823d0f283816651ce56e'
 BOTS = {'sip_orb', 'gap_go', 'gap_go_spread', 'nr7', 'spy_mr'}
+TARGETS = ('README.md', 'cc_sdk/cc_sdk/intraday.py', 'cc_sdk/tests/test_daily_context_health.py')
+
+
+def check_git(root):
+    """Require a clean index and repair targets; preserve unrelated local files."""
+    result = subprocess.run(['git', 'diff', '--cached', '--name-only', '-z', '--'], cwd=root, capture_output=True)
+    if result.returncode != 0:
+        raise ValueError('Could not inspect staged changes; no source was changed.')
+    if result.stdout:
+        raise ValueError('Staged changes are present; preserve them before applying the repair.')
+    result = subprocess.run(['git', 'status', '--porcelain', '-z', '--untracked-files=all', '--ignored=matching', '--', *TARGETS],
+                            cwd=root, capture_output=True)
+    if result.returncode != 0:
+        raise ValueError('Could not inspect repair targets; no source was changed.')
+    if result.stdout:
+        raise ValueError('A repair target has local changes: inspect README.md, intraday.py and test_daily_context_health.py.')
+    return {'ok': True, 'git': 'ready'}
 
 
 def check(root, now=None):
@@ -40,7 +58,7 @@ def check(root, now=None):
 
 if __name__ == '__main__':
     try:
-        print(json.dumps(check(sys.argv[1])))
+        print(json.dumps(check_git(sys.argv[1]) if '--git-only' in sys.argv[2:] else check(sys.argv[1])))
     except (OSError, ValueError, sqlite3.Error) as error:
         print(json.dumps({'ok': False, 'error': str(error)}))
         raise SystemExit(1)

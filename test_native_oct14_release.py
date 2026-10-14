@@ -83,3 +83,22 @@ def test_windows_guards_pin_server_interpreter_and_block_every_bot_command():
     assert "'bot\\.py\\b'" in before_stop
     assert "'^CC bot\\b'" in before_stop
     assert 'session|decide|reconcile' not in before_stop
+
+
+def test_windows_autocrlf_checkout_preserves_checksummed_native_payload(tmp_path):
+    import shutil
+    source = tmp_path / 'transfer-source'
+    source.mkdir()
+    names = [line.split(None, 1)[1].lstrip('*') for line in (HERE / 'OCT14-NATIVE-SHA256.txt').read_text().splitlines() if line.strip()]
+    for name in [*names, '.gitattributes']:
+        shutil.copyfile(HERE / name, source / name)
+    git(source, 'init')
+    git(source, 'config', 'core.autocrlf', 'false')
+    git(source, 'config', 'user.name', 'Release rehearsal')
+    git(source, 'config', 'user.email', 'release@example.invalid')
+    git(source, 'add', '.')
+    git(source, 'commit', '-m', 'Actual release payload')
+    checkout = tmp_path / 'windows-checkout'
+    git(tmp_path, '-c', 'core.autocrlf=true', 'clone', '--no-hardlinks', str(source), str(checkout))
+    altered = [name for name in names if (checkout / name).read_bytes() != (HERE / name).read_bytes()]
+    assert not altered, f'Windows checkout changes checksummed release bytes: {altered}'

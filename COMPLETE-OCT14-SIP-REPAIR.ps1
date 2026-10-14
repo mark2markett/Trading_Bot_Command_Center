@@ -3,7 +3,7 @@
 # No Windows bot source, tasks, controls, capital or positions are changed.
 $ErrorActionPreference = 'Stop'
 $repo = 'mark2markett/m2m-platform'
-$expected = '3da48b5d6ff552d008a810594e49efa0c0043f83'
+$expected = '37c431879851d1b5fc0fe8f25a7413875fa13ae4'
 $previousGhToken = [Environment]::GetEnvironmentVariable('GH_TOKEN', 'Process')
 $locationChanged = $false
 try {
@@ -40,8 +40,12 @@ try {
         if ($pull.mergeable -ne 'MERGEABLE') {
             throw "PR is not currently mergeable ($($pull.mergeable)); resolve conflicts or retry after GitHub finishes computing it. No merge was attempted."
         }
+        & node (Join-Path $PSScriptRoot 'OCT14-MERGE-PREFLIGHT.mjs') $expected
+        if ($LASTEXITCODE -ne 0) { throw 'Current main ancestry verification failed. No merge was attempted.' }
         & node scripts/delivery-gate.mjs readiness 1299
         if ($LASTEXITCODE -ne 0) { throw 'Canonical readiness failed. No merge was attempted.' }
+        & node (Join-Path $PSScriptRoot 'OCT14-MERGE-PREFLIGHT.mjs') $expected
+        if ($LASTEXITCODE -ne 0) { throw 'Main or PR changed after readiness. No merge was attempted.' }
         Write-Host 'Owner merge acknowledges the current-head review: https://github.com/mark2markett/m2m-platform/pull/1299'
         & gh pr merge 1299 --repo $repo --squash --match-head-commit $expected
         if ($LASTEXITCODE -ne 0) { throw 'Owner merge failed; required checks were not bypassed.' }

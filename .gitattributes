@@ -43,3 +43,17 @@
 /test_native_context_git.py text eol=lf
 
 /command-center-oct14-native.bundle -text
+/OCT14-MERGE-PREFLIGHT.mjs text eol=lf
+/test_oct14_merge_preflight.mjs text eol=lf
+/test_oct14_wrapper.ps1 text eol=lf
+/OCT14-NATIVE-SOURCE.json text eol=lf
+/NATIVE-OCT14-PREFLIGHT.py text eol=lf
+/test_native_oct14_preflight.py text eol=lf
+/test_native_oct14_release.py text eol=lf
+/APPLY-OCT14-NATIVE-FIXES.ps1 text eol=lf
+/COMPLETE-OCT14-SIP-REPAIR.ps1 text eol=lf
+/COMPLETE-CC-OCT14-REPAIRS.ps1 text eol=lf
+/OCT14-REPAIRS.md text eol=lf
+/OCT14-PLATFORM-CHECKS.json text eol=lf
+/OCT14-LOCAL-VERIFICATION.json text eol=lf
+/OCT14-NATIVE-SHA256.txt text eol=lf

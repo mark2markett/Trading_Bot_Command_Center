@@ -1,0 +1,44 @@
+{
+  "observedAt": "2026-10-14T21:04:21.894Z",
+  "head": "cf0fcb352df9b9c566b8248e36580c04ec34ad56",
+  "verdict": "REQUIRED_CONTEXTS_SUCCESS_OWNER_PROTECTION_CHECK_REQUIRED",
+  "liveBranchProtectionVerified": false,
+  "limitation": "Cloud integration cannot read Administration/branch protection (HTTP403). The owner helper must perform the complete canonical verifier under Mark authentication before merging.",
+  "proposedProtectionContextsVerified": [
+    {
+      "context": "delivery-acceptance",
+      "app_id": 15368
+    },
+    {
+      "context": "quality",
+      "app_id": 15368
+    },
+    {
+      "context": "codex-review",
+      "app_id": 15368
+    }
+  ],
+  "observedStatusRuns": [
+    {
+      "context": "codex-review",
+      "runId": 38632789015,
+      "path": ".github/workflows/codex-adversarial-review.yml",
+      "event": "pull_request_target",
+      "conclusion": "success"
+    },
+    {
+      "context": "delivery-acceptance",
+      "runId": 38632788966,
+      "path": ".github/workflows/check-pr-gate.yml",
+      "event": "pull_request_target",
+      "conclusion": "success"
+    },
+    {
+      "context": "quality",
+      "runId": 38632789045,
+      "path": ".github/workflows/quality-gate.yml",
+      "event": "pull_request_target",
+      "conclusion": "success"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ try {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'APPLY-OCT14-NATIVE-FIXES.ps1')
     $nativeExit = $LASTEXITCODE
 } finally {
+    Write-Host 'Collecting a read-only review of the resulting state.'
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'COLLECT-CC-REVIEW.ps1')
     if ($LASTEXITCODE -ne 0) { Write-Warning 'Review collection also needs attention; retain all output.' }
 }

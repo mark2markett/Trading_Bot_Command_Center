@@ -1,0 +1,36 @@
+{
+  "platform_head": "cf0fcb352df9b9c566b8248e36580c04ec34ad56",
+  "native_tip": "dbea1523259e8c7cafd6579ed083eb40da0a7c28",
+  "native_tests": {
+    "passed": 257
+  },
+  "release_tool_tests": {
+    "passed": 81
+  },
+  "focused_platform_tests": {
+    "passed": 228
+  },
+  "complete_local_platform": {
+    "files": 1000,
+    "passed": 9757,
+    "failed": 2,
+    "expected_fail": 1,
+    "skipped": 13,
+    "todo": 11,
+    "limitation": "Two unchanged inventory scans exceeded the default10s cloud runner budget; both passed unchanged assertions with a scoped30s allowance. No repository timeout or assertions changed."
+  },
+  "final_typecheck": "PASS",
+  "final_build": "PASS",
+  "lint_ratchet": "PASS:201existingproblems<=217baseline,no new offenders",
+  "size_ratchet": "PASS",
+  "quality_workflow": {
+    "runId": 38632789045,
+    "conclusion": "success",
+    "primary_job_steps": 27,
+    "publisher_recovery": "HTTP502; only failed publishing job rerun successfully"
+  },
+  "owner_installation": "UNVERIFIED",
+  "production_deployment": "UNVERIFIED",
+  "next_opening_publication_and_native_consumption": "UNVERIFIED",
+  "end_of_day_activity": "NOT_IN_MIDDAY_CAPTURE"
+}

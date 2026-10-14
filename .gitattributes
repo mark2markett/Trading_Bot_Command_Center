@@ -57,3 +57,32 @@
 /OCT14-PLATFORM-CHECKS.json text eol=lf
 /OCT14-LOCAL-VERIFICATION.json text eol=lf
 /OCT14-NATIVE-SHA256.txt text eol=lf
+/.gitattributes text eol=lf
+/APPLY-LOG-FIXES.ps1 text eol=lf
+/APPLY-RUNTIME-FIXES.ps1 text eol=lf
+/APPLY-SERVER-IMPORT-FIX.ps1 text eol=lf
+/APPLY-SIP-SCANNER.ps1 text eol=lf
+/CC-SIP-SCANNER.md text eol=lf
+/CONFIGURE-SIP-SCANNER.py text eol=lf
+/FINISH-CC-FIXES.md text eol=lf
+/LOG-FIXES.md text eol=lf
+/NATIVE-COMPLETION-HANDOFF.md text eol=lf
+/PUBLISH-PLATFORM-SCANNER.ps1 text eol=lf
+/README.md text eol=lf
+/RUNTIME-FIXES.md text eol=lf
+/SCANNER-PULL-REQUEST.md text eol=lf
+/SERVER-IMPORT-FIX.md text eol=lf
+/TRANSFER-SHA256SUMS text eol=lf
+/TRANSFER.md text eol=lf
+/command-center-closed-loop.zip -text
+/command-center-interruption.patch text eol=lf
+/command-center-log-fixes.bundle -text
+/command-center-runtime-fixes.bundle -text
+/command-center-server-import-fix.bundle -text
+/command-center-sip-scanner.bundle -text
+/command-center-web.zip -text
+/m2m-platform-sip-scanner.bundle -text
+/m2m-platform-sip-scanner.patch text eol=lf
+/platform-test-fix.patch text eol=lf
+/test_configure_sip_scanner.py text eol=lf
+/SHA256.txt text eol=lf

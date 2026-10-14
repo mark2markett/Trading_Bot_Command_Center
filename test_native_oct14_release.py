@@ -85,11 +85,12 @@ def test_windows_guards_pin_server_interpreter_and_block_every_bot_command():
     assert 'session|decide|reconcile' not in before_stop
 
 
-def test_windows_autocrlf_checkout_preserves_checksummed_native_payload(tmp_path):
+@pytest.mark.parametrize("manifest", ["OCT14-NATIVE-SHA256.txt", "SHA256.txt"])
+def test_windows_autocrlf_checkout_preserves_checksummed_native_payload(tmp_path, manifest):
     import shutil
     source = tmp_path / 'transfer-source'
     source.mkdir()
-    names = [line.split(None, 1)[1].lstrip('*') for line in (HERE / 'OCT14-NATIVE-SHA256.txt').read_text().splitlines() if line.strip()]
+    names = [line.split(None, 1)[1].lstrip('*') for line in (HERE / manifest).read_text().splitlines() if line.strip()]
     for name in [*names, '.gitattributes']:
         shutil.copyfile(HERE / name, source / name)
     git(source, 'init')

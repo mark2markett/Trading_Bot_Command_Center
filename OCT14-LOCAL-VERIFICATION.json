@@ -5,7 +5,7 @@
     "passed": 257
   },
   "release_tool_tests": {
-    "passed": 83
+    "passed": 119
   },
   "focused_platform_tests": {
     "passed": 228
@@ -23,10 +23,28 @@
   "final_build": "PASS",
   "lint_ratchet": "PASS:201existingproblems<=217baseline,no new offenders",
   "size_ratchet": "PASS",
-  "owner_installation": "UNVERIFIED",
-  "production_deployment": "UNVERIFIED",
+  "owner_installation": "UNVERIFIED: previousattemptblockedby normaldailyqueue; updatedpreservationgate needsWindowsverification",
+  "production_deployment": {
+    "state": "VERIFIED_OWNER_OUTPUT_AND_PUBLIC_HEALTH",
+    "mergeCommit": "e72320d223d2f6bb32aa8b0c354033533afb9cce"
+  },
   "next_opening_publication_and_native_consumption": "UNVERIFIED",
-  "end_of_day_activity": "NOT_IN_MIDDAY_CAPTURE",
+  "end_of_day_activity": {
+    "capture": "CC-review-20261014-192244.zip",
+    "qqq_closed_at_et": "2026-10-14 15:58:03",
+    "realized_today": 499.39,
+    "equity": 100200.52,
+    "unresolved_order": {
+      "id": 11,
+      "bot": "spy_mr",
+      "side": "BUY",
+      "qty": 130,
+      "symbol": "SPY",
+      "type": "MOC",
+      "status": "sent"
+    },
+    "normal_next_reconcile_et": "2026-10-15 09:45"
+  },
   "integration_targeted_tests": {
     "passed": 231,
     "files": 9
@@ -61,7 +79,7 @@
   "current_production_health": {
     "ok": true,
     "release": {
-      "sha": "cd45f61b0d5da9446b0eab5f7268d393f19b8b8f",
+      "sha": "e72320d223d2f6bb32aa8b0c354033533afb9cce",
       "state": "known"
     },
     "enrich_recent": true
@@ -77,5 +95,21 @@
   "live_main_ancestry": {
     "head": "37c431879851d1b5fc0fe8f25a7413875fa13ae4",
     "main": "cd45f61b0d5da9446b0eab5f7268d393f19b8b8f"
+  },
+  "release_powershell_runtime_preservation_tests": {
+    "passed": 4,
+    "runtime": "PortablePowerShell7.4.19; externalPythonboundary simulated; actualWindowsinstaller remains unverified"
+  },
+  "daily_queue_preflight_tests": {
+    "passed": 47,
+    "independent_review": "No remaining blocking findings; cash/reference guards verified"
+  },
+  "owner_observed_final_readiness": {
+    "head": "37c431879851d1b5fc0fe8f25a7413875fa13ae4",
+    "main": "cd45f61b0d5da9446b0eab5f7268d393f19b8b8f",
+    "requiredContexts": "PASS in owner output",
+    "strict": true,
+    "enforcedForAdmins": true,
+    "result": "OWNER_MERGED_AND_PRODUCTION_VERIFIED"
   }
 }

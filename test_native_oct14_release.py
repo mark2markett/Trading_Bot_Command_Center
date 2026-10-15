@@ -21,8 +21,9 @@ def git(root, *args):
     return subprocess.run(['git', '-C', str(root), *args], check=True, text=True, capture_output=True).stdout.strip()
 
 
+@pytest.mark.parametrize('pending_order', [False, True])
 @pytest.mark.parametrize('context_installed', [False, True])
-def test_actual_bundle_preserves_owner_files_and_is_idempotent(tmp_path, monkeypatch, context_installed):
+def test_actual_bundle_preserves_owner_files_and_is_idempotent(tmp_path, monkeypatch, context_installed, pending_order):
     if not NATIVE.is_dir():
         pytest.skip('Cloud source checkout is required for this local bundle rehearsal')
     monkeypatch.delenv('CC_VAR', raising=False)
@@ -46,8 +47,15 @@ def test_actual_bundle_preserves_owner_files_and_is_idempotent(tmp_path, monkeyp
     var = root / 'var'
     var.mkdir(exist_ok=True)
     with sqlite3.connect(var / 'cc.db') as db:
-        db.executescript('CREATE TABLE bots(id TEXT, mode TEXT); CREATE TABLE positions(qty INTEGER); CREATE TABLE orders(status TEXT);')
+        db.executescript('CREATE TABLE bots(id TEXT, mode TEXT); CREATE TABLE positions(qty INTEGER); CREATE TABLE orders(id INTEGER PRIMARY KEY,bot_id TEXT,at TEXT,broker_order_id TEXT,side TEXT,qty INTEGER,type TEXT,status TEXT,symbol TEXT,ref_price REAL); CREATE TABLE fills(order_id INTEGER);')
         db.executemany('INSERT INTO bots VALUES (?,?)', [(bot, 'paper') for bot in gate.BOTS])
+    daily_files = []
+    if pending_order:
+        from test_native_oct14_preflight import pending_daily
+        folder = pending_daily(root)
+        daily_files = [folder / 'state_paper.json', folder / 'paper_ledger.json']
+    daily_before = [p.read_bytes() for p in daily_files]
+    runtime_before = gate.check(root, AFTER)['runtime_fingerprint']
     ledger = (var / 'cc.db').read_bytes()
     assert gate.check_git(root)['ok']
     assert gate.check(root, AFTER)['source'] == ('context' if context_installed else 'original')
@@ -63,13 +71,15 @@ def test_actual_bundle_preserves_owner_files_and_is_idempotent(tmp_path, monkeyp
         assert not git(root, 'diff', '--cached', '--name-only')
         assert all((root / path).read_bytes() == value for path, value in owner.items())
         assert (var / 'cc.db').read_bytes() == ledger
+        assert [p.read_bytes() for p in daily_files] == daily_before
+        assert gate.check(root, AFTER)['runtime_fingerprint'] == runtime_before
 
 
 def test_power_shell_guards_and_staging_precede_mutation():
     source = (HERE / 'APPLY-OCT14-NATIVE-FIXES.ps1').read_text()
     mutation = source.index('cherry-pick $fix')
     assert source.index('-m pytest -q') < source.index('Consistent ledger backup failed') < mutation
-    assert source.index('Stop-ScheduledTask') < mutation < source.index('Installed source identity')
+    assert source.index('Stop-ScheduledTask') < mutation < source.index('Assert-Preflight -RequireInstalled')
     assert source.count('Assert-Preflight\n') >= 3
     assert 'Stop-Process' not in source
     assert 'git reset' not in source

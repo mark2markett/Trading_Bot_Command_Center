@@ -26,17 +26,24 @@ function Assert-NoBotCommand {
     }) { throw 'A bot task is running; install after it finishes.' }
 }
 function Assert-Preflight {
+    param([switch]$RequireInstalled)
     Assert-NoBotCommand
     & $python -B (Join-Path $PSScriptRoot 'NATIVE-OCT14-PREFLIGHT.py') $Repo --git-only
     if ($LASTEXITCODE -ne 0) { throw 'Git preflight failed; local files were preserved.' }
     $value = & $python -B (Join-Path $PSScriptRoot 'NATIVE-OCT14-PREFLIGHT.py') $Repo
     if ($LASTEXITCODE -ne 0) { throw "Native preflight failed: $value" }
+    $parsed = $value | ConvertFrom-Json
+    if ($parsed.runtime_fingerprint -notmatch '^[a-f0-9]{64}$') { throw 'Runtime preservation fingerprint is missing; installation cannot be verified.' }
+    if ($script:expectedRuntime -and $parsed.runtime_fingerprint -ne $script:expectedRuntime) { throw 'Orders or daily paper state changed during installation; preserve state and collect a review.' }
+    $script:expectedRuntime = $parsed.runtime_fingerprint
+    if ($RequireInstalled -and $parsed.source -ne 'installed') { throw 'Installed source identity was not verified.' }
     $value | Write-Host
 }
 Push-Location $Repo
 $stage = Join-Path $env:TEMP ('cc-oct14-stage-' + [guid]::NewGuid().ToString('N'))
 $oldCCVar = $env:CC_VAR
 $restart = $false
+$script:expectedRuntime = $null
 try {
     $branch = git branch --show-current
     if ($LASTEXITCODE -ne 0 -or $branch.Trim() -ne 'feat/options-m7') { throw 'Expected feat/options-m7; no branch was switched.' }
@@ -100,8 +107,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'Cherry-pick conflict; preserve checkout and paste output. Do not reset or switch branches.' }
         }
     }
-    $result = & $python -B (Join-Path $PSScriptRoot 'NATIVE-OCT14-PREFLIGHT.py') $Repo
-    if ($LASTEXITCODE -ne 0 -or ($result | ConvertFrom-Json).source -ne 'installed') { throw 'Installed source identity was not verified.' }
+    Assert-Preflight -RequireInstalled
     Start-ScheduledTask -TaskName 'CC server' -ErrorAction Stop
     $restart = $false
     $health = $null

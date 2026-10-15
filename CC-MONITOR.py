@@ -158,18 +158,11 @@ def main():
     parser.add_argument("--repo", type=Path, required=True)
     args = parser.parse_args()
     root = args.repo.resolve()
-    result = capture(root)
-    report = root / "var" / "monitor" / "latest.json"
-    log_dir = root / "var" / "logs"
-    report.parent.mkdir(parents=True, exist_ok=True)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    temporary = report.with_suffix(".tmp")
-    temporary.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(report)
-    with (log_dir / ("native-monitor-" + datetime.now(ET).strftime("%Y%m%d") + ".jsonl")).open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(result) + "\n")
-    print(json.dumps(result, indent=2))
-    return 0 if result["ok"] else 1
+    import sys
+    sys.path.insert(0, str(root / 'cc_sdk'))
+    sys.path.insert(0, str(root / 'cc_server'))
+    from cc_server.incidents.worker import main as incident_main
+    return incident_main()
 
 
 if __name__ == "__main__":

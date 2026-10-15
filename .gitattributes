@@ -88,3 +88,18 @@
 /SHA256.txt text eol=lf
 /test_oct14_runtime_preservation.ps1 text eol=lf
 /test_oct14_staging.ps1 text eol=lf
+/INSTALL-ATTENTION-HANDLING.ps1 text eol=lf
+/ATTENTION-TASK-OWNERSHIP.ps1 text eol=lf
+/ATTENTION-PREFLIGHT.py text eol=lf
+/ATTENTION-PACKAGE.py text eol=lf
+/ATTENTION-NATIVE-SOURCE.json text eol=lf
+/attention-native.bundle -text
+/attention-dashboard.zip -text
+/test_attention_install.py text eol=lf
+/test_attention_install.ps1 text eol=lf
+/ATTENTION-SHA256.txt text eol=lf
+/ATTENTION-RECEIPT.ps1 text eol=lf
+/test_attention_task_adapter.ps1 text eol=lf
+/test_attention_release.py text eol=lf
+/test_attention_receipt.ps1 text eol=lf
+/ATTENTION-RELEASE.md text eol=lf

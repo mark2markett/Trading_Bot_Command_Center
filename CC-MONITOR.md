@@ -17,3 +17,21 @@ For SIP incidents the collector also saves today's cc-sip-scanner preparation/pu
 October 8 at approximately 09:50 ET, production /api/healthcheck returned 503 with only enrich_recent=false. Database, cron, bar freshness and intelligence checks passed. Release SHA was 3d0abe7e85e31763933b10a2278727733dff8407. The enrich route supports a valid zero-trade run without new enrichment rows, whereas the health endpoint requires a row less than six hours old. No-trade status is a possible explanation, not an established production cause. Inspect authorized native/platform telemetry before changing either pipeline or monitor criteria.
 
 October 9 review improvement: the collector exports capped, typed SIP opening failure context (up to ten ticker rows, ten returned in-window ISO timestamps and five missing timestamps each) and the total failure count. It exports no arbitrary detail strings, provider payloads, prices, volumes, URLs or credential values. Malformed non-array HTTP 200 telemetry/eligibility responses are explicitly INVALID_RESPONSE, never evidence of zero eligible work. This improves future review archives; it does not change installed monitoring cadence or production policy.
+
+## October 15 attention-handling release
+
+Use `INSTALL-ATTENTION-HANDLING.ps1` from the reviewed packet. It installs native incident handling and the
+built dashboard, then replaces only the owned monitor task with one-minute observations. `-Activate` enables
+the approved server-start allowlist and existing notification routing after two coherent observations. No
+notification test message is sent by installation. Without an external channel the dashboard says so.
+
+The separate operations database is `var/monitor/incidents.db`. Packet files contain only typed status evidence.
+The worker reads the trading ledger without writes, never starts/restarts a bot, and does not edit/deploy code.
+An alert acknowledgment does not resolve an incident. Missed opening deadlines and rejected orders stay recorded.
+A stopped, enabled, exactly owned server task may be started once per 30 minutes; a running/hung server requires
+review. Resolution requires fresh evidence. The Windows account must remain signed in if its task uses Interactive
+logon. The local monitor does not automatically send evidence into this cloud chat.
+
+Keep the printed rollback receipt directory. Run the same installer with `-Rollback -Receipt <directory>` only
+under its normal idle maintenance guards. It restores owned monitor files/task and reviewed source changes while
+retaining incident history; it never restores a financial backup over the trading ledger.

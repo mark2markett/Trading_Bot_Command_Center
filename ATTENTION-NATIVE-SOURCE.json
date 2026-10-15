@@ -1,6 +1,6 @@
 {
   "base": "dbea1523259e8c7cafd6579ed083eb40da0a7c28",
-  "tip": "80110bec71e5e082c931ae57777de6261a0b14f6",
+  "tip": "cc544a7c07e3816b4b9db4af07f7d2681c2fc7ca",
   "branch": "feat/attention-monitor-20261015",
   "stages": {
     "before": {
@@ -291,7 +291,7 @@
       "docs/superpowers/specs/2026-10-15-attention-monitor-design.md": "2d731f99e56d1d090dead1d132ad6e2d5be6ba78b12d01856eb04b934cf3e9e6",
       "scripts/incident_task.ps1": "86278afacc956a16c83704c5831c0d2fb18a3f8e40a825f9ec60edcf645cfd1b"
     },
-    "installed": {
+    "step_9": {
       "README.md": "06cbd2c3e735bc40d3a6932a33ca96168bc0cee7e3b68c64aeec2b2c1b1fcd4d",
       "cc_server/cc_server/alerts.py": "95edc94fae48cd2526340b3a60c13d8d3e19a0c9bff0651c18c7263d641a49cf",
       "cc_server/cc_server/api.py": "962b69cb0ada4c56d82868c5b468a5df8498c2860e8cb68bbef11720dd9da150",
@@ -317,6 +317,38 @@
       "cc_web/src/app/FleetPage.tsx": "e7eba26345954d5a4f783a0ecc3abbe3e73ab8ae15c7044c077b757444c63a83",
       "cc_web/src/components/AttentionFeed.test.tsx": "fb9c19af54a72dec3f175da8231b1af3951331ffec0f96b7c5ee7eaac892902d",
       "cc_web/src/components/AttentionFeed.tsx": "2891fe69831cb5fe777f8cd25a67bf540fb77ba15ac3ee1546c1c7ea7a966420",
+      "cc_web/src/lib/api.ts": "6dfe828473055c80444920073421eb9b2ff060ed329cb1368634d84374587888",
+      "cc_web/src/styles/app.css": "1e3586ce7a48c777c85f4021b24cd75679a2a3a5a285411eb2f05984f9913183",
+      "docs/superpowers/plans/2026-10-15-attention-monitor.md": "5185784a34193961a45eae6a882574ca1989673bdda0105bb03dd0d02bc42a0c",
+      "docs/superpowers/specs/2026-10-15-attention-monitor-design.md": "2d731f99e56d1d090dead1d132ad6e2d5be6ba78b12d01856eb04b934cf3e9e6",
+      "scripts/incident_task.ps1": "3cec8e8b1a4f26f80778366b30f0123f831cc6d60633425049651422bdf4e5da"
+    },
+    "installed": {
+      "README.md": "06cbd2c3e735bc40d3a6932a33ca96168bc0cee7e3b68c64aeec2b2c1b1fcd4d",
+      "cc_server/cc_server/alerts.py": "95edc94fae48cd2526340b3a60c13d8d3e19a0c9bff0651c18c7263d641a49cf",
+      "cc_server/cc_server/api.py": "962b69cb0ada4c56d82868c5b468a5df8498c2860e8cb68bbef11720dd9da150",
+      "cc_server/cc_server/incidents/__init__.py": "e00760b6c14446ad2cac26e0c477a0f7185c8f97974796464c6e9b822714e4e7",
+      "cc_server/cc_server/incidents/classify.py": "07aab749dc271559b6e2328f9848f2ce79579f703c07e9a73d0277273adcc3b0",
+      "cc_server/cc_server/incidents/diagnostics.py": "337ffe5f70bb03349dc4d77fc2fa8acbbc50aa919b91db7ca55fd51d07a7d361",
+      "cc_server/cc_server/incidents/models.py": "c5f030814879968bb9269bae90ea3776ac17ff8a9e9f3d4dd3e560ec29212ed0",
+      "cc_server/cc_server/incidents/notify.py": "4445897a2a556e1122fef72b01bb2e330477a30c1089111dc6e6429df8855197",
+      "cc_server/cc_server/incidents/observe.py": "242a8b26e236815de6b720e05eea6eaf6d8ad0549160698240a50d132cf9a922",
+      "cc_server/cc_server/incidents/readback.py": "5b80d066049f92d305109c5a73215711429e0548c67dadef12edd4af3ab0fc04",
+      "cc_server/cc_server/incidents/store.py": "83f4427e2c35c3def19f2b236d72c5b1a1dcc286a04c84665d59c6d731362a49",
+      "cc_server/cc_server/incidents/windows.py": "ad17679124747abf00d671df457581538dcdb1396ee11c546057985555fad818",
+      "cc_server/cc_server/incidents/worker.py": "18deec6bb7ab75ec214a4267de91c7c42acaee3beb3b4eca8ba87c710eb2cb16",
+      "cc_server/tests/test_incident_api.py": "486db4dbb9150f81c2880bcc00d1d6cae65f647bebcb466e0b6c6073a6b0552f",
+      "cc_server/tests/test_incident_classification.py": "79d1d343fbb9ef78a72d80af12db1cdeb14785442d8fee4c2adf26c4eb22d6eb",
+      "cc_server/tests/test_incident_diagnostics.py": "3b44a8e1730f698cee2b36ca1639cd99ee6a9e17dafc9f117da81c18537f1c5e",
+      "cc_server/tests/test_incident_ingestion.py": "d9a9c2fd4fa3d1b36eff4c69b498118e02c8fdf16e6c27e9a40e72ccf022932e",
+      "cc_server/tests/test_incident_notifications.py": "f3bfd0968f97b1ccb8b7217264d2b42934d5e0998fa646fbc1e09dc94f60da35",
+      "cc_server/tests/test_incident_store.py": "0e9de054feb78dc541ad9899916b61aabdf151d084743e83724188fa2da4d85f",
+      "cc_server/tests/test_incident_worker.py": "5a02577f769bb4d7c01f0c239d2c9a677ca946477bd1648206ad0b738909d524",
+      "cc_web/e2e/attention-monitor.spec.ts": "4f641c08153a7be7a28ddcd2d6b3452a137ecd25b6205f4209dd90230aecd8d1",
+      "cc_web/src/app/App.tsx": "da7308e5cfae4bd37e65a42dd681f7bac90a75744bb19c2ad2f05556f2d5ec3a",
+      "cc_web/src/app/FleetPage.tsx": "e7eba26345954d5a4f783a0ecc3abbe3e73ab8ae15c7044c077b757444c63a83",
+      "cc_web/src/components/AttentionFeed.test.tsx": "fdbfa854d2efe83e7ff9bb9253894a3cef0b9cba4f0afe81cda891ca44609b12",
+      "cc_web/src/components/AttentionFeed.tsx": "f7d7a0e6920f177f8e120933f30f1462820e0d9cb786fc15930f3249004e9cc6",
       "cc_web/src/lib/api.ts": "6dfe828473055c80444920073421eb9b2ff060ed329cb1368634d84374587888",
       "cc_web/src/styles/app.css": "1e3586ce7a48c777c85f4021b24cd75679a2a3a5a285411eb2f05984f9913183",
       "docs/superpowers/plans/2026-10-15-attention-monitor.md": "5185784a34193961a45eae6a882574ca1989673bdda0105bb03dd0d02bc42a0c",

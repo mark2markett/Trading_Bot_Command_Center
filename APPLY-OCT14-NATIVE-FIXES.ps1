@@ -15,6 +15,28 @@ if ($release.base -ne $base -or $release.context -ne $context -or $release.tip -
 $allowed = @('README.md','cc_sdk/cc_sdk/intraday.py','cc_sdk/tests/test_daily_context_health.py',
     'cc_sdk/cc_sdk/options_runner.py','cc_sdk/tests/test_paper_account.py','cc_sdk/tests/test_options_runner.py',
     'cc_server/cc_server/api.py','cc_server/tests/test_paper_equity.py')
+function Invoke-StagedNativeTests {
+    param([string]$SourceStage, [string]$TestRuntime, [string]$Commit, [string]$Python)
+    New-Item -ItemType Directory -Path $SourceStage, $TestRuntime | Out-Null
+    $archive = Join-Path $SourceStage 'source.tar'
+    # Archive canonical Git bytes, independently of Windows working-tree defaults.
+    git -c core.autocrlf=false archive --format=tar --output=$archive $Commit
+    if ($LASTEXITCODE -ne 0) { throw 'Source staging failed.' }
+    & tar -xf $archive -C $SourceStage
+    if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed.' }
+    $previousCCVar = $env:CC_VAR
+    Push-Location $SourceStage
+    try {
+        $env:CC_VAR = Join-Path $TestRuntime 'var'
+        $pytestTemp = Join-Path $TestRuntime 'pytest-temp'
+        $pytestCache = Join-Path $TestRuntime 'pytest-cache'
+        & $Python -B -m pytest -q --basetemp $pytestTemp -o ("cache_dir=" + $pytestCache)
+        if ($LASTEXITCODE -ne 0) { throw 'Staged native regression failed; installed source was not changed.' }
+    } finally {
+        Pop-Location
+        if ($null -eq $previousCCVar) { Remove-Item Env:\CC_VAR -ErrorAction SilentlyContinue } else { $env:CC_VAR = $previousCCVar }
+    }
+}
 function Assert-NoBotCommand {
     if (Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
         $_.Name -match '^python(w)?\.exe$' -and
@@ -41,6 +63,7 @@ function Assert-Preflight {
 }
 Push-Location $Repo
 $stage = Join-Path $env:TEMP ('cc-oct14-stage-' + [guid]::NewGuid().ToString('N'))
+$testRoot = Join-Path $env:TEMP ('cc-oct14-test-runtime-' + [guid]::NewGuid().ToString('N'))
 $oldCCVar = $env:CC_VAR
 $restart = $false
 $script:expectedRuntime = $null
@@ -70,21 +93,7 @@ try {
     if ($LASTEXITCODE -ne 0 -or $parent.Trim() -ne $base) { throw 'Unexpected context repair history.' }
     $paths = @(git diff --name-only $base $tip)
     if ($LASTEXITCODE -ne 0 -or $paths.Count -ne $allowed.Count -or @($paths | Where-Object { $_ -notin $allowed }).Count -ne 0) { throw 'Repair exceeds its source allowlist.' }
-    New-Item -ItemType Directory -Path $stage | Out-Null
-    $archive = Join-Path $stage 'source.tar'
-    git archive --format=tar --output=$archive $tip
-    if ($LASTEXITCODE -ne 0) { throw 'Source staging failed.' }
-    & tar -xf (Join-Path $stage 'source.tar') -C $stage
-    if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed.' }
-    Push-Location $stage
-    try {
-        $env:CC_VAR = Join-Path $stage 'test-var'
-        & $python -B -m pytest -q --basetemp "$stage\pytest-temp" -o "cache_dir=$stage\pytest-cache"
-        if ($LASTEXITCODE -ne 0) { throw 'Staged native regression failed; installed source was not changed.' }
-    } finally {
-        Pop-Location
-        if ($null -eq $oldCCVar) { Remove-Item Env:\CC_VAR -ErrorAction SilentlyContinue } else { $env:CC_VAR = $oldCCVar }
-    }
+    Invoke-StagedNativeTests -SourceStage $stage -TestRuntime $testRoot -Commit $tip -Python $python
     Assert-Preflight
     & $python -B -c "import os,sqlite3; from pathlib import Path; from datetime import datetime; src=(Path(os.environ.get('CC_VAR','var'))/'cc.db').resolve(); dst=src.parent/'backups'/('pre-oct14-native-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.db'); dst.parent.mkdir(exist_ok=True); a=sqlite3.connect(src.as_uri()+'?mode=ro',uri=True,timeout=5); b=sqlite3.connect(dst); a.backup(b); b.close(); a.close(); print(dst)"
     if ($LASTEXITCODE -ne 0) { throw 'Consistent ledger backup failed; source was not changed.' }
@@ -125,5 +134,7 @@ try {
     if ($restart) { Start-ScheduledTask -TaskName 'CC server' -ErrorAction Continue }
     if ($null -eq $oldCCVar) { Remove-Item Env:\CC_VAR -ErrorAction SilentlyContinue } else { $env:CC_VAR = $oldCCVar }
     Pop-Location
-    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
+    foreach ($temporary in @($stage,$testRoot)) {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue }
+    }
 }

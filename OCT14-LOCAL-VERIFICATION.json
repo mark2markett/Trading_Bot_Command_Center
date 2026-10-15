@@ -23,7 +23,7 @@
   "final_build": "PASS",
   "lint_ratchet": "PASS:201existingproblems<=217baseline,no new offenders",
   "size_ratchet": "PASS",
-  "owner_installation": "UNVERIFIED: previousattemptblockedby normaldailyqueue; updatedpreservationgate needsWindowsverification",
+  "owner_installation": "UNVERIFIED: queue preflight passed, priorstagedtestsblockedbeforelivemutation; correctedexactstagingrehearsal passed",
   "production_deployment": {
     "state": "VERIFIED_OWNER_OUTPUT_AND_PUBLIC_HEALTH",
     "mergeCommit": "e72320d223d2f6bb32aa8b0c354033533afb9cce"
@@ -111,5 +111,22 @@
     "strict": true,
     "enforcedForAdmins": true,
     "result": "OWNER_MERGED_AND_PRODUCTION_VERIFIED"
+  },
+  "owner_verified_queue": {
+    "source": "original",
+    "id": 11,
+    "symbol": "SPY",
+    "qty": 130,
+    "session_date": "2026-10-14",
+    "runtime_fingerprint": "84f2610e02c224d6fb9be13eb90dd3418727c25b2c26e80b4643e6f514e2ab0a"
+  },
+  "exact_installer_staging": {
+    "runtime": "PortablePowerShell7.4.19, Linux, Gitcore.autocrlf=true Windowsdefault emulation",
+    "native_pytest_passed": 257,
+    "existing_warning": "Starlette/httpx deprecation",
+    "strategy_raw_sha256": "294a8d6e99f6ef01c4a6a52bd7406e43c0a177dc47b52775a18d50b7739a2f93",
+    "environment_restore": "PASS",
+    "failed_pytest_remains_blocking": "PASS",
+    "limitation": "ActualWindowsCIM/task/cherrypick/serverrestart remainunverified"
   }
 }

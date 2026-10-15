@@ -87,3 +87,4 @@
 /test_configure_sip_scanner.py text eol=lf
 /SHA256.txt text eol=lf
 /test_oct14_runtime_preservation.ps1 text eol=lf
+/test_oct14_staging.ps1 text eol=lf

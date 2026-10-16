@@ -74,23 +74,24 @@ def test_partial_install_receipt_stage_can_be_reverted(tmp_path,monkeypatch,pref
     assert (root/'var/cc.db').read_bytes()==before
 
 
-def test_previous_complete_attention_release_upgrades_without_reapplying_old_commits(tmp_path, monkeypatch):
+@pytest.mark.parametrize('base_key,stage', [('upgrade_base','upgrade_from_attention'), ('fleet_base','upgrade_from_fleet')])
+def test_previous_complete_attention_release_upgrades_without_reapplying_old_commits(tmp_path, monkeypatch, base_key, stage):
     monkeypatch.delenv('CC_VAR',raising=False)
     release=json.loads((HERE/'ATTENTION-NATIVE-SOURCE.json').read_text())
     root=tmp_path/'upgrade'
     git(tmp_path,'clone','--no-hardlinks','--no-checkout',str(NATIVE),str(root))
     git(root,'config','user.name','Upgrade rehearsal');git(root,'config','user.email','upgrade@example.invalid')
-    git(root,'checkout','-b','feat/options-m7',release['upgrade_base'])
+    git(root,'checkout','-b','feat/options-m7',release[base_key])
     (root/'var').mkdir()
     with sqlite3.connect(root/'var/cc.db') as db:
         db.executescript('CREATE TABLE bots(id TEXT,mode TEXT);CREATE TABLE positions(qty INTEGER);CREATE TABLE orders(id INTEGER PRIMARY KEY,status TEXT);CREATE TABLE fills(order_id INTEGER);')
         db.executemany('INSERT INTO bots VALUES(?,?)',[(b,'paper') for b in gate.BOTS])
     spec=importlib.util.spec_from_file_location('upgrade_gate',HERE/'ATTENTION-PREFLIGHT.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
     before=(root/'var/cc.db').read_bytes()
-    assert m.check(root,AFTER)['source']=='upgrade_from_attention'
-    commits=git(root,'rev-list','--reverse',release['upgrade_base']+'..'+release['tip']).splitlines()
+    assert m.check(root,AFTER)['source']==stage
+    commits=git(root,'rev-list','--reverse',release[base_key]+'..'+release['tip']).splitlines()
     for commit in commits: git(root,'cherry-pick',commit)
     assert m.check(root,AFTER)['source']=='installed'
     assert (root/'var/cc.db').read_bytes()==before
     git(root,'revert','--no-edit',*reversed(commits))
-    assert m.check(root,AFTER)['source']=='upgrade_from_attention'
+    assert m.check(root,AFTER)['source']==stage

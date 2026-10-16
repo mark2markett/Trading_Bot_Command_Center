@@ -1,5 +1,9 @@
 # Automatic attention handling — October 15
 
+The October 16 update adds observation-only expiration/volatility context and descriptive research cohorts.
+See [EXPIRATION-CONTEXT-RELEASE.md](EXPIRATION-CONTEXT-RELEASE.md) for its scope and installation checks. The current
+bundle uses branch `feat/expiration-context-20261016` and includes the preceding complete reliability release.
+
 The October 15 reliability update also validates account book marks, retains redacted quote provenance,
 settles new daily paper fills/fees idempotently, shows the fleet entry pause and simulated-stop semantics,
 and includes a read-only SPY reconciliation audit plus isolated research gates. Existing financial history

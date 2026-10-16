@@ -4,6 +4,7 @@ function Get-AttentionInstallBase {
         'before' { $Release.base }
         'installed' { $Release.tip }
         'upgrade_from_attention' { $Release.upgrade_base }
+        'upgrade_from_fleet' { $Release.fleet_base }
         default { throw 'Unknown or partial source stage; preserve the existing rollback receipt.' }
     }
     if ($base -notmatch '^[a-f0-9]{40}$') { throw 'Invalid reviewed installation base.' }

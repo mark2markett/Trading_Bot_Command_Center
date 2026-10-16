@@ -38,6 +38,37 @@ def backup(source, target):
                 raise RuntimeError("backup integrity check failed")
 
 
+def exclusion_manifest(payload):
+    """Typed snapshot dispositions; publication time is not an invented per-stock decision time."""
+    allowed = {'DAILY_HISTORY_INCOMPLETE', 'DAILY_LIQUIDITY', 'ATR_TOO_LOW', 'OPENING_BASELINE_ZERO',
+               'OPENING_HISTORY_INCOMPLETE', 'PRICE_TOO_LOW', 'TESTING_OPENING_DATA_UNAVAILABLE',
+               'TESTING_OPENING_WINDOW_INCOMPLETE'}
+    date, generated, rows = payload.get('session_date'), payload.get('generated_at'), payload.get('exclusions')
+    invalid = {'valid': False, 'rows': [], 'reason': 'EXCLUSION_MANIFEST_INVALID'}
+    if not isinstance(date, str) or not re.fullmatch(r'202[5-7]-\d{2}-\d{2}', date):
+        return invalid
+    try:
+        stamp = datetime.fromisoformat(generated.replace('Z', '+00:00'))
+        if not stamp.tzinfo or stamp.astimezone(ZoneInfo('America/New_York')).date().isoformat() != date:
+            return invalid
+    except (AttributeError, TypeError, ValueError):
+        return invalid
+    if not isinstance(rows, list) or len(rows) > 5000:
+        return invalid
+    clean, seen = [], set()
+    for row in rows:
+        if not isinstance(row, dict):
+            return invalid
+        symbol, reason = row.get('symbol'), row.get('reason')
+        if (not isinstance(symbol, str) or not re.fullmatch(r'[A-Z][A-Z0-9.]{0,9}', symbol)
+                or not isinstance(reason, str) or reason not in allowed or symbol in seen):
+            return invalid
+        seen.add(symbol)
+        clean.append({'symbol': symbol, 'reason': reason, 'session_date': date,
+                      'recorded_at': generated, 'timestamp_basis': 'snapshot_publication'})
+    return {'valid': True, 'rows': clean}
+
+
 def opening_context(details):
     """Export only bounded, typed public-symbol/minute diagnostics."""
     count, failures = details.get('opening_failure_count'), details.get('opening_failures')
@@ -131,7 +162,8 @@ def platform_enrich_probe(root, *, cron_name="enrich"):
         if cron_name == 'cc-sip-scanner':
             fields = ('universe', 'classificationExcluded', 'failures',
                       'opening_cached_count', 'opening_provider_read_count',
-                      'opening_cache_read_ms', 'publication_elapsed_ms')
+                      'opening_cache_read_ms', 'publication_elapsed_ms', 'opening_rest_pacing_floor_ms',
+                      'native_deadline_margin_ms')
         safe_codes = {'SIP_SCANNER_CONFIGURATION', 'SIP_SCANNER_FAILED', 'SIP_TELEMETRY_FAILED',
                       'SIP_LOCK_LOST', 'SIP_LOCK_RELEASE_FAILED', 'SIP_STORAGE_FAILED', 'SIP_STORAGE_UNCONFIGURED',
                       'SIP_SNAPSHOT_INVALID', 'PREPARATION_INCOMPLETE', 'PREPARATION_BUDGET', 'PREPARATION_FAILED',
@@ -157,6 +189,10 @@ def platform_enrich_probe(root, *, cron_name="enrich"):
                     (details['error'] in safe_codes or re.fullmatch(r'SCHWAB_HTTP_[1-5]\d{2}', details['error'])) else None,
                 })
                 output['cron_runs'][-1].update(opening_context(details))
+                if type(details.get('publication_slo_met')) is bool:
+                    output['cron_runs'][-1]['publication_slo_met'] = details['publication_slo_met']
+                if 'classificationExcluded' in counts:
+                    output['cron_runs'][-1]['classification_excluded_scope'] = 'outside_sip_stock_universe'
         if cron_name == 'cc-sip-scanner':
             return output
         rows = read('trade_enrichments', {'order': 'enriched_at.desc', 'limit': '1', 'select': 'enriched_at'})
@@ -248,6 +284,7 @@ def main(root, review):
             result.update({"endpoint_ready": True, "checked_at": now.isoformat(),
                            "version": payload.get("version"), "session_date": payload.get("session_date"),
                            "generated_at": payload.get("generated_at"), "coverage": payload.get("coverage")})
+            result['exclusion_manifest'] = exclusion_manifest(payload)
             try:
                 result["fresh_selected_symbols"] = scanner.parse_snapshot(payload, now)
                 result["valid_and_fresh_now"] = True

@@ -9,6 +9,24 @@ collector = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(collector)
 
 
+def test_exclusion_manifest_retains_reasons_without_exporting_unknown_fields():
+    payload = {'session_date': '2026-10-15', 'generated_at': '2026-10-15T13:38:38.490Z',
+               'exclusions': [{'symbol': 'AMD', 'reason': 'DAILY_LIQUIDITY', 'secret': 'never-export'}]}
+    result = collector.exclusion_manifest(payload)
+    assert result['valid'] is True
+    assert result['rows'] == [{'symbol': 'AMD', 'reason': 'DAILY_LIQUIDITY', 'session_date': '2026-10-15',
+                              'recorded_at': '2026-10-15T13:38:38.490Z', 'timestamp_basis': 'snapshot_publication'}]
+    assert 'never-export' not in json.dumps(result)
+
+
+def test_exclusion_manifest_refuses_unknown_reasons_instead_of_leaking_them():
+    payload = {'session_date': '2026-10-15', 'generated_at': '2026-10-15T13:38:38Z',
+               'exclusions': [{'symbol': 'AMD', 'reason': 'private-provider-body'}]}
+    result = collector.exclusion_manifest(payload)
+    assert result['valid'] is False
+    assert 'private-provider-body' not in json.dumps(result)
+
+
 def test_probe_exports_counts_and_status_without_credentials_or_raw_error_details(tmp_path, monkeypatch):
     secret = "secret-never-in-the-report"
     (tmp_path / '.env.local').write_text(f'SUPABASE_URL=https://example.supabase.co\nSUPABASE_SERVICE_ROLE_KEY={secret}\n')

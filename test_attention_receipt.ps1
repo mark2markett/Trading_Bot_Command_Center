@@ -1,12 +1,13 @@
 param([string]$NativeRepo='/workspace/scratch/cc-dashboard-wrap-20261007')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ATTENTION-RECEIPT.ps1')
-$release=[pscustomobject]@{base=('a'*40);tip=('b'*40);upgrade_base=('c'*40);fleet_base=('d'*40);expiration_base=('e'*40)}
+$release=[pscustomobject]@{base=('a'*40);tip=('b'*40);upgrade_base=('c'*40);fleet_base=('d'*40);expiration_base=('e'*40);paused_sip_base=('f'*40)}
 if ((Get-AttentionInstallBase $release 'before') -ne $release.base) { throw 'Wrong clean base.' }
 if ((Get-AttentionInstallBase $release 'installed') -ne $release.tip) { throw 'Wrong repeat base.' }
 if ((Get-AttentionInstallBase $release 'upgrade_from_attention') -ne $release.upgrade_base) { throw 'Wrong upgrade base.' }
 if ((Get-AttentionInstallBase $release 'upgrade_from_fleet') -ne $release.fleet_base) { throw 'Wrong fleet upgrade base.' }
 if ((Get-AttentionInstallBase $release 'upgrade_from_expiration') -ne $release.expiration_base) { throw 'Wrong expiration upgrade base.' }
+if ((Get-AttentionInstallBase $release 'upgrade_from_paused_sip') -ne $release.paused_sip_base) { throw 'Wrong paused-SIP upgrade base.' }
 $refused=$false
 try { Get-AttentionInstallBase $release 'step_1' | Out-Null } catch { $refused=$true }
 if (!$refused) { throw 'Partial source cannot become an upgrade base.' }

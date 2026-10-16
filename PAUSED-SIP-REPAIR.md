@@ -33,12 +33,14 @@ tabs, backs up the index, replaces it atomically and verifies served bytes. Fail
 Press **Ctrl+F5** afterward. The expected legacy-server result is **Monitor unavailable / Automatic recovery not enabled**.
 That is an honest report of missing runtime functionality, not a claim that monitoring or SIP has recovered.
 The command prints an index backup receipt. Old assets are retained; no financial rollback is ever performed.
+The display uses the neutral label "Shared paper account valuation." It does not infer book-midpoint pricing or
+commission treatment from an older server's `source=paper` field. A label is not proof that the runtime repair is installed.
 
 ## Runtime repair for subsequent sessions
 
 The checksummed `attention-native.bundle` includes the two fixes and all preceding reliability/expiration changes.
 Use INSTALL-ATTENTION-HANDLING.ps1 under its existing maintenance guards only when flat, orders resolved and bot commands
-idle. It recognizes all three preceding complete releases. Existing positions must not be closed just to install.
+idle. It recognizes preceding complete releases. Existing positions must not be closed just to install.
 See ATTENTION-RELEASE.md and EXPIRATION-CONTEXT-RELEASE.md for the guarded command and recovery receipt procedure.
 
 Verify the actual pause reasons before considering any audited rearm. A risk pause, four-loss guard, failed scanner and

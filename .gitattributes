@@ -103,3 +103,5 @@
 /test_attention_release.py text eol=lf
 /test_attention_receipt.ps1 text eol=lf
 /ATTENTION-RELEASE.md text eol=lf
+/AUDIT-SPY-PAPER.py text eol=lf
+/FLEET-RELIABILITY-RELEASE.md text eol=lf

@@ -45,6 +45,18 @@ def backup(runtime,target):
         finally: src.close(); dst.close()
 
 
+def rollback_safe(runtime):
+    """Old source cannot correctly value new fee-bearing history. Never restore a DB."""
+    source=Path(runtime)/'cc.db'
+    with sqlite3.connect(source.resolve(strict=True).as_uri()+'?mode=ro',uri=True,timeout=2) as db:
+        db.execute('BEGIN')
+        if db.execute('SELECT 1 FROM fills WHERE commission IS NOT NULL AND commission != 0 LIMIT 1').fetchone():
+            raise ValueError('New accounting events exist; old accounting source rollback requires a reviewed forward-compatible repair')
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='trade_costs'").fetchone():
+            if db.execute('SELECT 1 FROM trade_costs WHERE commission != 0 LIMIT 1').fetchone():
+                raise ValueError('New accounting allocation exists; old accounting rollback is unsafe')
+
+
 def activate(repo,runtime):
     repo,runtime=Path(repo),Path(runtime)
     sys.path[:0]=[str(repo/'cc_server'),str(repo/'cc_sdk')]
@@ -68,7 +80,7 @@ def activate(repo,runtime):
 
 if __name__=='__main__':
     try:
-        {'backup':backup,'extract':extract,'activate':activate}[sys.argv[1]](*sys.argv[2:])
+        {'backup':backup,'extract':extract,'activate':activate,'rollback-safe':rollback_safe}[sys.argv[1]](*sys.argv[2:])
     except Exception as exc:
         print(type(exc).__name__+': '+str(exc))
         raise SystemExit(1)

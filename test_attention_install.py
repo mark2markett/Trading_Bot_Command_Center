@@ -59,6 +59,22 @@ def test_consistent_backup_preserves_source_and_copies_operations(tmp_path):
     for name in ('cc.db','incidents.db'):
         with sqlite3.connect(tmp_path/'backup'/name) as db: assert db.execute('SELECT value FROM proof').fetchone()[0]=='kept'
 
+def test_rollback_refuses_old_accounting_after_new_fee_events(tmp_path):
+    import sqlite3
+    m=package(); runtime=tmp_path/'var'; runtime.mkdir()
+    with sqlite3.connect(runtime/'cc.db') as db:
+        db.executescript('CREATE TABLE fills(commission REAL);CREATE TABLE trade_costs(commission REAL);')
+        db.execute('INSERT INTO fills VALUES(.455)')
+    with pytest.raises(ValueError,match='accounting'):
+        m.rollback_safe(runtime)
+
+def test_rollback_accepts_verified_zero_cost_legacy_accounting(tmp_path):
+    import sqlite3
+    m=package(); runtime=tmp_path/'var'; runtime.mkdir()
+    with sqlite3.connect(runtime/'cc.db') as db:
+        db.execute('CREATE TABLE fills(commission REAL)');db.execute('INSERT INTO fills VALUES(0)')
+    m.rollback_safe(runtime)
+
 def test_rollback_metadata_is_written_before_any_source_change():
     text=(ROOT/'INSTALL-ATTENTION-HANDLING.ps1').read_text()
     before=text.index('git -c gc.auto=0 cherry-pick $commit')

@@ -79,8 +79,10 @@ try {
     if ($oldMonitor -and ($oldMonitor.State -eq 'Running' -or !(Test-AttentionMonitorOwnership $oldMonitor $Repo $power))) { throw 'Monitor is running or has unexpected ownership; retry after it finishes.' }
     if ($Rollback) {
         if (!$Receipt) { throw 'Rollback requires the printed receipt directory.' }
+        & $python -B (Join-Path $PSScriptRoot 'ATTENTION-PACKAGE.py') rollback-safe $runtime
+        if ($LASTEXITCODE -ne 0) { throw 'Accounting history prevents an old-source rollback; keep the current ledger and request a reviewed forward-compatible repair.' }
         $saved=Get-Content -LiteralPath (Join-Path $Receipt 'receipt.json') -Raw | ConvertFrom-Json
-        if ($preflight.source -ne 'installed' -and $preflight.source -ne 'before' -and $preflight.source -notlike 'step_*') { throw 'Unknown rollback source stage.' }
+        if ($preflight.source -ne 'installed' -and $preflight.source -ne 'before' -and $preflight.source -ne 'upgrade_from_attention' -and $preflight.source -notlike 'step_*') { throw 'Unknown rollback source stage.' }
         $commits=@(Get-AttentionRollbackCommits $saved $Repo)
         if ($oldMonitor) { Disable-ScheduledTask -TaskName 'CC health monitor' | Out-Null }
         if ($server.State -eq 'Running') { Stop-ScheduledTask -TaskName 'CC server' } elseif ($server.State -ne 'Ready') { throw 'Server task state is ambiguous.' }; $restart=$true
@@ -113,6 +115,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Could not import reviewed source.' }
     $actual=(git rev-parse test/attention-native).Trim()
     if ($actual -ne $release.tip) { throw 'Unexpected native release head.' }
+    $installBase=Get-AttentionInstallBase $release $preflight.source
     $paths=@(git diff --name-only $release.base $release.tip)
     $allowed=@($release.stages.installed.PSObject.Properties.Name)
     if ($paths.Count -ne $allowed.Count -or @($paths | Where-Object { $_ -notin $allowed }).Count -ne 0) { throw 'Source exceeds reviewed allowlist.' }
@@ -136,7 +139,7 @@ try {
         for ($i=0;$i -lt 15;$i++) { if (!(Get-NetTCPConnection -LocalPort 8585 -State Listen -ErrorAction SilentlyContinue)) { break }; Start-Sleep -Seconds 1 }
         if (Get-NetTCPConnection -LocalPort 8585 -State Listen -ErrorAction SilentlyContinue) { throw 'Server port is still occupied; no process was forced to stop.' }
         Assert-Preflight | Out-Null
-        foreach ($commit in @(git rev-list --reverse ($release.base+'..'+$release.tip))) {
+        foreach ($commit in @(git rev-list --reverse ($installBase+'..'+$release.tip))) {
             if ((git rev-parse HEAD).Trim() -ne $expectedHead) { throw 'Source head changed during installation; preserve the receipt.' }
             Save-AttentionReceipt -Repo $Repo -Backup $backup -Before $before -PendingCommit $commit
             git -c gc.auto=0 cherry-pick $commit

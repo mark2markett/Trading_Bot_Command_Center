@@ -1,12 +1,24 @@
 # Automatic attention handling — October 15
 
+The October 15 reliability update also validates account book marks, retains redacted quote provenance,
+settles new daily paper fills/fees idempotently, shows the fleet entry pause and simulated-stop semantics,
+and includes a read-only SPY reconciliation audit plus isolated research gates. Existing financial history
+is retained; no control or strategy parameter is reset. A previous fully installed attention version is a
+recognized upgrade base; unknown/partial source still requires its receipt-based recovery.
+
+Rollback to older accounting source is refused after fee-bearing history or cost allocations exist. Keep
+the current ledger and use a reviewed forward-compatible fix; never restore an old financial database.
+The strict flat/idle installation guard remains. An open SPY holding must not be closed just to install.
+Windows execution, actual notification receipt, current broker/SPCX evidence and future clean sessions
+remain operator verification steps; cloud tests alone cannot certify live trading readiness.
+
 This release adds one-minute incident handling to the existing Windows monitor and dashboard. Unknown issues
 receive a recorded request for review and sanitized evidence. The only repair is starting the exact enabled,
 stopped Command Center server task; its persisted cooldown is 30 minutes. Bots, orders, risk controls, capital,
 and scanner deadlines are unchanged. Acknowledgment does not resolve an issue.
 
-Run after bot commands finish, after 16:15 ET or before 09:20 ET. The installer refuses open positions or unresolved
-orders except the already verified normal pending daily SPY paper BUY MOC. It does not cancel/settle that order.
+Run after bot commands finish, after 16:15 ET or before 09:20 ET. This accounting update refuses all open positions
+and unresolved orders, including a normal pending daily SPY paper BUY MOC. It does not cancel or settle orders.
 It stages the native tests before installation, preserves unrelated owner files, backs up state consistently,
 records rollback metadata before mutation, installs an observation-only worker first, and enables limited recovery
 only after two coherent observations if `-Activate` is supplied. The current Windows account must remain signed

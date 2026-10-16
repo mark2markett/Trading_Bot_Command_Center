@@ -28,6 +28,14 @@ def test_real_attention_bundle_install_repeat_and_rollback_preserve_runtime(tmp_
     before={str(p):p.read_bytes() for p in paths}
     spec=importlib.util.spec_from_file_location('attention_gate',HERE/'ATTENTION-PREFLIGHT.py')
     m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    if pending:
+        # This release changes the daily broker/settlement path. Unlike the
+        # earlier dashboard-only release, even a normal pending MOC must wait.
+        with pytest.raises(ValueError,match='Unresolved orders remain'):
+            m.check(root,AFTER)
+        assert all(p.read_bytes()==before[str(p)] for p in paths)
+        assert all((root/name).read_bytes()==value for name,value in owner.items())
+        return
     original=m.check(root,AFTER)
     assert original['source']=='before'
     git(root,'bundle','verify',str(HERE/'attention-native.bundle'))
@@ -64,3 +72,25 @@ def test_partial_install_receipt_stage_can_be_reverted(tmp_path,monkeypatch,pref
     git(root,'revert','--no-edit',*reversed(commits))
     assert m.check(root,AFTER)['source']=='before'
     assert (root/'var/cc.db').read_bytes()==before
+
+
+def test_previous_complete_attention_release_upgrades_without_reapplying_old_commits(tmp_path, monkeypatch):
+    monkeypatch.delenv('CC_VAR',raising=False)
+    release=json.loads((HERE/'ATTENTION-NATIVE-SOURCE.json').read_text())
+    root=tmp_path/'upgrade'
+    git(tmp_path,'clone','--no-hardlinks','--no-checkout',str(NATIVE),str(root))
+    git(root,'config','user.name','Upgrade rehearsal');git(root,'config','user.email','upgrade@example.invalid')
+    git(root,'checkout','-b','feat/options-m7',release['upgrade_base'])
+    (root/'var').mkdir()
+    with sqlite3.connect(root/'var/cc.db') as db:
+        db.executescript('CREATE TABLE bots(id TEXT,mode TEXT);CREATE TABLE positions(qty INTEGER);CREATE TABLE orders(id INTEGER PRIMARY KEY,status TEXT);CREATE TABLE fills(order_id INTEGER);')
+        db.executemany('INSERT INTO bots VALUES(?,?)',[(b,'paper') for b in gate.BOTS])
+    spec=importlib.util.spec_from_file_location('upgrade_gate',HERE/'ATTENTION-PREFLIGHT.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+    before=(root/'var/cc.db').read_bytes()
+    assert m.check(root,AFTER)['source']=='upgrade_from_attention'
+    commits=git(root,'rev-list','--reverse',release['upgrade_base']+'..'+release['tip']).splitlines()
+    for commit in commits: git(root,'cherry-pick',commit)
+    assert m.check(root,AFTER)['source']=='installed'
+    assert (root/'var/cc.db').read_bytes()==before
+    git(root,'revert','--no-edit',*reversed(commits))
+    assert m.check(root,AFTER)['source']=='upgrade_from_attention'

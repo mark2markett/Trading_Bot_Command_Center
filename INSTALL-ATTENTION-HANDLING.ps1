@@ -82,7 +82,7 @@ try {
         & $python -B (Join-Path $PSScriptRoot 'ATTENTION-PACKAGE.py') rollback-safe $runtime
         if ($LASTEXITCODE -ne 0) { throw 'Accounting history prevents an old-source rollback; keep the current ledger and request a reviewed forward-compatible repair.' }
         $saved=Get-Content -LiteralPath (Join-Path $Receipt 'receipt.json') -Raw | ConvertFrom-Json
-        if ($preflight.source -ne 'installed' -and $preflight.source -ne 'before' -and $preflight.source -ne 'upgrade_from_attention' -and $preflight.source -ne 'upgrade_from_fleet' -and $preflight.source -notlike 'step_*') { throw 'Unknown rollback source stage.' }
+        if ($preflight.source -ne 'installed' -and $preflight.source -ne 'before' -and $preflight.source -ne 'upgrade_from_attention' -and $preflight.source -ne 'upgrade_from_fleet' -and $preflight.source -ne 'upgrade_from_expiration' -and $preflight.source -notlike 'step_*') { throw 'Unknown rollback source stage.' }
         $commits=@(Get-AttentionRollbackCommits $saved $Repo)
         if ($oldMonitor) { Disable-ScheduledTask -TaskName 'CC health monitor' | Out-Null }
         if ($server.State -eq 'Running') { Stop-ScheduledTask -TaskName 'CC server' } elseif ($server.State -ne 'Ready') { throw 'Server task state is ambiguous.' }; $restart=$true

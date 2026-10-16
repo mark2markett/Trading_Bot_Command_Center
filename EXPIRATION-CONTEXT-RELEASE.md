@@ -3,6 +3,7 @@
 New bot decisions record expiration and market observations. This is observation-only: no strategy, sizing, stop,
 entry cutoff, contract selection, execution pricing or risk-control policy changes. The frozen SPY strategy stays intact.
 The package includes the preceding fleet reliability and attention repairs.
+The subsequent pause/scanner repair is included; PAUSED-SIP-REPAIR.md provides the display-only path while a holding is open.
 
 ## What is recorded
 

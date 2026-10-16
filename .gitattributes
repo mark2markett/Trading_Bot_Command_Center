@@ -106,3 +106,7 @@
 /AUDIT-SPY-PAPER.py text eol=lf
 /FLEET-RELIABILITY-RELEASE.md text eol=lf
 /EXPIRATION-CONTEXT-RELEASE.md text eol=lf
+/PAUSED-SIP-REPAIR.md text eol=lf
+/APPLY-ATTENTION-DISPLAY.py text eol=lf
+/APPLY-ATTENTION-DISPLAY.ps1 text eol=lf
+/test_attention_display.py text eol=lf

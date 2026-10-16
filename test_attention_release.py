@@ -74,7 +74,8 @@ def test_partial_install_receipt_stage_can_be_reverted(tmp_path,monkeypatch,pref
     assert (root/'var/cc.db').read_bytes()==before
 
 
-@pytest.mark.parametrize('base_key,stage', [('upgrade_base','upgrade_from_attention'), ('fleet_base','upgrade_from_fleet')])
+@pytest.mark.parametrize('base_key,stage', [('upgrade_base','upgrade_from_attention'), ('fleet_base','upgrade_from_fleet'),
+                                         ('expiration_base','upgrade_from_expiration')])
 def test_previous_complete_attention_release_upgrades_without_reapplying_old_commits(tmp_path, monkeypatch, base_key, stage):
     monkeypatch.delenv('CC_VAR',raising=False)
     release=json.loads((HERE/'ATTENTION-NATIVE-SOURCE.json').read_text())

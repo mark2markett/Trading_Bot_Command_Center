@@ -2,7 +2,8 @@
 
 The October 16 update adds observation-only expiration/volatility context and descriptive research cohorts.
 See [EXPIRATION-CONTEXT-RELEASE.md](EXPIRATION-CONTEXT-RELEASE.md) for its scope and installation checks. The current
-bundle uses branch `feat/expiration-context-20261016` and includes the preceding complete reliability release.
+bundle uses branch `fix/paused-sip-observation-20261016` and includes the preceding complete reliability release.
+See PAUSED-SIP-REPAIR.md for the pause/scanner defect and a separate display-only update that can run with an open holding.
 
 The October 15 reliability update also validates account book marks, retains redacted quote provenance,
 settles new daily paper fills/fees idempotently, shows the fleet entry pause and simulated-stop semantics,

@@ -1,7 +1,7 @@
 # Fleet reliability repair — October 15
 
 Native reliability source: `fix/fleet-reliability-20261015`; the current checksummed bundle extends it on
-`feat/expiration-context-20261016` with the observation-only update in EXPIRATION-CONTEXT-RELEASE.md.
+`fix/paused-sip-observation-20261016` with the updates in EXPIRATION-CONTEXT-RELEASE.md and PAUSED-SIP-REPAIR.md.
 Platform source: https://github.com/mark2markett/m2m-platform/pull/1309 (owner merge and deployed SHA verification required).
 
 The release validates account quote books and stores redacted provenance, makes new SPY paper settlements

@@ -110,3 +110,4 @@
 /APPLY-ATTENTION-DISPLAY.py text eol=lf
 /APPLY-ATTENTION-DISPLAY.ps1 text eol=lf
 /test_attention_display.py text eol=lf
+/POSITION-MONITOR-RELEASE.md text eol=lf

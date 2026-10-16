@@ -1,8 +1,12 @@
 # Automatic attention handling — October 15
 
+The latest update adds separate 30-second position observations and clear quote/check freshness on bot details.
+See [POSITION-MONITOR-RELEASE.md](POSITION-MONITOR-RELEASE.md). The current bundle branch is
+`fix/position-monitor-20261016`; the runtime observer needs the full guarded installation below.
+
 The October 16 update adds observation-only expiration/volatility context and descriptive research cohorts.
 See [EXPIRATION-CONTEXT-RELEASE.md](EXPIRATION-CONTEXT-RELEASE.md) for its scope and installation checks. The current
-bundle uses branch `fix/paused-sip-observation-20261016` and includes the preceding complete reliability release.
+bundle includes the preceding complete reliability release.
 See PAUSED-SIP-REPAIR.md for the pause/scanner defect and a separate display-only update that can run with an open holding.
 
 The October 15 reliability update also validates account book marks, retains redacted quote provenance,

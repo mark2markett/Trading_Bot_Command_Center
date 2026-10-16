@@ -7,6 +7,7 @@ function Get-AttentionInstallBase {
         'upgrade_from_fleet' { $Release.fleet_base }
         'upgrade_from_expiration' { $Release.expiration_base }
         'upgrade_from_paused_sip' { $Release.paused_sip_base }
+        'upgrade_from_display_label' { $Release.display_label_base }
         default { throw 'Unknown or partial source stage; preserve the existing rollback receipt.' }
     }
     if ($base -notmatch '^[a-f0-9]{40}$') { throw 'Invalid reviewed installation base.' }

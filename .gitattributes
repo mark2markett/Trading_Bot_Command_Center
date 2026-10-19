@@ -149,3 +149,8 @@
 /test_activity_dashboard_install.py text eol=lf
 /test_activity_dashboard.ps1 text eol=lf
 /activity-dashboard-source.bundle -text
+/APPLY-TRADING-OVERVIEW.py text eol=lf
+/APPLY-TRADING-OVERVIEW.ps1 text eol=lf
+/test_trading_overview.py text eol=lf
+/test_trading_overview.ps1 text eol=lf
+/TRADING-OVERVIEW.md text eol=lf

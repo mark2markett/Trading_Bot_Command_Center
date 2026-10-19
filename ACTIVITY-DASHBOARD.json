@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "native_source_commit": "ceee920ecbfcb0d94596934692982a121729c1b4",
+  "compatible_base": "379ea4666995dcbe3da5746b887de1f4d3b9575d",
+  "scope": "Read-only activity API and dashboard; no bot, SDK, financial schema, control, limit or schedule edits",
+  "archive_sha256": "82511de5e7270588f34633c8b9acbbb2f1a22b3a6acc00bdaa7211907baed65e",
+  "files": {
+    "cc_server/cc_server/activity.py": "116bc0aa311ffb2075ade9c2f5d357ce258f838e4d2cdd4618c89ad6013a76a7",
+    "cc_server/cc_server/api.py": "a2884249befbfd53b0e9d411620b25f83b8ae3053c2c5c256521ce2d54b37642",
+    "cc_web/dist/assets/index-9fy8CYzV.css": "58cd36870243d2e392cfc6bf6f5378e3323cbf6425ae43faa98f1a811a25c64a",
+    "cc_web/dist/assets/index-Kbb1SWp9.js": "e714622cb5f022da65a477d943bf14f04375dc11a320ebbab8e6f295bf92993f",
+    "cc_web/dist/favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
+    "cc_web/dist/icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
+    "cc_web/dist/index.html": "f8298a97c39e0d42a74df0b10d55fe0f32625a0ca4234b144e5037f3c9744ba6"
+  },
+  "compatible": {
+    "cc_server/cc_server/api.py": "a133b88bd276e7c9ebd85351c98e7a3de3c1f501acd783d444aaf44237ed28ae",
+    "cc_server/cc_server/db.py": "8c38fed72d88afbd93f2c862c5a09df3416ba9f56a4e8839069fb8b7a3b8984b",
+    "cc_server/cc_server/main.py": "4aae4d37a0a7ee997c74122f597e8938d5404618c243c24f132c29eeedbe0541",
+    "cc_sdk/cc_sdk/ledger.py": "a2cf782fee9777244cd1302d45e0ed99e9f83eec918f13a1a1d89058e57fc76a",
+    "cc_sdk/cc_sdk/control.py": "1e5bf0472f8c4d75c547c722444b34b8aa96351fc280cfce6d8a695ebbad952c",
+    "cc_sdk/cc_sdk/options.py": "48052c134b6c0cda0dd28dddf5ad5e66351a2b9567a974d4fa47772ef32785d7",
+    "cc_sdk/cc_sdk/schema.sql": "420f23b7ee4f2ceb5e397815ab7dce7c560fbd1e36b5320f16d6e99749bdbbc8",
+    "cc_server/cc_server/activity.py": null
+  }
+}

@@ -103,5 +103,9 @@
     "bots/spy_mr_bot/broker.py": "2dd6bab02de42813914368d32ece2aebeca22829c98d564318c0a1a52abf81be",
     "bots/spy_mr_bot/cc.py": "7e0332cad05ee87039fcb5c11facb3e5430261e992c37d3d94fff10c45b1ddb8",
     "bots/spy_mr_bot/strategy.py": "294a8d6e99f6ef01c4a6a52bd7406e43c0a177dc47b52775a18d50b7739a2f93"
+  },
+  "activity_overlay": {
+    "cc_server/cc_server/api.py": "a2884249befbfd53b0e9d411620b25f83b8ae3053c2c5c256521ce2d54b37642",
+    "cc_server/cc_server/activity.py": "116bc0aa311ffb2075ade9c2f5d357ce258f838e4d2cdd4618c89ad6013a76a7"
   }
 }

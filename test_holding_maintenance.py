@@ -113,3 +113,17 @@ def test_actual_bundle_install_rollback_and_owner_files_with_holding(tmp_path,mo
     incompatible=root/'cc_sdk/cc_sdk/schema.sql'
     incompatible.write_bytes(incompatible.read_bytes()+b'\n-- local schema change\n')
     with pytest.raises(ValueError,match='SDK/schema'):m.check(root,NOW)
+
+
+def test_exact_activity_overlay_remains_compatible_without_accepting_other_edits(tmp_path):
+    import zipfile
+    m=module();manifest=json.loads((ROOT/'HOLDING-MAINTENANCE-SOURCE.json').read_text())
+    root=tmp_path/'native'
+    subprocess.run(['git','clone',str(ROOT/'holding-maintenance.bundle'),str(root)],check=True,capture_output=True)
+    subprocess.run(['git','checkout',manifest['tip']],cwd=root,check=True,capture_output=True)
+    with zipfile.ZipFile(ROOT/'activity-dashboard.zip') as z:
+        for name in manifest['activity_overlay']:(root/name).write_bytes(z.read(name))
+    assert m.source_stage(root,manifest)=='installed'
+    api=root/'cc_server/cc_server/api.py'
+    api.write_bytes(api.read_bytes()+b'\n# unreviewed edit\n')
+    with pytest.raises(ValueError):m.source_stage(root,manifest)

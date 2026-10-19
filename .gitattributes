@@ -139,3 +139,13 @@
 /DIAGNOSE-FLEET-BLOCKERS.py text eol=lf
 /test_fleet_blockers.py text eol=lf
 /test_fleet_completion.py text eol=lf
+
+/INSTALL-ACTIVITY-DASHBOARD.py text eol=lf
+/INSTALL-ACTIVITY-DASHBOARD.ps1 text eol=lf
+/ACTIVITY-DASHBOARD.json text eol=lf
+/activity-dashboard.zip -text
+/ACTIVITY-SHA256.txt text eol=lf
+/ACTIVITY-DASHBOARD.md text eol=lf
+/test_activity_dashboard_install.py text eol=lf
+/test_activity_dashboard.ps1 text eol=lf
+/activity-dashboard-source.bundle -text

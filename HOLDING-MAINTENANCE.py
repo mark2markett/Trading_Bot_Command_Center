@@ -120,11 +120,27 @@ def source_stage(root,manifest):
         path=root/name
         if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=expected:
             raise ValueError('Installed SDK/schema or daily bot source differs from the reviewed maintenance base: '+name)
-    for args in (['diff','--cached','--name-only'],['status','--porcelain','--untracked-files=all','--ignored=matching','--',*targets]):
-        result=subprocess.run(['git',*args],cwd=root,capture_output=True,check=True)
-        if result.stdout: raise ValueError("Repair source or Git index has local changes; preserve them")
     actual={name:hashlib.sha256((root/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest() if (root/name).is_file() else None for name in targets}
+    # A separately reviewed read-only API overlay leaves Git history and owner
+    # changes intact. Accept only the exact two-file published overlay, with all
+    # other installed source hashes still matching the original manifest.
+    overlay=manifest.get('activity_overlay',{})
+    overlay_ok=False
+    if set(overlay)=={'cc_server/cc_server/api.py','cc_server/cc_server/activity.py'}:
+        candidate=dict(actual)
+        candidate['cc_server/cc_server/api.py']=manifest['stages']['installed']['cc_server/cc_server/api.py']
+        overlay_ok=(candidate==manifest['stages']['installed'] and all(
+            (root/name).is_file() and not (root/name).is_symlink()
+            and (root/name).resolve().is_relative_to(root.resolve())
+            and hashlib.sha256((root/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()==expected
+            for name,expected in overlay.items()))
+    staged=subprocess.run(['git','diff','--cached','--name-only'],cwd=root,capture_output=True,check=True)
+    status=subprocess.run(['git','status','--porcelain','--untracked-files=all','--ignored=matching','--',*targets],cwd=root,capture_output=True,check=True)
+    changes=status.stdout.decode().splitlines()
+    if staged.stdout or (changes and not (overlay_ok and changes==[' M cc_server/cc_server/api.py'])):
+        raise ValueError("Repair source or Git index has local changes; preserve them")
     stage=next((key for key,value in manifest['stages'].items() if value==actual),None)
+    if stage is None and overlay_ok: stage='installed'
     if stage is None: raise ValueError("Unexpected maintenance source; preserve the checkout")
     return stage
 

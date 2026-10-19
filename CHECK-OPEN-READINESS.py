@@ -2,8 +2,10 @@
 from __future__ import annotations
 import argparse
 import json
+import os
 import sqlite3
 import urllib.request
+import urllib.error
 from datetime import datetime,timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -43,21 +45,46 @@ def assess(health,readiness,incidents,reports,now):
             'scope':'Stored observations only; no continuous broker protection or scanner readiness certification'}
 
 
+def verify_ledger_identity(health,expected):
+    reported=health.get('db')
+    if not isinstance(reported,str) or not reported.strip():
+        raise ValueError('API health response is missing its ledger path')
+    try:
+        # Resolve Windows case/junction/short-path spellings AND check the file.
+        # A hard link with a different canonical basename is unsafe for SQLite
+        # WAL because it can read a different -wal/-shm alongside the same db.
+        canonical=Path(reported).resolve(strict=True)
+        selected=Path(expected).resolve(strict=True)
+        matches=canonical==selected and os.path.samefile(canonical,selected)
+    except OSError as error:
+        raise ValueError('API ledger identity could not be verified: reported='+repr(reported)+
+                         ' expected='+str(expected)+' error='+type(error).__name__) from error
+    if not matches:
+        raise ValueError('API ledger does not match the selected repository: reported='+repr(reported)+' expected='+str(expected))
+
+
 def capture(root):
     root=Path(root).resolve(strict=True);payloads={};errors=[]
     for route in ('health','readiness','incidents'):
         try:
             request=urllib.request.Request('http://127.0.0.1:8585/api/'+route,headers={'Accept':'application/json'})
-            with urllib.request.urlopen(request,timeout=5) as response:
-                if response.status!=200:raise ValueError('Unexpected response')
-                value=json.loads(response.read(262144))
-                if not isinstance(value,dict):raise ValueError('Unexpected payload')
-                payloads[route]=value
+            for attempt in range(2 if route=='health' else 1):
+                try:
+                    with urllib.request.urlopen(request,timeout=5) as response:
+                        if response.status!=200:raise ValueError('Unexpected response')
+                        value=json.loads(response.read(262144))
+                        if not isinstance(value,dict):raise ValueError('Unexpected payload')
+                        payloads[route]=value
+                    break
+                except (TimeoutError,urllib.error.URLError) as error:
+                    timed_out=isinstance(error,TimeoutError) or isinstance(getattr(error,'reason',None),TimeoutError)
+                    if route!='health' or attempt or not timed_out:raise
         except Exception as error:
             payloads[route]={};errors.append(route+':'+type(error).__name__)
     health=payloads['health']
-    if Path(health.get('db','')).resolve()!=(root/'var/cc.db').resolve():
-        raise ValueError('API ledger does not match the selected repository')
+    if not health:
+        raise ValueError('API health could not be read; '+('; '.join(errors) or 'empty health response'))
+    verify_ledger_identity(health,root/'var/cc.db')
     with sqlite3.connect((root/'var/cc.db').resolve(strict=True).as_uri()+'?mode=ro',uri=True,timeout=3) as db:
         db.execute('PRAGMA query_only=ON')
         row=db.execute("SELECT value_json FROM kv WHERE key='position_monitor'").fetchone()

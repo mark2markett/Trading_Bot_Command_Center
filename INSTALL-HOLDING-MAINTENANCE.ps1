@@ -15,10 +15,12 @@ $expected=$null; $preservationFile=$null; $restart=$false; $restoreMonitor=$fals
 $stage=Join-Path $env:TEMP ('cc-holding-tests-'+[guid]::NewGuid().ToString('N'))
 function Import-HoldingBundle {
     param([string]$Bundle,[string]$Branch,[string]$Expected)
+    if ($Expected -notmatch '^[a-f0-9]{40}$') { throw 'Invalid maintenance source identity.' }
+    $importRef='refs/test/holding-maintenance-'+$Expected
     # gc.auto=0 alone does not suppress incremental maintenance on recent Git.
-    git -c maintenance.auto=false -c gc.auto=0 -c gc.autoPackLimit=0 -c fetch.writeCommitGraph=false fetch --no-auto-maintenance $Bundle ($Branch+':refs/test/holding-maintenance')
+    git -c maintenance.auto=false -c gc.auto=0 -c gc.autoPackLimit=0 -c fetch.writeCommitGraph=false fetch --no-auto-maintenance $Bundle ($Branch+':'+$importRef)
     if ($LASTEXITCODE -ne 0) { throw 'Native bundle import failed; source was not changed.' }
-    $actual=(git rev-parse refs/test/holding-maintenance).Trim()
+    $actual=(git rev-parse $importRef).Trim()
     if ($LASTEXITCODE -ne 0 -or $actual -ne $Expected) { throw 'Wrong maintenance source head.' }
 }
 function Export-HoldingSource {

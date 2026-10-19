@@ -1,7 +1,7 @@
 {
   "base": "dbea1523259e8c7cafd6579ed083eb40da0a7c28",
-  "tip": "fe1d2e57fcbf605ef5a42ed1883c43cfdc765ecf",
-  "branch": "fix/holding-safe-monitor",
+  "tip": "379ea4666995dcbe3da5746b887de1f4d3b9575d",
+  "branch": "fix/holding-safe-monitor-win",
   "scope": "operational maintenance; no daily bot/accounting/schema/feed changes",
   "stages": {
     "before": {
@@ -69,7 +69,7 @@
       "cc_server/tests/test_incident_api.py": "486db4dbb9150f81c2880bcc00d1d6cae65f647bebcb466e0b6c6073a6b0552f",
       "cc_server/tests/test_incident_classification.py": "79d1d343fbb9ef78a72d80af12db1cdeb14785442d8fee4c2adf26c4eb22d6eb",
       "cc_server/tests/test_incident_diagnostics.py": "3b44a8e1730f698cee2b36ca1639cd99ee6a9e17dafc9f117da81c18537f1c5e",
-      "cc_server/tests/test_incident_ingestion.py": "d9a9c2fd4fa3d1b36eff4c69b498118e02c8fdf16e6c27e9a40e72ccf022932e",
+      "cc_server/tests/test_incident_ingestion.py": "8fa7d587ab009a840c5073e7b2c04962ab26a184e61eba92998b74e5b040ff96",
       "cc_server/tests/test_incident_notifications.py": "f3bfd0968f97b1ccb8b7217264d2b42934d5e0998fa646fbc1e09dc94f60da35",
       "cc_server/tests/test_incident_store.py": "0b890b2f966f22743dd52ad0bab0880e3af9d33fadacf8ceff97bf1b11240b70",
       "cc_server/tests/test_incident_worker.py": "5a02577f769bb4d7c01f0c239d2c9a677ca946477bd1648206ad0b738909d524",

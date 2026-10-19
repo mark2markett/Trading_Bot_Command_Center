@@ -32,9 +32,13 @@ try {
         git -c gc.auto=0 fetch $bundle reviewed:refs/test/control 2>&1 | Out-Null
         $prior=@(Get-Content -LiteralPath $control | ConvertFrom-Json | Where-Object { $_.event -eq 'child_start' -and $_.argv -contains 'maintenance' })
         if (!$prior.Count) { throw 'Control failed to demonstrate automatic Git maintenance.' }
+        $legacy=(git rev-parse HEAD).Trim()
+        git update-ref refs/test/holding-maintenance $legacy
         $trace=Join-Path $root fixed.trace
         $env:GIT_TRACE2_EVENT=$trace
         Import-HoldingBundle -Bundle $bundle -Branch reviewed -Expected $tip
+        if ((git rev-parse refs/test/holding-maintenance).Trim() -ne $legacy) { throw 'Import overwrote a prior release reference.' }
+        if ((git rev-parse ('refs/test/holding-maintenance-'+$tip)).Trim() -ne $tip) { throw 'Imported release has no commit-specific reference.' }
         $unexpected=@(Get-Content -LiteralPath $trace | ConvertFrom-Json | Where-Object { $_.event -eq 'child_start' -and ($_.argv -contains 'maintenance' -or $_.argv -contains 'gc' -or $_.argv -contains 'repack') })
         if ($unexpected.Count) { throw 'Patched import still launches housekeeping.' }
         $tokens=$null;$errors=$null

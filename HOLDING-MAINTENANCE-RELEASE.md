@@ -6,7 +6,7 @@ had previously been installed. An hours-old daily strategy heartbeat is separate
 
 This maintenance package installs the reviewed incident worker and 30-second position observer and repairs
 read-only SIP scanner selection while entries are paused. It starts from native base dbea152 (equivalent
-source to the reported Windows release); its single native commit is fe1d2e57fcbf605ef5a42ed1883c43cfdc765ecf.
+source to the reported Windows release); its single native commit is 379ea4666995dcbe3da5746b887de1f4d3b9575d.
 It does not install the separate accounting/settlement/book-quote changes from the full reliability bundle.
 Eleven unchanged SDK/schema/feed/calendar/daily-bot files are verified before mutation. Unknown source refuses.
 
@@ -15,7 +15,7 @@ Eleven unchanged SDK/schema/feed/calendar/daily-bot files are verified before mu
 Run the following before 09:20 ET or after 16:15 ET, with bot commands idle. The helper accepts exactly five
 paper bots, a retained fleet entry pause and either a flat account or one existing long SPY paper holding
 with one matching recorded simulated stop and matching daily state/paper files. It refuses any other open
-position or unresolved order. It stages 103 server/intraday tests, then restarts only the exact owned server.
+position or unresolved order. It stages 104 server/intraday tests, then restarts only the exact owned server.
 A single Git cherry-pick retains unrelated owner files. Runtime checks protect all orders, fills, positions,
 trades, costs, control records/flags and existing equity-history prefixes. No historical financial DB is restored.
 
@@ -53,7 +53,7 @@ keeps its flat-account guard and will refuse this distinct source until a review
 
 PR https://github.com/mark2markett/m2m-platform/pull/1309 was integrated with current main 36bbc915 on October 18 ET;
 the sole changelog conflict preserves both histories. New reviewed head: 1c7b21add0e8cbcd991806c0f6f9b77220b21089.
-The main integration requires new current-head checks and independent review. Mark performs the owner merge;
+Current-head quality, delivery-acceptance and codex-review checks passed; the independent review approved with concerns and no blockers. Mark performs the owner merge;
 never use --admin, fabricate a status or reuse old-head approvals. Production readiness still needs a READY
 deployment containing the merged commit; a push or public health 200 does not establish that deployment.
 
@@ -70,8 +70,8 @@ parameters. Holding a position is not itself authority to lift an entry pause or
 
 ## Verification
 
-- Native complete Python suite: 329 passed; one existing Starlette deprecation warning.
-- Windows-staged scope: 103 passed (SDK tests before server tests, matching normal project ordering).
+- Native complete Python suite: 330 passed; one existing Starlette deprecation warning.
+- Windows-staged scope: 104 passed (SDK tests before server tests, matching normal project ordering).
 - Dashboard: 21 tests passed; TypeScript and production Vite build passed.
 - Real local server: 30.003-second observer interval; protected financial records and pause unchanged.
 - Release gate: actual Git CRLF install/revert preserves holding, stop, owner dev file and fingerprint.
@@ -95,5 +95,18 @@ The subsequent Windows attempt exposed a separate native-argument issue in Git a
 The corrected staging helper supplies --output and its filename as separate arguments, checks both archive
 and tar extraction exit codes, and stages the unchanged reviewed commit. Its regression executes the original
 PowerShell expression against real Git to reproduce the failure, then tests actual export/extraction into
-paths with spaces and all 103 staged native checks through the same PowerShell helper. Both stopped Windows
+paths with spaces and all 104 staged native checks through the same PowerShell helper. Both stopped Windows
 attempts occurred before source mutation or server restart; no financial state was rolled back or reset.
+
+## Windows SQLite fixture correction
+
+The next Windows attempt passed 102 tests but stopped at the replaced-ledger test because its fixture
+retained a SQLite connection. A transaction context commits but does not close the handle; Windows then
+refuses database renaming. Fixture connections now close explicitly, and a new regression retains both
+writer and reader connections to verify they are closed before replacement. No test is skipped and all
+original ledger-replacement assertions remain. This attempt also stopped before source installation.
+
+The bundle contains one complete maintenance commit based on the same original baseline, so installation
+still applies the entire repair with one cherry-pick. Imports use commit-specific references and preserve
+references from previous attempts. The only native difference from the earlier maintenance release is
+the test-fixture correction and its regression; production behavior and protected-source hashes are unchanged.

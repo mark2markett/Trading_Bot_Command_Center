@@ -122,3 +122,8 @@
 /HOLDING-MAINTENANCE-SHA256.txt text eol=lf
 /holding-maintenance.bundle -text
 /test_holding_git.ps1 text eol=lf
+/REPAIR-WEEKDAY-TASKS.ps1 text eol=lf
+/WEEKDAY-TASK-HELPERS.ps1 text eol=lf
+/test_weekday_tasks.ps1 text eol=lf
+/WEEKDAY-TASKS-RELEASE.md text eol=lf
+/WEEKDAY-TASKS-SHA256.txt text eol=lf

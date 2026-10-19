@@ -1,3 +1,7 @@
+## Confirmed weekend scheduling repair
+
+The six bot tasks were confirmed to run daily, including Sunday. [WEEKDAY-TASKS-RELEASE.md](WEEKDAY-TASKS-RELEASE.md) describes the guarded Monday-Friday trigger repair. It retains Eastern clock times, uses future start dates to prevent catch-up runs, and preserves actions, settings, positions and risk pauses.
+
 ## October 19 opening maintenance
 
 For the existing open SPY paper holding, use [HOLDING-MAINTENANCE-RELEASE.md](HOLDING-MAINTENANCE-RELEASE.md).

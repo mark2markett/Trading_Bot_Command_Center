@@ -64,7 +64,7 @@ public health endpoint does not prove those. The incomplete-opening exception ex
 completeness resumes October 19. Real missing provider bars may still block SIP and require provider diagnosis;
 no data is filled, deadline extended, stock silently omitted or late strategy session replayed by this package.
 
-The existing 130-share SPY stop at 731.12 is a simulated daily-bar record evaluated at reconciliation, not
+An existing SPY paper stop is a simulated daily-bar record evaluated at reconciliation, not
 continuous broker protection. The daily SPY strategy remains 09:45 reconcile / 15:50 decide, with existing
 parameters. Holding a position is not itself authority to lift an entry pause or change a stop.
 
@@ -90,3 +90,10 @@ and source-only rollback also disable automatic maintenance. No global Git setti
 file is deleted. A real Git trace regression reproduces the old child-maintenance invocation and verifies
 that the corrected import launches no housekeeping and rejects an unexpected head. Run a fresh release;
 do not delete locked indexes or repeatedly answer unlink prompts.
+
+The subsequent Windows attempt exposed a separate native-argument issue in Git archive's output option.
+The corrected staging helper supplies --output and its filename as separate arguments, checks both archive
+and tar extraction exit codes, and stages the unchanged reviewed commit. Its regression executes the original
+PowerShell expression against real Git to reproduce the failure, then tests actual export/extraction into
+paths with spaces and all 103 staged native checks through the same PowerShell helper. Both stopped Windows
+attempts occurred before source mutation or server restart; no financial state was rolled back or reset.

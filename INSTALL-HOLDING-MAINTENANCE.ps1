@@ -21,6 +21,29 @@ function Import-HoldingBundle {
     $actual=(git rev-parse refs/test/holding-maintenance).Trim()
     if ($LASTEXITCODE -ne 0 -or $actual -ne $Expected) { throw 'Wrong maintenance source head.' }
 }
+function Export-HoldingSource {
+    param([string]$Stage,[string]$Commit)
+    $archive=Join-Path $Stage 'source.tar'
+    # Keep the option and native argument separate; PowerShell does not combine
+    # --output=(Join-Path ...) into one argument as a shell would.
+    git archive --format=tar --output $archive $Commit
+    if ($LASTEXITCODE -ne 0) { throw 'Source staging failed; installed source unchanged.' }
+    & tar -xf $archive -C $Stage
+    if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed; installed source unchanged.' }
+}
+function Test-HoldingSource {
+    param([string]$Stage,[string]$Python)
+    $oldCCVar=$env:CC_VAR
+    Push-Location $Stage
+    try {
+        $env:CC_VAR=Join-Path $Stage 'isolated-var'
+        & $Python -B -m pytest -q cc_sdk/tests/test_intraday.py cc_server/tests --basetemp (Join-Path $Stage 'pytest-temp') -o ('cache_dir='+(Join-Path $Stage 'pytest-cache'))
+        if ($LASTEXITCODE -ne 0) { throw 'Staged regression failed; installed source unchanged.' }
+    } finally {
+        Pop-Location
+        if ($null -eq $oldCCVar) { Remove-Item Env:\CC_VAR -ErrorAction SilentlyContinue } else { $env:CC_VAR=$oldCCVar }
+    }
+}
 function Assert-Idle {
     if (Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
         $_.Name -match '^python(w)?\.exe$' -and ([string]::IsNullOrWhiteSpace($_.CommandLine) -or $_.CommandLine -match 'bot\.py\b')
@@ -124,20 +147,8 @@ try {
     $allowed=@($release.stages.installed.PSObject.Properties.Name)
     if ($LASTEXITCODE -ne 0 -or $paths.Count -ne $allowed.Count -or @($paths | Where-Object { $_ -notin $allowed }).Count -ne 0) { throw 'Maintenance source exceeds reviewed allowlist.' }
     New-Item -ItemType Directory -Path $stage | Out-Null
-    git archive --format=tar --output=(Join-Path $stage 'source.tar') $release.tip
-    if ($LASTEXITCODE -ne 0) { throw 'Source staging failed.' }
-    & tar -xf (Join-Path $stage 'source.tar') -C $stage
-    if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed.' }
-    $oldCCVar=$env:CC_VAR
-    Push-Location $stage
-    try {
-        $env:CC_VAR=Join-Path $stage 'isolated-var'
-        & $python -B -m pytest -q cc_sdk/tests/test_intraday.py cc_server/tests --basetemp (Join-Path $stage 'pytest-temp') -o ('cache_dir='+(Join-Path $stage 'pytest-cache'))
-        if ($LASTEXITCODE -ne 0) { throw 'Staged regression failed; installed source unchanged.' }
-    } finally {
-        Pop-Location
-        if ($null -eq $oldCCVar) { Remove-Item Env:\CC_VAR -ErrorAction SilentlyContinue } else { $env:CC_VAR=$oldCCVar }
-    }
+    Export-HoldingSource -Stage $stage -Commit $release.tip
+    Test-HoldingSource -Stage $stage -Python $python
     Assert-State | Out-Null
     $backup=Join-Path $runtime ('backups\holding-maintenance-'+(Get-Date -Format 'yyyyMMdd-HHmmss-ffff'))
     New-Item -ItemType Directory -Path $backup | Out-Null

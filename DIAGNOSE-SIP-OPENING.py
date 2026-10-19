@@ -128,6 +128,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo', type=Path, default=Path.cwd())
     parser.add_argument('--date', default=datetime.now(ET).date().isoformat())
+    parser.add_argument('--symbols', nargs='+', metavar='SYMBOL',
+                        help='Probe only these classified stocks (at most ten); bypasses cache-based target selection.')
     args = parser.parse_args()
     start = opening_start(args.date)
     now = datetime.now(ET)
@@ -141,6 +143,9 @@ def main():
     code = 0
     try:
         fallback = json.loads(Path(__file__).with_name('SIP-DIAGNOSTIC-UNIVERSE.json').read_text())['symbols']
+        requested = list(dict.fromkeys(args.symbols or []))
+        if requested and (len(requested) > 10 or any(symbol not in fallback for symbol in requested)):
+            parser.error('--symbols requires at most ten stocks from the classified diagnostic universe.')
         with httpx.Client(timeout=12, follow_redirects=False) as client:
             stage = 'server_health'
             health = client.get('http://127.0.0.1:8585/api/health')
@@ -155,10 +160,14 @@ def main():
             stage = 'feed_authentication'
             feed.c.access_token()  # Existing SDK OAuth handling; never export the returned token.
             stage = 'preparation_cache'
-            try:
-                symbols, evidence = targets(values, client, args.date, fallback)
-            except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
-                symbols, evidence = fallback, {'source': 'classified_universe', 'cache_error_type': type(error).__name__}
+            if requested:
+                symbols, evidence = requested, {'source': 'operator_targeted_probe',
+                                               'note': 'Requested stocks only; current preparation eligibility is not asserted.'}
+            else:
+                try:
+                    symbols, evidence = targets(values, client, args.date, fallback)
+                except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+                    symbols, evidence = fallback, {'source': 'classified_universe', 'cache_error_type': type(error).__name__}
             output['selection'] = evidence
             output['target_count'] = len(symbols)
             deadline = time.monotonic() + 600
@@ -175,7 +184,7 @@ def main():
                 stage = 'market_data'
                 result = inspect_symbol(symbol, start, read)
                 output['results'].append(result)
-                if result['finding'] != 'COMPLETE_NOW':
+                if requested or result['finding'] != 'COMPLETE_NOW':
                     print(json.dumps(result), flush=True)
                 if len(output['results']) % 25 == 0:
                     print(f"Checked {len(output['results'])}/{len(symbols)} stocks", flush=True)

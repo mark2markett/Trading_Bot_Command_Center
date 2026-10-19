@@ -141,8 +141,8 @@ def test_failed_http_stage_is_recorded_without_url_or_credentials(tmp_path, monk
     assert 'secret-never-in-report' not in json.dumps(report)
 
 
-@pytest.mark.parametrize('provider_status', [200, 404])
-def test_full_probe_uses_shared_auth_and_identifies_market_errors(tmp_path, monkeypatch, provider_status):
+@pytest.mark.parametrize('provider_status,targeted', [(200, False), (404, False), (200, True)])
+def test_full_probe_uses_shared_auth_and_identifies_market_errors(tmp_path, monkeypatch, provider_status, targeted):
     from cc_sdk import schwab_feed
     class AfterClose(datetime):
         @classmethod
@@ -150,7 +150,10 @@ def test_full_probe_uses_shared_auth_and_identifies_market_errors(tmp_path, monk
             return cls(2026, 10, 8, 17, 0, tzinfo=probe.ET)
     monkeypatch.setattr(probe, 'datetime', AfterClose)
     monkeypatch.setattr(Path, 'home', lambda: tmp_path)
-    monkeypatch.setattr(sys, 'argv', ['probe', '--repo', str(tmp_path), '--date', '2026-10-08'])
+    argv = ['probe', '--repo', str(tmp_path), '--date', '2026-10-08']
+    if targeted:
+        argv += ['--symbols', 'BBY', 'CHTR', 'SHW', 'BBY']
+    monkeypatch.setattr(sys, 'argv', argv)
     monkeypatch.setattr(schwab_feed, 'REPO_ROOT', tmp_path)
     for key, value in {
         'SCHWAB_CLIENT_ID': 'fixture-id', 'SCHWAB_CLIENT_SECRET': 'fixture-client-secret',
@@ -165,6 +168,7 @@ def test_full_probe_uses_shared_auth_and_identifies_market_errors(tmp_path, monk
         connection.execute('CREATE TABLE positions(bot_id TEXT,qty REAL)')
     before = ledger.read_bytes()
     start = probe.opening_start('2026-10-08')
+    provider_symbols = []
     def handler(request):
         if request.url.host == '127.0.0.1':
             return httpx.Response(200, json={'db': str(ledger)})
@@ -179,7 +183,9 @@ def test_full_probe_uses_shared_auth_and_identifies_market_errors(tmp_path, monk
             return httpx.Response(200, json={'result': [None]})
         if request.url.path == '/v1/oauth/token':
             return httpx.Response(200, json={'access_token': 'a'*40, 'expires_in': 1800})
-        return httpx.Response(provider_status, json=bars(start, range(5)))
+        provider_symbols.append(request.url.params['symbol'])
+        offsets = [0, 1, 3, 4] if targeted and request.url.params['symbol'] == 'CHTR' else range(5)
+        return httpx.Response(provider_status, json=bars(start, offsets))
     original = httpx.Client
     def client(**kwargs):
         if kwargs.get('transport') is None:
@@ -191,8 +197,31 @@ def test_full_probe_uses_shared_auth_and_identifies_market_errors(tmp_path, monk
     assert report['authentication'] == 'shared_state'
     if provider_status == 200:
         assert report['scan_complete'] and report['results'][0]['finding'] == 'COMPLETE_NOW'
+        if targeted:
+            assert provider_symbols == ['BBY', 'CHTR', 'CHTR', 'SHW']
+            assert report['target_count'] == 3
+            assert report['selection']['source'] == 'operator_targeted_probe'
+            assert report['results'][1]['finding'] == 'OPENING_DATA_STILL_INCOMPLETE'
+            assert report['results'][1]['wider_request_window']['missing_minutes'] == ['09:32']
     else:
         assert not report['scan_complete'] and report['failed_stage'] == 'market_data'
         assert report['http_status'] == 404 and report['failed_symbol'] == 'NVDA'
     assert ledger.read_bytes() == before
     assert 'fixture-client-secret' not in json.dumps(report)
+
+
+@pytest.mark.parametrize('symbols', [['NOTREAL'], json.loads(
+    Path(__file__).with_name('SIP-DIAGNOSTIC-UNIVERSE.json').read_text())['symbols'][:11]])
+def test_targeted_probe_rejects_unknown_or_excessive_targets_before_network(tmp_path, monkeypatch, symbols):
+    class AfterClose(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 19, 17, 0, tzinfo=probe.ET)
+    monkeypatch.setattr(probe, 'datetime', AfterClose)
+    monkeypatch.setattr(sys, 'argv', ['probe', '--repo', str(tmp_path), '--symbols', *symbols])
+    def unexpected_network(**kwargs):
+        pytest.fail('Invalid targets must not open a network client')
+    monkeypatch.setattr(httpx, 'Client', unexpected_network)
+    with pytest.raises(SystemExit) as error:
+        probe.main()
+    assert error.value.code == 2

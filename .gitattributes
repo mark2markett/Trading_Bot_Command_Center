@@ -135,3 +135,7 @@
 /FLEET-RESUME-SHA256.txt text eol=lf
 /test_fleet_paper_resume.py text eol=lf
 /test_fleet_resume.ps1 text eol=lf
+/COMPLETE-FLEET-RELEASE.ps1 text eol=lf
+/DIAGNOSE-FLEET-BLOCKERS.py text eol=lf
+/test_fleet_blockers.py text eol=lf
+/test_fleet_completion.py text eol=lf

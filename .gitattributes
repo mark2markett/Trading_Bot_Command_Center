@@ -128,3 +128,10 @@
 /WEEKDAY-TASKS-RELEASE.md text eol=lf
 /WEEKDAY-TASKS-SHA256.txt text eol=lf
 /CHECK-WEEKDAY-TASKS.ps1 text eol=lf
+/RESUME-FLEET-PAPER.ps1 text eol=lf
+/FLEET-RESUME-HELPERS.ps1 text eol=lf
+/FLEET-PAPER-RESUME.py text eol=lf
+/FLEET-RESUME-RELEASE.md text eol=lf
+/FLEET-RESUME-SHA256.txt text eol=lf
+/test_fleet_paper_resume.py text eol=lf
+/test_fleet_resume.ps1 text eol=lf

@@ -50,3 +50,22 @@ fleet/SIP pauses, change the daily SPY simulated stop into broker protection, co
 channels, acknowledge old incidents, merge platform PR 1309 or certify live scanner publication. Fresh actual
 prices and the Monday 09:35-09:39 authenticated publication/native selection remain required. The old broad
 scripts/install_tasks.ps1 recreates daily triggers; re-check schedules if that legacy installer is run again.
+
+## Execution-limit readback correction and resuming a partial update
+
+A Windows application stopped at ExecutionTimeLimit readback after updating the first task. The actual
+Windows before/after duration strings remain to be collected. Independently, a regression reproduced a
+false mismatch between PT72H and P3D, which are equal durations. Readback now compares fixed day/time ISO
+durations by value; it still rejects genuine changes such as 72 hours becoming one hour. Calendar months
+and years are not approximated. Default limits and every existing task setting remain protected.
+
+CHECK-WEEKDAY-TASKS.ps1 -Receipt '<original receipt directory>' publishes the small read-only comparison
+of the first two original/current trigger and task limits, actions, principals and settings. It prints no
+credentials and makes no task, source, trade or control changes.
+
+Use REPAIR-WEEKDAY-TASKS.ps1 -Apply -ResumeReceipt '<original receipt directory>' to continue a partial apply.
+Before any additional update, it verifies all six current definitions against the original receipt, including
+the task already on weekdays. Equivalent duration formatting is accepted; a real difference stops with the
+expected and observed property values. The remaining five tasks are updated only if those checks pass.
+Unknown command-line switches are rejected. Additional tests cover canonical Windows-style duration
+serialization, refusal of genuine limit changes and receipt-verified partial-apply recovery.

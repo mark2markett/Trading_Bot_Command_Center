@@ -28,7 +28,12 @@ try {
     Assert-WeekdayTaskResult -Before $plan -After $installed -Mode weekly
     New-WeekdayTaskTrigger -Plan $plan -Mode daily | Out-Null
     if (!$script:parameters.Daily -or $script:parameters.DaysInterval -ne 1) { throw 'Daily rollback does not restore the original interval.' }
-    $checks=4
+    $canonical=Get-WeekdayTaskPlan -Xml ($weekly.Replace('<Enabled>true</Enabled><ScheduleByWeek>','<Enabled>true</Enabled><ExecutionTimeLimit>P3D</ExecutionTimeLimit><ScheduleByWeek>')) -Name $plan.Name -Repo $Repo
+    Assert-WeekdayTaskResult -Before $plan -After $canonical -Mode weekly
+    $different=Get-WeekdayTaskPlan -Xml ($weekly.Replace('<Enabled>true</Enabled><ScheduleByWeek>','<Enabled>true</Enabled><ExecutionTimeLimit>PT1H</ExecutionTimeLimit><ScheduleByWeek>')) -Name $plan.Name -Repo $Repo
+    $refused=$false;try { Assert-WeekdayTaskResult -Before $plan -After $different -Mode weekly } catch { $refused=$true }
+    if (!$refused) { throw 'A genuine execution limit change was accepted.' }
+    $checks=6
     foreach ($bad in @(
         $xml.Replace('bot.py reconcile','bot.py reconcile -Command bad'),
         $xml.Replace('spy_mr_bot</WorkingDirectory>','other</WorkingDirectory>'),
@@ -90,6 +95,7 @@ try {
             $node=$calendar.SelectSingleNode('t:'+$property,$ns)
             if(!$node) { $node=$doc.CreateElement($property,$doc.DocumentElement.NamespaceURI);$calendar.AppendChild($node) | Out-Null }
             $node.InnerText=if($Trigger.$property){$Trigger.$property}elseif($property -eq 'RandomDelay'){'PT0S'}else{'PT72H'}
+            $node.InnerText=[Xml.XmlConvert]::ToString([Xml.XmlConvert]::ToTimeSpan($node.InnerText))
         }
 
         $old=$calendar.SelectSingleNode('t:ScheduleByDay|t:ScheduleByWeek',$ns);$calendar.RemoveChild($old) | Out-Null
@@ -126,6 +132,20 @@ try {
     if(!$report.ok -or $report.changed -ne 5 -or $script:setCount -ne 25) { throw 'Same-receipt retry could not complete a partial rollback.' };$checks++
     $report=Invoke-WeekdayTaskRepair -Repo $Repo -ToolRoot $PSScriptRoot -Apply -Rollback -Receipt $again.receipt
     if($report.applied -or $script:setCount -ne 25) { throw 'Completed partial rollback cannot be repeated safely.' };$checks++
+    # Resume a partial apply only after comparing it with its original receipt.
+    $script:failAt=$script:setCount+2;$refused=$false
+    try { Invoke-WeekdayTaskRepair -Repo $Repo -ToolRoot $PSScriptRoot -Apply | Out-Null } catch { $refused=$true }
+    if(!$refused) { throw 'Partial-apply fixture did not stop.' }
+    $script:failAt=0
+    $partialReceipt=(Get-ChildItem -LiteralPath (Join-Path $Repo 'var/backups') -Directory | Sort-Object CreationTimeUtc | Select-Object -Last 1).FullName
+    $firstName='CC bot gap_go_bot session';$firstXml=$script:definitions[$firstName]
+    $script:definitions[$firstName]=$firstXml.Replace('<ExecutionTimeLimit>P3D</ExecutionTimeLimit>','<ExecutionTimeLimit>PT1H</ExecutionTimeLimit>')
+    $beforeResume=$script:setCount;$refused=$false
+    try { Invoke-WeekdayTaskRepair -Repo $Repo -ToolRoot $PSScriptRoot -Apply -ResumeReceipt $partialReceipt | Out-Null } catch { $refused=$true }
+    if(!$refused -or $script:setCount -ne $beforeResume) { throw 'Resume ignored a genuine limit change in the already-updated task.' };$checks++
+    $script:definitions[$firstName]=$firstXml
+    $report=Invoke-WeekdayTaskRepair -Repo $Repo -ToolRoot $PSScriptRoot -Apply -ResumeReceipt $partialReceipt
+    if(!$report.ok -or $report.changed -ne 5) { throw 'Receipt-verified partial apply did not resume remaining five tasks.' };$checks++
     $baselineSetCount=$script:setCount
     foreach($fault in @('running','process','timezone','ownership')) {
         $script:running=($fault -eq 'running');$script:badProcess=($fault -eq 'process');$script:zone=if($fault -eq 'timezone'){'UTC'}else{'Eastern Standard Time'}

@@ -21,6 +21,14 @@ function Get-WeekdayNodeText {
     if ($null -eq $value) { return $Default }
     return $value.InnerText
 }
+function Convert-WeekdayDuration {
+    param([string]$Value)
+    # Compare day/time durations by value. Do not approximate calendar years/months.
+    if ($Value -match '^P(?=\d|T)(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$') {
+        return [System.Xml.XmlConvert]::ToString([System.Xml.XmlConvert]::ToTimeSpan($Value))
+    }
+    return $Value
+}
 function Get-WeekdayTaskPlan {
     param([string]$Xml,[string]$Name,[string]$Repo)
     $spec=Get-WeekdayTaskNames
@@ -57,7 +65,7 @@ function Get-WeekdayTaskPlan {
     $enabledText=Get-WeekdayNodeText $tr 't:Enabled' $ns 'true'
     if ($enabledText -notin @('true','false')) { throw 'Invalid trigger enabled state.' }
     $delay=Get-WeekdayNodeText $tr 't:RandomDelay' $ns 'PT0S'
-    if ($delay -notin @('','PT0S')) { throw 'Randomized bot start requires separate review.' }
+    if ($delay -ne '' -and (Convert-WeekdayDuration $delay) -ne 'PT0S') { throw 'Randomized bot start requires separate review.' }
     $daily=$tr.SelectSingleNode('t:ScheduleByDay',$ns);$weekly=$tr.SelectSingleNode('t:ScheduleByWeek',$ns)
     if ($daily -and !$weekly -and (Get-WeekdayNodeText $daily 't:DaysInterval' $ns) -eq '1' -and $daily.ChildNodes.Count -eq 1) { $mode='daily' }
     elseif ($weekly -and !$daily) {
@@ -102,7 +110,9 @@ function Assert-WeekdayTaskResult {
     param($Before,$After,[ValidateSet('daily','weekly')][string]$Mode,[string]$ExpectedStart=$Before.Start)
     $expected=@{Name=$Before.Name;Mode=$Mode;Start=$ExpectedStart;ProtectedHash=$Before.ProtectedHash;Enabled=$Before.Enabled;TriggerId=$Before.TriggerId;ExecutionTimeLimit=$Before.ExecutionTimeLimit;RandomDelay=$Before.RandomDelay}
     foreach ($property in $expected.Keys) {
-        if ($After.$property -cne $expected[$property]) { throw ("Task readback differs at "+$property+"; preserve the receipt.") }
+        $observed=$After.$property;$wanted=$expected[$property]
+        if ($property -in @('ExecutionTimeLimit','RandomDelay')) { $observed=Convert-WeekdayDuration $observed;$wanted=Convert-WeekdayDuration $wanted }
+        if ($observed -cne $wanted) { throw ("Task readback differs at "+$property+": expected="+$wanted+", observed="+$observed+"; preserve the receipt.") }
     }
 }
 function Assert-WeekdayTasksIdle {
@@ -126,8 +136,10 @@ function Get-WeekdayFinancialState {
     return $value
 }
 function Invoke-WeekdayTaskRepair {
-    param([string]$Repo,[string]$ToolRoot,[switch]$Apply,[switch]$Rollback,[string]$Receipt)
+    [CmdletBinding()]
+    param([string]$Repo,[string]$ToolRoot,[switch]$Apply,[switch]$Rollback,[string]$Receipt,[string]$ResumeReceipt)
     if ((Get-TimeZone).Id -ne 'Eastern Standard Time') { throw 'Windows must use Eastern Standard Time for the existing local bot cadence.' }
+    if ($Rollback -and $ResumeReceipt) { throw 'Use either rollback or resume, not both.' }
     if ($Rollback -and (!$Apply -or !$Receipt)) { throw 'Rollback requires -Apply and the printed -Receipt directory.' }
     $names=Get-WeekdayTaskNames
     $actual=@(Get-ScheduledTask -TaskPath '\' -TaskName 'CC bot *' -ErrorAction Stop | Select-Object -ExpandProperty TaskName)
@@ -135,13 +147,14 @@ function Invoke-WeekdayTaskRepair {
     Assert-WeekdayTasksIdle
     $financial=Get-WeekdayFinancialState -Repo $Repo -ToolRoot $ToolRoot
     $originals=@{};$plans=@();$targets=@{};$starts=@{};$savedItems=@{};$rollbackStarts=@{};$readbacks=@{}
-    if ($Rollback) {
+    if ($Rollback -or $ResumeReceipt) {
+        if ($ResumeReceipt) { $Receipt=$ResumeReceipt }
         $Receipt=(Resolve-Path -LiteralPath $Receipt -ErrorAction Stop).Path
         $saved=Get-Content -LiteralPath (Join-Path $Receipt 'receipt.json') -Raw | ConvertFrom-Json
         if ($saved.version -ne 1 -or $saved.repo -ne $Repo -or $saved.tasks.Count -ne 6 -or
             @(Compare-Object @($names.Keys) @($saved.tasks.Name)).Count) { throw 'Receipt does not identify these six tasks and this repository.' }
         $progressPath=Join-Path $Receipt 'rollback-progress.json'
-        if (Test-Path -LiteralPath $progressPath) {
+        if ($Rollback -and (Test-Path -LiteralPath $progressPath)) {
             $progress=Get-Content -LiteralPath $progressPath -Raw | ConvertFrom-Json
             if ($progress.repo -ne $Repo -or $progress.version -ne 1) { throw 'Rollback progress is not for this repository.' }
             foreach ($entry in $progress.tasks) {
@@ -161,12 +174,12 @@ function Invoke-WeekdayTaskRepair {
         $xml=Export-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction Stop
         $plan=Get-WeekdayTaskPlan -Xml $xml -Name $name -Repo $Repo
         $plans+=,$plan;$readbacks[$name]=$plan
-        if ($Rollback) {
+        if ($Rollback -or $ResumeReceipt) {
             $target=$originals[$name]
             $record=$savedItems[$name]
             $expected=if ($plan.Mode -eq $record.AppliedMode) { $record.AppliedStart.Substring(9) } elseif ($plan.Mode -eq $target.Mode) { if ($rollbackStarts.ContainsKey($name)) { $rollbackStarts[$name] } else { $target.Start } } else { throw 'Unexpected current task schedule.' }
             Assert-WeekdayTaskResult -Before $target -After $plan -Mode $plan.Mode -ExpectedStart $expected
-            $targets[$name]=$target.Mode
+            $targets[$name]=if ($Rollback) { $target.Mode } else { 'weekly' }
         } else { $targets[$name]='weekly' }
         $starts[$name]=if ($plan.Mode -ne $targets[$name]) { Get-WeekdayFutureStart -Clock $names[$name][2] -Mode $targets[$name] } else { $plan.Start }
     }

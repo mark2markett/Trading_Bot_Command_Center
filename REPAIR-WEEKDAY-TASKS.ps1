@@ -1,6 +1,7 @@
+[CmdletBinding()]
 param(
     [string]$Repo='C:\Users\Administrator\trading_bots\command-center',
-    [switch]$Apply,[switch]$Rollback,[string]$Receipt
+    [switch]$Apply,[switch]$Rollback,[string]$Receipt,[string]$ResumeReceipt
 )
 $ErrorActionPreference='Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'This operator helper requires Windows Task Scheduler.' }
@@ -10,5 +11,5 @@ foreach ($line in Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WEEKDAY-TAS
     if ((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $Matches[2])).Hash -ne $Matches[1]) { throw 'Weekday repair checksum mismatch.' }
 }
 . (Join-Path $PSScriptRoot 'WEEKDAY-TASK-HELPERS.ps1')
-Invoke-WeekdayTaskRepair -Repo $Repo -ToolRoot $PSScriptRoot -Apply:$Apply -Rollback:$Rollback -Receipt $Receipt |
+Invoke-WeekdayTaskRepair -Repo $Repo -ToolRoot $PSScriptRoot -Apply:$Apply -Rollback:$Rollback -Receipt $Receipt -ResumeReceipt $ResumeReceipt |
     ConvertTo-Json -Depth 6

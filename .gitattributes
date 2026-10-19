@@ -127,3 +127,4 @@
 /test_weekday_tasks.ps1 text eol=lf
 /WEEKDAY-TASKS-RELEASE.md text eol=lf
 /WEEKDAY-TASKS-SHA256.txt text eol=lf
+/CHECK-WEEKDAY-TASKS.ps1 text eol=lf

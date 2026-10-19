@@ -111,3 +111,13 @@
 /APPLY-ATTENTION-DISPLAY.ps1 text eol=lf
 /test_attention_display.py text eol=lf
 /POSITION-MONITOR-RELEASE.md text eol=lf
+/HOLDING-MAINTENANCE.py text eol=lf
+/HOLDING-MAINTENANCE-SOURCE.json text eol=lf
+/INSTALL-HOLDING-MAINTENANCE.ps1 text eol=lf
+/HOLDING-MAINTENANCE-RELEASE.md text eol=lf
+/CHECK-OPEN-READINESS.py text eol=lf
+/test_holding_maintenance.py text eol=lf
+/test_holding_maintenance.ps1 text eol=lf
+/test_open_readiness.py text eol=lf
+/HOLDING-MAINTENANCE-SHA256.txt text eol=lf
+/holding-maintenance.bundle -text

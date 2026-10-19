@@ -1,3 +1,11 @@
+## October 19 opening maintenance
+
+For the existing open SPY paper holding, use [HOLDING-MAINTENANCE-RELEASE.md](HOLDING-MAINTENANCE-RELEASE.md).
+This separate operational repair installs 30-second position checks and one-minute incident handling,
+repairs scanner observation during entry pauses, and preserves the holding, simulated stop and risk pauses.
+The full accounting installer continues to require a flat account. Windows installation, reviewed platform
+merge/deployment and live opening evidence remain required before readiness can be established.
+
 # Current Command Center delivery
 
 ## October 13 after-hours release health

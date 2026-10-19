@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "native_source_commit": "cda0b8d637aa067ad97fb181ba14fc7aecb73985",
+  "native_source_commit": "c843780389c022b5f928f2754032905dcf1c2dc6",
   "compatible_base": "379ea4666995dcbe3da5746b887de1f4d3b9575d",
   "scope": "Read-only activity API and dashboard; no bot, SDK, financial schema, control, limit or schedule edits",
-  "archive_sha256": "5c61f7fad944a84458cf65173096bb210dd2f4a7a12dc4fdd65c35c2568aa6a9",
+  "archive_sha256": "5add8d59b1e25dfe769d56556db34cf4130f1480cfd8125407a2c44ce92ab751",
   "files": {
     "cc_server/cc_server/activity.py": "116bc0aa311ffb2075ade9c2f5d357ce258f838e4d2cdd4618c89ad6013a76a7",
     "cc_server/cc_server/api.py": "a2884249befbfd53b0e9d411620b25f83b8ae3053c2c5c256521ce2d54b37642",
-    "cc_web/dist/assets/index-CjAbTWfT.css": "be3274e2abad12c19480b6892a800380bb17408b02e596d2c222cfaf387a6042",
-    "cc_web/dist/assets/index-YwsffqCp.js": "43d293f9b1071bf010eeaf3ee7136326bd2d85c82773ac121fd67e63ffd305fb",
+    "cc_web/dist/assets/index-B5JmTuZE.js": "d315755bb054dcb530d1af0ab62b74148b10a44d25ca2a4f1e31692ad420d217",
+    "cc_web/dist/assets/index-CACxy7kt.css": "91e8ad825821b4ada2bb0fcd49a705361c36a0683d5a64747319a0a62b7fa5f7",
     "cc_web/dist/favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
     "cc_web/dist/icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
-    "cc_web/dist/index.html": "0261a84b2d60c2437be2f48e7d652df0d53825bb2037cc4b0184542d777f236f"
+    "cc_web/dist/index.html": "113d7b72b736d5493f3422b36ec62b3d19ec76c21b777c6e5e10004b69221f8b"
   },
   "compatible": {
     "cc_server/cc_server/api.py": "a133b88bd276e7c9ebd85351c98e7a3de3c1f501acd783d444aaf44237ed28ae",

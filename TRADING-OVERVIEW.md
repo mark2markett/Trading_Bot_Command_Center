@@ -22,3 +22,7 @@ The older full `INSTALL-ACTIVITY-DASHBOARD.ps1` remains available for compatible
 ## Verification
 
 The complete frontend test suite and TypeScript/production build pass. Tests include period reconciliation, stale marks, Eastern midnight, short share/option prices, profit/loss filtering, unknown order states and pagination. Chromium checks cover desktop/mobile layouts, overview-to-bot-to-history navigation, filters and history tabs without trading requests. Installer tests verify source/ledger/control preservation, API compatibility refusal, recovery, and PowerShell argument handling with spaces. PowerShell tests use mocked task APIs in PowerShell 7; actual owner-machine activation still requires its installer output.
+
+## Warning explanations
+
+A successful strategy report can coexist with degraded health: the existing risk monitor counts any rejected order in the past 24 hours. Bot cards now show a matching recorded rejection reason/time and the successful report separately. Failed reports expose captured data errors (including scanner errors); absent cause evidence remains explicitly unverified. Open P&L warnings show the last recorded quote time when it exceeds the 60-second freshness limit. This display update does not change the rolling warning policy or clear pauses.

@@ -121,3 +121,4 @@
 /test_open_readiness.py text eol=lf
 /HOLDING-MAINTENANCE-SHA256.txt text eol=lf
 /holding-maintenance.bundle -text
+/test_holding_git.ps1 text eol=lf

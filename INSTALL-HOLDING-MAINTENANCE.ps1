@@ -13,6 +13,14 @@ foreach ($line in Get-Content -LiteralPath (Join-Path $PSScriptRoot 'HOLDING-MAI
 $release=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'HOLDING-MAINTENANCE-SOURCE.json') -Raw | ConvertFrom-Json
 $expected=$null; $preservationFile=$null; $restart=$false; $restoreMonitor=$false; $lock=$null
 $stage=Join-Path $env:TEMP ('cc-holding-tests-'+[guid]::NewGuid().ToString('N'))
+function Import-HoldingBundle {
+    param([string]$Bundle,[string]$Branch,[string]$Expected)
+    # gc.auto=0 alone does not suppress incremental maintenance on recent Git.
+    git -c maintenance.auto=false -c gc.auto=0 -c gc.autoPackLimit=0 -c fetch.writeCommitGraph=false fetch --no-auto-maintenance $Bundle ($Branch+':refs/test/holding-maintenance')
+    if ($LASTEXITCODE -ne 0) { throw 'Native bundle import failed; source was not changed.' }
+    $actual=(git rev-parse refs/test/holding-maintenance).Trim()
+    if ($LASTEXITCODE -ne 0 -or $actual -ne $Expected) { throw 'Wrong maintenance source head.' }
+}
 function Assert-Idle {
     if (Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
         $_.Name -match '^python(w)?\.exe$' -and ([string]::IsNullOrWhiteSpace($_.CommandLine) -or $_.CommandLine -match 'bot\.py\b')
@@ -88,7 +96,7 @@ try {
             $actual=(git diff --binary ($commits[0]+'^') $commits[0]) -join "`n"
             $wanted=(git diff --binary $release.base $release.tip) -join "`n"
             if ($LASTEXITCODE -ne 0 -or $actual -cne $wanted) { throw 'Receipt commit differs from reviewed maintenance patch.' }
-            git revert --no-edit $commits[0]
+            git -c maintenance.auto=false -c gc.auto=0 -c gc.autoPackLimit=0 revert --no-edit $commits[0]
             if ($LASTEXITCODE -ne 0) { throw 'Rollback conflict; preserve checkout and receipt. No reset attempted.' }
         }
         foreach ($name in @('CC-MONITOR.py','CC-MONITOR.ps1','installed.json')) {
@@ -111,8 +119,7 @@ try {
     if (!$health.ok -or [IO.Path]::GetFullPath($health.db) -ne (Join-Path $runtime 'cc.db')) { throw 'Running server does not match the repository.' }
     git bundle verify (Join-Path $PSScriptRoot 'holding-maintenance.bundle')
     if ($LASTEXITCODE -ne 0) { throw 'Maintenance bundle invalid.' }
-    git -c gc.auto=0 fetch (Join-Path $PSScriptRoot 'holding-maintenance.bundle') ($release.branch+':refs/test/holding-maintenance')
-    if ($LASTEXITCODE -ne 0 -or (git rev-parse refs/test/holding-maintenance).Trim() -ne $release.tip) { throw 'Wrong maintenance source head.' }
+    Import-HoldingBundle -Bundle (Join-Path $PSScriptRoot 'holding-maintenance.bundle') -Branch $release.branch -Expected $release.tip
     $paths=@(git diff --name-only $release.base $release.tip)
     $allowed=@($release.stages.installed.PSObject.Properties.Name)
     if ($LASTEXITCODE -ne 0 -or $paths.Count -ne $allowed.Count -or @($paths | Where-Object { $_ -notin $allowed }).Count -ne 0) { throw 'Maintenance source exceeds reviewed allowlist.' }
@@ -158,7 +165,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Consistent ledger backup failed.' }
     $initial | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $backup 'preservation.json') -Encoding UTF8
     if ($initial.source -eq 'before') {
-        git -c gc.auto=0 cherry-pick $release.tip
+        git -c maintenance.auto=false -c gc.auto=0 -c gc.autoPackLimit=0 cherry-pick $release.tip
         if ($LASTEXITCODE -ne 0) { throw 'Source conflict; preserve receipt and checkout. Do not reset.' }
     }
     Save-AttentionReceipt -Repo $Repo -Backup $backup -Before $before

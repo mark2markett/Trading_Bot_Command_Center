@@ -79,3 +79,14 @@ parameters. Holding a position is not itself authority to lift an entry pause or
 - Platform full suite: 10077 passed, one expected failure, 14 skipped, 11 TODO; 223 focused tests and typecheck passed.
 - Independent review found no remaining major issue. Actual Windows Task Scheduler execution, delivery through
   configured external channels and live opening evidence remain operator verification, not cloud test claims.
+
+## Git housekeeping correction
+
+The first Windows attempt verified/imported the bundle, then recent Git started incremental housekeeping
+although gc.auto was zero. Locked pack-index files produced unlink retry prompts before staged tests,
+source installation or server restart. The corrected importer uses --no-auto-maintenance plus per-command
+maintenance.auto=false, gc.auto=0 and gc.autoPackLimit=0; fetch commit-graph writes are disabled. Cherry-pick
+and source-only rollback also disable automatic maintenance. No global Git setting is changed and no pack
+file is deleted. A real Git trace regression reproduces the old child-maintenance invocation and verifies
+that the corrected import launches no housekeeping and rejects an unexpected head. Run a fresh release;
+do not delete locked indexes or repeatedly answer unlink prompts.

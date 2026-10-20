@@ -13,7 +13,9 @@ import zipfile
 
 SOURCE = {'cc_server/cc_server/api.py', 'cc_server/cc_server/activity.py', 'cc_server/cc_server/risk_reporting.py',
           'cc_server/cc_server/riskd.py', 'cc_server/cc_server/account_quotes.py', 'cc_sdk/cc_sdk/polygon_options.py', 'cc_sdk/cc_sdk/control.py', 'cc_sdk/cc_sdk/risk.py',
-          'cc_sdk/cc_sdk/intraday.py', 'cc_sdk/cc_sdk/options_runner.py'}
+          'cc_sdk/cc_sdk/intraday.py', 'cc_sdk/cc_sdk/options_runner.py', 'cc_sdk/cc_sdk/ledger.py',
+          'cc_server/cc_server/main.py', 'cc_server/cc_server/request_ledger.py', 'cc_server/cc_server/position_monitor.py'}
+SOURCE |= {f'cc_server/cc_server/incidents/{name}.py' for name in ('models','observe','store','readback')}
 INDEX = 'cc_web/dist/index.html'
 
 def digest(value):

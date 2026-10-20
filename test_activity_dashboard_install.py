@@ -35,6 +35,11 @@ def fixture(tmp_path):
                                    'cc_server/cc_server/account_quotes.py':None, 'cc_sdk/cc_sdk/control.py':None, 'cc_sdk/cc_sdk/risk.py':None,
                                    'cc_sdk/cc_sdk/intraday.py':None, 'cc_sdk/cc_sdk/options_runner.py':None,
                                    'cc_sdk/cc_sdk/polygon_options.py':installer.normalized(b'# prior Polygon parser\n')})
+    for name in installer.SOURCE:
+        (repo/name).parent.mkdir(parents=True,exist_ok=True)
+        payload.setdefault(name,b'# reviewed runtime boundary\n')
+        manifest['compatible'].setdefault(name,None)
+        manifest['files'][name]=installer.digest(payload[name])
     write_package(package,manifest,payload)
     def fetcher(route):
         if route=='/api/health':return json.dumps({'ok':True,'db':str(repo/'var/cc.db')}).encode()

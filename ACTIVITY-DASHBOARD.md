@@ -30,3 +30,11 @@ The overlay now also includes SDK `control.py`, `risk.py` and the stock/options 
 ## Validation
 
 Native source commit and payload identities are in `ACTIVITY-DASHBOARD.json`; the complete source is retained in `activity-dashboard-source.bundle`. Tests cover read-only SQL, stock/option P&L, quote age and mixed time zones, partial/unknown order states, absent registrations, history pagination, preservation of shares/options/pauses, atomic recovery, task ownership and failed rollback. The exact packaged overlay also boots a real HTTP server against a synthetic paper ledger with an open holding; only external quotes are mocked. Production UI is also checked in Chromium at desktop and phone widths without trading requests. PowerShell wrapper tests run in PowerShell 7 with mocked Windows task APIs, including delayed task shutdown and failed candidate startup; actual Windows Task Scheduler behavior requires owner-machine verification.
+
+## Operational responsiveness correction (October 20)
+
+The overlay now includes the SDK ledger's read-only constructor, server request isolation
+and startup middleware, position report projection, and the incident models/observer/store/readback.
+The trading workspace is independent of alert-column height. Use `REPAIR-OPERATIONS.ps1`
+for the already installed options-only fleet, including when the current API is unresponsive.
+See `OPERATIONS-REPAIR.md` for exact recovery boundaries, retained controls and validation.

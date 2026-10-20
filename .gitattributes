@@ -170,3 +170,9 @@
 /OPTIONS-ONLY-SHA256.txt text eol=lf
 /test_options_only.ps1 text eol=lf
 /test_options_only_install.py text eol=lf
+/OPERATIONS-REPAIR.py text eol=lf
+/REPAIR-OPERATIONS.ps1 text eol=lf
+/OPERATIONS-REPAIR.md text eol=lf
+/OPERATIONS-SHA256.txt text eol=lf
+/test_operations_repair.py text eol=lf
+/test_operations_repair.ps1 text eol=lf

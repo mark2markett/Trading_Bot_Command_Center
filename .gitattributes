@@ -1,4 +1,5 @@
 # Keep checksummed dashboard payloads byte-identical on Windows checkouts.
+/test_activity_server_startup.py text eol=lf
 /APPLY-DASHBOARD-FIX.ps1 text eol=lf
 /DASHBOARD-FIX.md text eol=lf
 /DASHBOARD-RELEASE.json text eol=lf

@@ -19,20 +19,28 @@ function Get-OwnedActivityServer {
 }
 function Wait-ActivityPortClosed {
     for ($i=0;$i -lt 20;$i++) {
-        if (!(Get-NetTCPConnection -LocalPort 8585 -State Listen -ErrorAction SilentlyContinue)) { return }
+        $task=Get-OwnedActivityServer
+        if ($task.State -eq 'Ready' -and !(Get-NetTCPConnection -LocalPort 8585 -State Listen -ErrorAction SilentlyContinue)) { return }
         Start-Sleep -Seconds 1
     }
-    throw 'Server port remains occupied; no process forced to stop.'
+    throw 'Owned server task has not stopped or its port remains occupied; no process forced to stop.'
 }
 function Wait-ActivityHealth {
+    $lastIssue='No health response'
     for ($i=0;$i -lt 20;$i++) {
         try {
             $health=Invoke-RestMethod 'http://127.0.0.1:8585/api/health' -TimeoutSec 2
             if ($health.ok -and [IO.Path]::GetFullPath($health.db) -eq (Join-Path $Repo 'var\cc.db')) { return }
-        } catch { }
+            $lastIssue='Health response or ledger identity differs'
+        } catch { $lastIssue=$_.Exception.GetType().Name }
         Start-Sleep -Seconds 1
     }
-    throw 'Updated server health could not be verified.'
+    $taskState='unavailable';$taskResult='unavailable'
+    try {
+        $taskState=(Get-OwnedActivityServer).State
+        $taskResult=(Get-ScheduledTaskInfo -TaskName 'CC server' -TaskPath '\').LastTaskResult
+    } catch { }
+    throw ('Updated server health could not be verified (task='+$taskState+'; result='+$taskResult+'; request='+$lastIssue+').')
 }
 $lock=$null; $receipt=$null; $restoreMonitor=$false; $serverStopped=$false; $applyAttempted=$false
 try {

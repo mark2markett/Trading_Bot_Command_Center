@@ -21,12 +21,13 @@ def fixture(tmp_path):
     c=sqlite3.connect(repo/'var/cc.db')
     c.executescript('CREATE TABLE bots(id TEXT, mode TEXT); INSERT INTO bots VALUES("spy_mr","paper"); CREATE TABLE positions(symbol TEXT,qty INTEGER); INSERT INTO positions VALUES("SPY",130),("QQQ call long",2),("QQQ call short",-2);'+''.join('CREATE TABLE '+name+'(id INTEGER); INSERT INTO '+name+' VALUES(1);' for name in ('orders','fills','trades','limits','controls')))
     c.commit();c.close()
-    payload={'cc_server/cc_server/api.py':b'# new API\n','cc_server/cc_server/activity.py':b'# read only\n',installer.INDEX:b'new index','cc_web/dist/assets/activity.js':b'compiled activity'}
-    manifest={'compatible':{'cc_server/cc_server/api.py':installer.normalized(b'# original\n'),'cc_server/cc_server/activity.py':None},'files':{k:installer.digest(v) for k,v in payload.items()}}
+    payload={'cc_server/cc_server/api.py':b'# new API\n','cc_server/cc_server/activity.py':b'# read only\n','cc_server/cc_server/risk_reporting.py':b'# unknown valuation is not zero risk\n',installer.INDEX:b'new index','cc_web/dist/assets/activity.js':b'compiled activity'}
+    manifest={'compatible':{'cc_server/cc_server/api.py':installer.normalized(b'# original\n'),'cc_server/cc_server/activity.py':None,'cc_server/cc_server/risk_reporting.py':None},'files':{k:installer.digest(v) for k,v in payload.items()}}
     write_package(package,manifest,payload)
     def fetcher(route):
         if route=='/api/health':return json.dumps({'ok':True,'db':str(repo/'var/cc.db')}).encode()
         if route=='/api/activity':return b'{"bots":[],"summary":{},"quote_max_age_seconds":60}'
+        if route=='/api/risk':return b'{"drawdown":{"equity":null,"dd":null},"exposure":{"usd":null,"ratio":null}}'
         name=installer.INDEX if route=='/' else 'cc_web/dist'+route
         return (repo/name).read_bytes()
     return repo,package,payload,fetcher
@@ -55,6 +56,7 @@ def test_installs_and_verifies_preserving_shares_options_and_flags(tmp_path):
     assert (repo/installer.INDEX).read_bytes()==b'old index'
     assert (repo/'cc_server/cc_server/api.py').read_bytes()==b'# original\r\n'
     assert not (repo/'cc_server/cc_server/activity.py').exists()
+    assert not (repo/'cc_server/cc_server/risk_reporting.py').exists()
     assert protected(repo)==before
 
 
@@ -63,6 +65,22 @@ def test_refuses_unreviewed_source_before_runtime_changes(tmp_path):
     (repo/'cc_server/cc_server/api.py').write_text('# owner edit\n')
     with pytest.raises(ValueError,match='source differs'):installer.prepare(repo,package,fetcher)
     assert (repo/installer.INDEX).read_bytes()==b'old index'
+
+
+def test_new_reporting_module_never_overwrites_owner_content(tmp_path):
+    repo,package,payload,fetcher=fixture(tmp_path)
+    module=repo/'cc_server/cc_server/risk_reporting.py'
+    module.write_text('# owner module\n')
+    with pytest.raises(ValueError,match='source differs'):installer.prepare(repo,package,fetcher)
+    assert module.read_text()=='# owner module\n'
+
+
+def test_missing_source_compatibility_entry_is_refused(tmp_path):
+    repo,package,payload,fetcher=fixture(tmp_path)
+    manifest=json.loads((package/'ACTIVITY-DASHBOARD.json').read_text())
+    del manifest['compatible']['cc_server/cc_server/risk_reporting.py']
+    write_package(package,manifest,payload)
+    with pytest.raises(ValueError,match='compatibility'):installer.prepare(repo,package,fetcher)
 
 
 def test_wrong_server_identity_is_refused(tmp_path):
@@ -93,6 +111,14 @@ def test_stale_served_index_fails_verification_and_can_rollback(tmp_path):
     with pytest.raises(ValueError,match='Served dashboard differs'):installer.verify(repo,package,receipt,stale)
     installer.rollback(repo,package,receipt)
     assert (repo/installer.INDEX).read_bytes()==b'old index'
+
+
+def test_unavailable_risk_cannot_be_verified_as_a_measured_zero(tmp_path):
+    repo,package,payload,fetcher=fixture(tmp_path)
+    receipt=Path(installer.prepare(repo,package,fetcher)['receipt']);installer.apply(repo,package,receipt)
+    def misleading(route):
+        return b'{"drawdown":{"equity":null,"dd":0},"exposure":{"usd":100048,"ratio":0}}' if route=='/api/risk' else fetcher(route)
+    with pytest.raises(ValueError,match='Unavailable valuation'):installer.verify(repo,package,receipt,misleading)
 
 
 def test_corrupt_and_unsafe_package_refused(tmp_path):

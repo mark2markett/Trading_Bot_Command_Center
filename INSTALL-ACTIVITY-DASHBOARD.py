@@ -11,7 +11,7 @@ import urllib.request
 import uuid
 import zipfile
 
-SOURCE = {'cc_server/cc_server/api.py', 'cc_server/cc_server/activity.py'}
+SOURCE = {'cc_server/cc_server/api.py', 'cc_server/cc_server/activity.py', 'cc_server/cc_server/risk_reporting.py'}
 INDEX = 'cc_web/dist/index.html'
 
 def digest(value):
@@ -39,6 +39,8 @@ def safe_target(repo, name):
 
 def read_package(package):
     manifest = json.loads((package / 'ACTIVITY-DASHBOARD.json').read_text())
+    if not SOURCE.issubset(manifest['compatible']):
+        raise ValueError('Activity source compatibility manifest is incomplete')
     archive = package / 'activity-dashboard.zip'
     if digest(archive.read_bytes()) != manifest['archive_sha256']:
         raise ValueError('Activity archive checksum mismatch')
@@ -199,9 +201,17 @@ def verify(repo, package, receipt, fetcher=fetch):
     activity = json.loads(fetcher('/api/activity'))
     if activity.get('quote_max_age_seconds') != 60 or not isinstance(activity.get('bots'), list) or not isinstance(activity.get('summary'), dict):
         raise ValueError('Activity API verification failed')
+    risk = json.loads(fetcher('/api/risk'))
+    drawdown, exposure = risk.get('drawdown'), risk.get('exposure')
+    if not isinstance(drawdown, dict) or not isinstance(exposure, dict):
+        raise ValueError('Risk API verification failed')
+    if drawdown.get('equity') is None and any(value is not None for value in
+                                            (drawdown.get('dd'), exposure.get('ratio'), exposure.get('usd'))):
+        raise ValueError('Unavailable valuation is still reported as measured risk')
     saved['state'] = 'verified'
     atomic(receipt / 'receipt.json', (json.dumps(saved, indent=2) + '\n').encode())
     return {'ok': True, 'scope': saved['scope'], 'receipt': str(receipt), 'activity': activity['summary'],
+            'risk_reporting': {'drawdown': drawdown, 'exposure': exposure},
             'next_step': 'Press Ctrl+F5. Entry controls, positions and trading rules were not changed.'}
 
 if __name__ == '__main__':

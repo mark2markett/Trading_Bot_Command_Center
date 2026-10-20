@@ -116,14 +116,33 @@ def test_actual_bundle_install_rollback_and_owner_files_with_holding(tmp_path,mo
 
 
 def test_exact_activity_overlay_remains_compatible_without_accepting_other_edits(tmp_path):
+    import hashlib
+    m=module();manifest=json.loads((ROOT/'HOLDING-MAINTENANCE-SOURCE.json').read_text())
+    root=tmp_path/'native'
+    subprocess.run(['git','clone',str(ROOT/'holding-maintenance.bundle'),str(root)],check=True,capture_output=True)
+    subprocess.run(['git','checkout',manifest['tip']],cwd=root,check=True,capture_output=True)
+    # The holding manifest governs the original published overlay, not every
+    # future reporting release. Its exact historical bytes remain auditable in
+    # the complete source bundle; a newer API must not widen this old gate.
+    subprocess.run(['git','fetch','--no-auto-maintenance',str(ROOT/'activity-dashboard-source.bundle'),
+                    'HEAD:refs/test/activity-history'],cwd=root,check=True,capture_output=True)
+    for name,expected in manifest['activity_overlay'].items():
+        value=subprocess.check_output(['git','show','c843780389c022b5f928f2754032905dcf1c2dc6:'+name],cwd=root)
+        assert hashlib.sha256(value.replace(b'\r\n',b'\n')).hexdigest()==expected
+        (root/name).write_bytes(value)
+    assert m.source_stage(root,manifest)=='installed'
+    api=root/'cc_server/cc_server/api.py'
+    api.write_bytes(api.read_bytes()+b'\n# unreviewed edit\n')
+    with pytest.raises(ValueError):m.source_stage(root,manifest)
+
+
+def test_old_holding_gate_refuses_the_new_reporting_overlay(tmp_path):
     import zipfile
     m=module();manifest=json.loads((ROOT/'HOLDING-MAINTENANCE-SOURCE.json').read_text())
     root=tmp_path/'native'
     subprocess.run(['git','clone',str(ROOT/'holding-maintenance.bundle'),str(root)],check=True,capture_output=True)
     subprocess.run(['git','checkout',manifest['tip']],cwd=root,check=True,capture_output=True)
-    with zipfile.ZipFile(ROOT/'activity-dashboard.zip') as z:
-        for name in manifest['activity_overlay']:(root/name).write_bytes(z.read(name))
-    assert m.source_stage(root,manifest)=='installed'
-    api=root/'cc_server/cc_server/api.py'
-    api.write_bytes(api.read_bytes()+b'\n# unreviewed edit\n')
+    with zipfile.ZipFile(ROOT/'activity-dashboard.zip') as archive:
+        for name in ('cc_server/cc_server/api.py','cc_server/cc_server/activity.py','cc_server/cc_server/risk_reporting.py'):
+            (root/name).write_bytes(archive.read(name))
     with pytest.raises(ValueError):m.source_stage(root,manifest)

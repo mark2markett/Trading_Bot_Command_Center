@@ -67,7 +67,7 @@ try {
     & $python -B $helper verify --repo $Repo --receipt $receipt
     if ($LASTEXITCODE -ne 0) { throw 'Activity endpoint or served dashboard verification failed.' }
     $serverStopped=$false
-    Write-Host 'Activity dashboard verified. Press Ctrl+F5. Positions, orders, entry pauses, risk limits and bot schedules were not changed.'
+    Write-Host 'Account quote-source and reporting update verified. Schwab equities; Polygon options. Live-provider freshness still requires verification. Positions, orders, entry pauses, risk limits and bot schedules were not changed.'
 } catch {
     $original=$_.Exception.Message
     if ($serverStopped) {

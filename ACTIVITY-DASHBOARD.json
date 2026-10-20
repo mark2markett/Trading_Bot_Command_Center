@@ -1,13 +1,16 @@
 {
-  "version": 2,
-  "native_source_commit": "ba230d529f3fa86c0beaac9ece2262094d2b321d",
-  "compatible_base": "fb2251aa698cfa7809ebd63ee7fd6c2d94af73b7",
-  "scope": "Read-only account risk and activity API/display; no SDK, bot, financial schema, control, limit or schedule edits",
-  "archive_sha256": "c3eb46dd1ebe715a511775a70374e3e6745dce58f464805c8c98e617799eaca4",
+  "version": 3,
+  "native_source_commit": "740abe821806fb016c72cd1b7e2b2ffaf0725c0c",
+  "compatible_base": "ba230d529f3fa86c0beaac9ece2262094d2b321d",
+  "scope": "Account mark provider routing and strict Polygon quote parsing, with existing risk/activity reporting. No SDK risk/order, bot strategy, financial schema, control, limit or schedule edits.",
+  "archive_sha256": "23139b4523b38db3ce4efd0274e8e0f951e5971b30943b88dfb140ab42e7f50b",
   "files": {
+    "cc_sdk/cc_sdk/polygon_options.py": "9c91bef74a7490b066cf18d1b94187dc5d0d481eaf8f7e1ed90efaf9b71506f2",
+    "cc_server/cc_server/account_quotes.py": "60f6a51425e88e13c6ab0a79a8b1ac816e6cb9c6fa35e30b7b1404efb5c9ffce",
     "cc_server/cc_server/activity.py": "116bc0aa311ffb2075ade9c2f5d357ce258f838e4d2cdd4618c89ad6013a76a7",
     "cc_server/cc_server/api.py": "e43e1df89b8614f7d4df6fd173a0193e39b851167e667a0035fd802964208c10",
     "cc_server/cc_server/risk_reporting.py": "8daf973a9aa973161151d842b8f237fc9aa8909775318a38e2cdf99cce826527",
+    "cc_server/cc_server/riskd.py": "4b7bdcf1d10aeeffa84b1d054d46b9cc623c6da351287dbfa7a2e356aaa6574e",
     "cc_web/dist/assets/index-CACxy7kt.css": "91e8ad825821b4ada2bb0fcd49a705361c36a0683d5a64747319a0a62b7fa5f7",
     "cc_web/dist/assets/index-hgqJ9P59.js": "545530fb1c82a09ee5bcf82f0538487e5a26924f3511c7676034b24ae919dd71",
     "cc_web/dist/favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
@@ -15,14 +18,19 @@
     "cc_web/dist/index.html": "cd0efd59f9a2c47705264cd6013c5ca080a71b3a9e7b324b554277b062021fd1"
   },
   "compatible": {
-    "cc_server/cc_server/api.py": "a2884249befbfd53b0e9d411620b25f83b8ae3053c2c5c256521ce2d54b37642",
+    "cc_server/cc_server/api.py": "e43e1df89b8614f7d4df6fd173a0193e39b851167e667a0035fd802964208c10",
     "cc_server/cc_server/db.py": "8c38fed72d88afbd93f2c862c5a09df3416ba9f56a4e8839069fb8b7a3b8984b",
     "cc_server/cc_server/main.py": "4aae4d37a0a7ee997c74122f597e8938d5404618c243c24f132c29eeedbe0541",
     "cc_sdk/cc_sdk/ledger.py": "a2cf782fee9777244cd1302d45e0ed99e9f83eec918f13a1a1d89058e57fc76a",
     "cc_sdk/cc_sdk/control.py": "1e5bf0472f8c4d75c547c722444b34b8aa96351fc280cfce6d8a695ebbad952c",
     "cc_sdk/cc_sdk/options.py": "48052c134b6c0cda0dd28dddf5ad5e66351a2b9567a974d4fa47772ef32785d7",
     "cc_sdk/cc_sdk/schema.sql": "420f23b7ee4f2ceb5e397815ab7dce7c560fbd1e36b5320f16d6e99749bdbbc8",
-    "cc_server/cc_server/activity.py": null,
-    "cc_server/cc_server/risk_reporting.py": null
+    "cc_server/cc_server/activity.py": "116bc0aa311ffb2075ade9c2f5d357ce258f838e4d2cdd4618c89ad6013a76a7",
+    "cc_server/cc_server/risk_reporting.py": "8daf973a9aa973161151d842b8f237fc9aa8909775318a38e2cdf99cce826527",
+    "cc_sdk/cc_sdk/paper_account.py": "f2787a146cc069fd4041b0427a2850b8551f4cabe6ed9706e36a6dd657b22517",
+    "cc_sdk/cc_sdk/schwab_feed.py": "bff878cd794e4492c2af7673a8766cf547c6b6adf01004792085c478a723cba4",
+    "cc_server/cc_server/riskd.py": "5982e1b8bfeffda7a565b380660679c01541b0d2bbf83ac563436182e75c555a",
+    "cc_server/cc_server/account_quotes.py": null,
+    "cc_sdk/cc_sdk/polygon_options.py": "1670a356efb17a79959e0e3b090a05683d6588a08e0d9d2f217d6cd2a21262e0"
   }
 }

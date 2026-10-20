@@ -1,0 +1,21 @@
+{
+  "source_commit": "fb2251aa698cfa7809ebd63ee7fd6c2d94af73b7",
+  "scope": "INCIDENT_MONITOR_ONLY",
+  "archive_sha256": "bdae81a8c1a3752804ab84b1680bac2e0b223dc869583be7b3656284058b1943",
+  "files": {
+    "cc_server/cc_server/incidents/__init__.py": "e00760b6c14446ad2cac26e0c477a0f7185c8f97974796464c6e9b822714e4e7",
+    "cc_server/cc_server/incidents/classify.py": "d89a3f5a5240af0adc64ecbfc6bffd01571dfb590729e1b68d32f84579890e14",
+    "cc_server/cc_server/incidents/models.py": "687bcde52e8880632278efad4532120d00047b9fc199966323d864c6cad274fd",
+    "cc_server/cc_server/incidents/observe.py": "ee5cf7d4648214fbccd62a34a85094d957f374450c6d42ae42822e15ec184fce",
+    "cc_server/cc_server/incidents/readback.py": "a320d8f0611f0d48c2c8411be040e1659c332c5165223e6d1e170e45ce8c17e2",
+    "cc_server/cc_server/incidents/store.py": "4ca6d17a1affae493754dd024cf376eb8cb4e0d817641b522d611f53be0d2f03"
+  },
+  "compatible": {
+    "cc_server/cc_server/incidents/__init__.py": "e00760b6c14446ad2cac26e0c477a0f7185c8f97974796464c6e9b822714e4e7",
+    "cc_server/cc_server/incidents/classify.py": "3e2fb4d91a86743fb562a79baa426e5b6a76f81b5baa95529faad025a6dd9c50",
+    "cc_server/cc_server/incidents/models.py": "687bcde52e8880632278efad4532120d00047b9fc199966323d864c6cad274fd",
+    "cc_server/cc_server/incidents/observe.py": "db5a3f5dd390c77c3095738a0ed6102ca1a5b62c1594d93afb0ddebf255703bd",
+    "cc_server/cc_server/incidents/readback.py": "5b80d066049f92d305109c5a73215711429e0548c67dadef12edd4af3ab0fc04",
+    "cc_server/cc_server/incidents/store.py": "83f4427e2c35c3def19f2b236d72c5b1a1dcc286a04c84665d59c6d731362a49"
+  }
+}

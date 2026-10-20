@@ -154,3 +154,12 @@
 /test_trading_overview.py text eol=lf
 /test_trading_overview.ps1 text eol=lf
 /TRADING-OVERVIEW.md text eol=lf
+/INSTALL-INCIDENT-REPAIR.py text eol=lf
+/INSTALL-INCIDENT-REPAIR.ps1 text eol=lf
+/INCIDENT-REPAIR.json text eol=lf
+/INCIDENT-REPAIR-SHA256.txt text eol=lf
+/INCIDENT-REPAIR.md text eol=lf
+/test_incident_repair_install.py text eol=lf
+/test_incident_repair.ps1 text eol=lf
+/incident-repair.zip -text
+/incident-repair-source.bundle -text

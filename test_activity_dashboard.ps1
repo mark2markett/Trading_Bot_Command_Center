@@ -9,7 +9,7 @@ try {
     $power=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     New-Item -ItemType Directory (Split-Path $power) -Force | Out-Null
     Set-Content -LiteralPath $power -Value 'test executable identity'
-    foreach ($scenario in @('success','delayed_stop','stuck_stop','health_failure','apply_failure','rollback_failure')) {
+    foreach ($scenario in @('success','delayed_stop','stuck_stop','health_failure','busy_before_apply','busy_before_rollback','apply_failure','rollback_failure')) {
         $repo=Join-Path $testRoot ('owner checkout '+$scenario)
         New-Item -ItemType Directory (Join-Path $repo 'var/monitor') -Force | Out-Null
         New-Item -ItemType Directory (Join-Path $repo '.venv/Scripts') -Force | Out-Null
@@ -24,7 +24,7 @@ with (root/'invocations.txt').open('a') as f:f.write(mode+'\n')
 scenario=root.name
 if mode=='prepare': print(json.dumps({'ok':True,'receipt':str(root/'var/backups/activity-dashboard-test')}))
 else:
-    if (mode=='apply' and scenario not in ('owner checkout success','owner checkout delayed_stop','owner checkout health_failure')) or (mode=='rollback' and scenario=='owner checkout rollback_failure'):sys.exit(1)
+    if (mode=='apply' and scenario not in ('owner checkout success','owner checkout delayed_stop','owner checkout health_failure','owner checkout busy_before_rollback')) or (mode=='rollback' and scenario=='owner checkout rollback_failure'):sys.exit(1)
     print(json.dumps({'ok':True}))
 '@
         [IO.File]::WriteAllText($pythonExe,$shim,[Text.UTF8Encoding]::new($false))
@@ -36,7 +36,9 @@ else:
         $global:activityTestStarts=0;$global:activityTestStops=0;$global:activityStopPending=0
         $global:activityDelayedStop=($scenario -eq 'delayed_stop')
         $global:activityStuckStop=($scenario -eq 'stuck_stop')
-        $global:activityHealthFailure=($scenario -eq 'health_failure')
+        $global:activityHealthFailure=($scenario -in @('health_failure','busy_before_rollback'))
+        $global:activityBusyBeforeApply=($scenario -eq 'busy_before_apply')
+        $global:activityBusyBeforeRollback=($scenario -eq 'busy_before_rollback')
         function Start-Sleep { param($Seconds) }
         function Get-ScheduledTask {
             param($TaskName,$TaskPath,$ErrorAction)
@@ -48,7 +50,15 @@ else:
                 return $global:activityTestServer
             }
             if($TaskName -eq 'CC health monitor'){return $global:activityTestMonitor}
+            if($TaskName -eq 'CC bot *'){return @()}
             throw 'Unowned task queried'
+        }
+        function Get-CimInstance {
+            param($ClassName,$ErrorAction)
+            if(($global:activityBusyBeforeApply -and $global:activityTestStops -gt 0) -or ($global:activityBusyBeforeRollback -and $global:activityTestStarts -gt 0)){
+                return [pscustomobject]@{Name='python.exe';CommandLine='python.exe bot.py session'}
+            }
+            return @()
         }
         function Disable-ScheduledTask { param($TaskName,$TaskPath) if($TaskName -ne 'CC health monitor'){throw 'Unowned disable'};$global:activityTestMonitor.Settings.Enabled=$false }
         function Enable-ScheduledTask { param($TaskName,$TaskPath) if($TaskName -ne 'CC health monitor'){throw 'Unowned enable'};$global:activityTestMonitor.Settings.Enabled=$true }
@@ -82,6 +92,10 @@ else:
             if ($failed -or ($calls -join ',') -ne 'prepare,apply,verify' -or $global:activityTestStarts -ne 1 -or !$global:activityTestMonitor.Settings.Enabled) { throw 'Success path failed' }
         } elseif ($scenario -eq 'stuck_stop') {
             if (!$failed -or ($calls -join ',') -ne 'prepare' -or $global:activityTestStarts -ne 0 -or !$global:activityTestMonitor.Settings.Enabled) { throw 'Unstopped task was modified or restarted' }
+        } elseif ($scenario -eq 'busy_before_apply') {
+            if(!$failed -or ($calls -join ',') -ne 'prepare' -or $global:activityTestStarts -ne 1 -or !$global:activityTestMonitor.Settings.Enabled){throw 'Busy bot was overwritten during apply'}
+        } elseif ($scenario -eq 'busy_before_rollback') {
+            if(!$failed -or ($calls -join ',') -ne 'prepare,apply' -or $global:activityTestMonitor.Settings.Enabled){throw 'Busy bot was overwritten during rollback'}
         } elseif ($scenario -eq 'apply_failure') {
             if (!$failed -or ($calls -join ',') -ne 'prepare,apply,rollback' -or $global:activityTestStarts -ne 1 -or !$global:activityTestMonitor.Settings.Enabled) { throw 'Apply recovery failed' }
         } elseif ($scenario -eq 'health_failure') {

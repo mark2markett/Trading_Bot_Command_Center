@@ -176,3 +176,10 @@
 /OPERATIONS-SHA256.txt text eol=lf
 /test_operations_repair.py text eol=lf
 /test_operations_repair.ps1 text eol=lf
+/TRADE-REVIEW-GUARDS.ps1 text eol=lf
+/INSTALL-TRADE-REVIEW.ps1 text eol=lf
+/TRADE-REVIEW.md text eol=lf
+/TRADE-REVIEW-SHA256.txt text eol=lf
+/test_trade_review_guards.ps1 text eol=lf
+/test_trade_review_runtime.py text eol=lf
+/test_trade_review_install.ps1 text eol=lf

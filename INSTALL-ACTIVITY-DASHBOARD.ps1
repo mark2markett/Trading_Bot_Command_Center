@@ -9,6 +9,11 @@ foreach ($line in Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ACTIVITY-SH
     if ($line -notmatch '^([a-f0-9]{64})\s+([A-Za-z0-9_.-]+)$') { throw 'Invalid activity checksum entry.' }
     if ((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $Matches[2])).Hash -ne $Matches[1]) { throw 'Activity checksum mismatch.' }
 }
+$reviewRelease=$false
+if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'ACTIVITY-DASHBOARD.json')){
+    $reviewRelease=((Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ACTIVITY-DASHBOARD.json') -Raw | ConvertFrom-Json).trade_review_schema -eq 1)
+}
+if($reviewRelease){ . (Join-Path $PSScriptRoot 'TRADE-REVIEW-GUARDS.ps1') }
 function Get-OwnedActivityServer {
     $task=Get-ScheduledTask -TaskName 'CC server' -TaskPath '\' -ErrorAction Stop
     if ($task.Actions.Count -ne 1 -or !$task.Settings.Enabled -or
@@ -46,6 +51,7 @@ $lock=$null; $receipt=$null; $restoreMonitor=$false; $serverStopped=$false; $app
 try {
     $lock=[IO.File]::Open((Join-Path $Repo 'var\monitor\holding-install.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
     $server=Get-OwnedActivityServer
+    if($reviewRelease){Assert-TradeReviewIdle}
     if ($server.State -ne 'Running') { throw 'Expected the owned running server.' }
     $monitor=Get-ScheduledTask -TaskName 'CC health monitor' -TaskPath '\' -ErrorAction Stop
     if (!(Test-AttentionMonitorOwnership $monitor $Repo $power)) { throw 'Monitor task ownership differs.' }
@@ -63,9 +69,11 @@ try {
     }
     if ((Get-ScheduledTask -TaskName 'CC health monitor' -TaskPath '\').State -eq 'Running') { throw 'Monitor still running; retry after its check finishes.' }
     Get-OwnedActivityServer | Out-Null
+    if($reviewRelease){Assert-TradeReviewIdle}
     $serverStopped=$true
     Stop-ScheduledTask -TaskName 'CC server' -TaskPath '\'
     Wait-ActivityPortClosed
+    if($reviewRelease){Assert-TradeReviewIdle}
     $applyAttempted=$true
     & $python -B $helper apply --repo $Repo --receipt $receipt
     if ($LASTEXITCODE -ne 0) { throw 'Activity update failed; source recovery was attempted.' }
@@ -80,10 +88,12 @@ try {
     $original=$_.Exception.Message
     if ($serverStopped) {
         try {
+            if($reviewRelease -and $applyAttempted){Assert-TradeReviewIdle}
             Get-OwnedActivityServer | Out-Null
             Stop-ScheduledTask -TaskName 'CC server' -TaskPath '\'
             Wait-ActivityPortClosed
             if ($applyAttempted) {
+                if($reviewRelease){Assert-TradeReviewIdle}
                 & $python -B $helper rollback --repo $Repo --receipt $receipt
                 if ($LASTEXITCODE -ne 0) { throw 'Automatic source rollback failed.' }
             }

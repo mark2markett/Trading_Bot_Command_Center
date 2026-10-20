@@ -16,6 +16,8 @@ SOURCE = {'cc_server/cc_server/api.py', 'cc_server/cc_server/activity.py', 'cc_s
           'cc_sdk/cc_sdk/intraday.py', 'cc_sdk/cc_sdk/options_runner.py', 'cc_sdk/cc_sdk/ledger.py',
           'cc_server/cc_server/main.py', 'cc_server/cc_server/request_ledger.py', 'cc_server/cc_server/position_monitor.py'}
 SOURCE |= {f'cc_server/cc_server/incidents/{name}.py' for name in ('models','observe','store','readback')}
+SOURCE |= {'cc_sdk/cc_sdk/trade_evidence.py'}
+SOURCE |= {f'cc_server/cc_server/{name}.py' for name in ('review','review_events','review_findings','review_worker')}
 INDEX = 'cc_web/dist/index.html'
 
 def digest(value):
@@ -138,7 +140,8 @@ def prepare(repo, package, fetcher=fetch):
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_bytes(old)
     saved = {'repo': str(repo), 'files': manifest['files'], 'originals': originals,
-             'archive_sha256': manifest['archive_sha256'], 'state': 'prepared', 'scope': 'OPTIONS_ONLY_POLICY_AND_DISPLAY', **observed}
+             'archive_sha256': manifest['archive_sha256'], 'state': 'prepared',
+             'scope': 'TRADE_LIFECYCLE_EVIDENCE_AND_REVIEW' if manifest.get('trade_review_schema') == 1 else 'OPTIONS_ONLY_POLICY_AND_DISPLAY', **observed}
     (receipt / 'receipt.json').write_text(json.dumps(saved, indent=2) + '\n')
     return {'ok': True, 'receipt': str(receipt)}
 
@@ -212,11 +215,17 @@ def verify(repo, package, receipt, fetcher=fetch):
     if drawdown.get('equity') is None and any(value is not None for value in
                                             (drawdown.get('dd'), exposure.get('ratio'), exposure.get('usd'))):
         raise ValueError('Unavailable valuation is still reported as measured risk')
+    if manifest.get('trade_review_schema') == 1:
+        review = json.loads(fetcher('/api/review'))
+        if (review.get('schema_version') != 1 or not isinstance(review.get('candidates'),list)
+                or not isinstance(review.get('coverage'),dict) or review.get('execution',{}).get('broker_verified') is not False):
+            raise ValueError('Trade review API verification failed')
     saved['state'] = 'verified'
     atomic(receipt / 'receipt.json', (json.dumps(saved, indent=2) + '\n').encode())
     return {'ok': True, 'scope': saved['scope'], 'receipt': str(receipt), 'activity': activity['summary'],
             'risk_reporting': {'drawdown': drawdown, 'exposure': exposure},
-            'next_step': 'Options-only SDK/API capability installed. Use ENFORCE-OPTIONS-ONLY.ps1 for audited policy activation. Holdings, orders and exits retained.'}
+            'next_step': 'Open /review for dated reports and timelines. Automatic generation runs at exchange close +30 minutes. Broker-side paper execution remains unverified.' if manifest.get('trade_review_schema') == 1 else
+            'Options-only SDK/API capability installed. Use ENFORCE-OPTIONS-ONLY.ps1 for audited policy activation. Holdings, orders and exits retained.'}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

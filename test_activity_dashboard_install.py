@@ -45,6 +45,7 @@ def fixture(tmp_path):
         if route=='/api/health':return json.dumps({'ok':True,'db':str(repo/'var/cc.db')}).encode()
         if route=='/api/activity':return b'{"bots":[],"summary":{},"quote_max_age_seconds":60}'
         if route=='/api/risk':return b'{"drawdown":{"equity":null,"dd":null},"exposure":{"usd":null,"ratio":null}}'
+        if route=='/api/review':return b'{"schema_version":1,"candidates":[],"coverage":{"gaps":[]},"execution":{"broker_verified":false}}'
         name=installer.INDEX if route=='/' else 'cc_web/dist'+route
         return (repo/name).read_bytes()
     return repo,package,payload,fetcher
@@ -142,6 +143,20 @@ def test_missing_source_compatibility_entry_is_refused(tmp_path):
 def test_wrong_server_identity_is_refused(tmp_path):
     repo,package,payload,fetcher=fixture(tmp_path)
     with pytest.raises(ValueError,match='ledger does not match'):installer.prepare(repo,package,lambda _:b'{"ok":true,"db":"/another/cc.db"}')
+
+
+def test_review_release_cannot_pass_with_the_old_missing_review_route(tmp_path):
+    repo,package,payload,fetcher=fixture(tmp_path)
+    manifest=json.loads((package/'ACTIVITY-DASHBOARD.json').read_text())
+    manifest['trade_review_schema']=1
+    write_package(package,manifest,payload)
+    receipt=Path(installer.prepare(repo,package,fetcher)['receipt'])
+    installer.apply(repo,package,receipt)
+    def old_runtime(route):
+        if route=='/api/review':return b'{"detail":"Not Found"}'
+        return fetcher(route)
+    with pytest.raises(ValueError,match='review'):
+        installer.verify(repo,package,receipt,old_runtime)
 
 
 def test_partial_copy_failure_rolls_back_source_and_index(tmp_path,monkeypatch):

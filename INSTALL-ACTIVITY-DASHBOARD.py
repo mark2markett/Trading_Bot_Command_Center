@@ -12,7 +12,8 @@ import uuid
 import zipfile
 
 SOURCE = {'cc_server/cc_server/api.py', 'cc_server/cc_server/activity.py', 'cc_server/cc_server/risk_reporting.py',
-          'cc_server/cc_server/riskd.py', 'cc_server/cc_server/account_quotes.py', 'cc_sdk/cc_sdk/polygon_options.py'}
+          'cc_server/cc_server/riskd.py', 'cc_server/cc_server/account_quotes.py', 'cc_sdk/cc_sdk/polygon_options.py', 'cc_sdk/cc_sdk/control.py', 'cc_sdk/cc_sdk/risk.py',
+          'cc_sdk/cc_sdk/intraday.py', 'cc_sdk/cc_sdk/options_runner.py'}
 INDEX = 'cc_web/dist/index.html'
 
 def digest(value):
@@ -135,7 +136,7 @@ def prepare(repo, package, fetcher=fetch):
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_bytes(old)
     saved = {'repo': str(repo), 'files': manifest['files'], 'originals': originals,
-             'archive_sha256': manifest['archive_sha256'], 'state': 'prepared', 'scope': 'ACCOUNT_VALUATION_DATA_AND_DISPLAY', **observed}
+             'archive_sha256': manifest['archive_sha256'], 'state': 'prepared', 'scope': 'OPTIONS_ONLY_POLICY_AND_DISPLAY', **observed}
     (receipt / 'receipt.json').write_text(json.dumps(saved, indent=2) + '\n')
     return {'ok': True, 'receipt': str(receipt)}
 
@@ -213,7 +214,7 @@ def verify(repo, package, receipt, fetcher=fetch):
     atomic(receipt / 'receipt.json', (json.dumps(saved, indent=2) + '\n').encode())
     return {'ok': True, 'scope': saved['scope'], 'receipt': str(receipt), 'activity': activity['summary'],
             'risk_reporting': {'drawdown': drawdown, 'exposure': exposure},
-            'next_step': 'Schwab equities and Polygon option books configured for account marks. Live provider freshness remains unverified. Positions, controls and trading rules were not changed.'}
+            'next_step': 'Options-only SDK/API capability installed. Use ENFORCE-OPTIONS-ONLY.ps1 for audited policy activation. Holdings, orders and exits retained.'}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

@@ -164,3 +164,9 @@
 /test_incident_repair.ps1 text eol=lf
 /incident-repair.zip -text
 /incident-repair-source.bundle -text
+/ENFORCE-OPTIONS-ONLY.ps1 text eol=lf
+/OPTIONS-ONLY.py text eol=lf
+/OPTIONS-ONLY.md text eol=lf
+/OPTIONS-ONLY-SHA256.txt text eol=lf
+/test_options_only.ps1 text eol=lf
+/test_options_only_install.py text eol=lf

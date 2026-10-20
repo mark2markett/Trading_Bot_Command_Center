@@ -27,10 +27,13 @@ def fixture(tmp_path):
     payload={'cc_server/cc_server/api.py':b'# new API\n','cc_server/cc_server/activity.py':b'# read only\n','cc_server/cc_server/risk_reporting.py':b'# unknown valuation is not zero risk\n',installer.INDEX:b'new index','cc_web/dist/assets/activity.js':b'compiled activity'}
     payload.update({'cc_server/cc_server/riskd.py':b'# account provider routing\n',
                     'cc_server/cc_server/account_quotes.py':b'# strict Polygon account books\n',
+                    'cc_sdk/cc_sdk/intraday.py':b'# honor exit refusal\n', 'cc_sdk/cc_sdk/options_runner.py':b'# honor spread exit refusal\n',
+                    'cc_sdk/cc_sdk/control.py':b'# options only control\n', 'cc_sdk/cc_sdk/risk.py':b'# options only risk guard\n',
                     'cc_sdk/cc_sdk/polygon_options.py':b'# no manufactured bid\n'})
-    manifest={'compatible':{'cc_server/cc_server/api.py':installer.normalized(b'# original\n'),'cc_server/cc_server/activity.py':None,'cc_server/cc_server/risk_reporting.py':None},'files':{k:installer.digest(v) for k,v in payload.items()}}
+    manifest={'entry_asset_policy':'options_only','compatible':{'cc_server/cc_server/api.py':installer.normalized(b'# original\n'),'cc_server/cc_server/activity.py':None,'cc_server/cc_server/risk_reporting.py':None},'files':{k:installer.digest(v) for k,v in payload.items()}}
     manifest['compatible'].update({'cc_server/cc_server/riskd.py':installer.normalized(b'# prior account monitor\n'),
-                                   'cc_server/cc_server/account_quotes.py':None,
+                                   'cc_server/cc_server/account_quotes.py':None, 'cc_sdk/cc_sdk/control.py':None, 'cc_sdk/cc_sdk/risk.py':None,
+                                   'cc_sdk/cc_sdk/intraday.py':None, 'cc_sdk/cc_sdk/options_runner.py':None,
                                    'cc_sdk/cc_sdk/polygon_options.py':installer.normalized(b'# prior Polygon parser\n')})
     write_package(package,manifest,payload)
     def fetcher(route):

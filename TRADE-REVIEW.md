@@ -1,7 +1,7 @@
 # Options lifecycle evidence and daily review
 
-This release extends the owner-verified a07af9d operational overlay (native
-0238d94). It preserves the options-only restriction, stock strategy pauses,
+This release extends the owner-verified 013d53d review overlay (native
+04823ab). It preserves the options-only restriction, stock strategy pauses,
 existing SPY holding and exit handling. No broker orders, financial migrations,
 strategy changes, bot task starts/stops or risk-limit changes occur during install.
 
@@ -37,7 +37,7 @@ paper IDs/fills are labeled simulations; no setting turns them into paperMoney
 executions. Nothing enables live trading.
 
 
-Release validation: native source 04823ab; 436 backend tests, 52 frontend tests,
+Release validation: native source 3c85161; 444 backend tests, 52 frontend tests,
 production build, targeted Ruff checks and Chromium desktop/phone checks pass.
 The transfer package passes 240 Python tests including launching the actual
 bundled server and generating a saved review against an owned test ledger.
@@ -52,3 +52,16 @@ closing spread legs and an explicit commission basis; source apply and rollback
 recheck active bot commands. If a bot starts while candidate health verification
 fails, source rollback is refused and the recovery receipt is preserved rather
 than replacing imported SDK files. This requires operator recovery once idle.
+
+
+October 20 readiness repair: explicitly options-only-disabled share strategies
+skip entry-only scanner and daily context requirements while managing existing
+exits first. Ordinary pauses retain scanner observation. The monitor omits SIP
+opening requirements only if a dated policy proves prohibition by 09:35; later
+policy changes cannot erase earlier failures. Historical incidents stay intact.
+This update does not implement broker-side Schwab paper execution.
+
+Run installation inside the original trading server session. The owner's DESKTOP
+profile C:\Users\markw has no trading checkout; localhost there is a different
+endpoint from the installed Administrator trading server. A failed connection on
+that desktop is not evidence that the original server is down.

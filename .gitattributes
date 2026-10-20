@@ -183,3 +183,4 @@
 /test_trade_review_guards.ps1 text eol=lf
 /test_trade_review_runtime.py text eol=lf
 /test_trade_review_install.ps1 text eol=lf
+/SCHWAB-EXECUTION-READINESS.md text eol=lf

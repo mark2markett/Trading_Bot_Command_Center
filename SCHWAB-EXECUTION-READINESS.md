@@ -39,3 +39,33 @@ future market-data availability, or complete the broker execution acceptance tes
 
 No credentials, orders, positions, capital, risk controls, execution modes or
 production configuration were changed by this audit.
+
+
+## October 20 verification update
+
+Latest native source inspected: 3c85161 (following owner-installed 013d53d /
+native 04823ab). Local options paper entries still generate `paper-...` IDs and
+record simulated fills without calling Schwab order submission. The inspected
+Autotrader `placeOrder` paper branch and spread guarded paper branch similarly
+return generated PAPER IDs without posting orders. These paths do not meet the
+owner's requirement for broker-side paper execution.
+
+The public platform health check returned HTTP 200 with all 12 checks true on
+October 20. The public Schwab developer portal was reachable, but its application
+shell is not evidence of a supported paper order API. The current schwab-py
+README still states paper trading is unsupported; this is client documentation,
+not a definitive statement covering every Schwab product.
+
+Required external acceptance before implementing/testing broker paper orders:
+Schwab must identify a supported API product, its paper/sandbox base URL, order
+and account documentation, paper account identity and OAuth entitlements. Confirm
+whether options multi-leg order submit/status/fill/cancel/replace and position
+reconciliation are supported. Credentials must remain in the existing secret
+store. An API-enabled live account is not a paper account. No live order is an
+authorized substitute for a paper connectivity test.
+
+The October 20 native repair addresses entry dependencies for options-only-disabled
+share strategies; it leaves real missed-opening history and all exits intact.
+It cannot create a broker service Schwab has not provisioned. Windows readiness
+must be checked on the actual trading server; the owner diagnostic from DESKTOP
+found no Administrator trading checkout.

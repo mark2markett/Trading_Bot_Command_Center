@@ -4,6 +4,17 @@ October 20 repair for the already installed, options-only five-bot paper fleet.
 The owner reported all local API routes timing out, a monitor `DEADLINE`, and a tall
 alert column hiding the bot controls. Market-data requests were still succeeding.
 
+Follow-up: the owner verified the operational repair and fresh position checks.
+A platform HTTP 503 was traced to `enrich_recent=false`; authenticated read-only
+telemetry confirmed earlier zero-work enrichment runs and a successful 12:58 ET run
+on October 20 (one eligible trade, one enrichment and plan, zero upsert errors).
+Production health passed at 13:01 and 13:03 ET. No producer or eligibility policy
+was changed. Platform incidents now preserve the HTTP status and controlled failed
+check names, and display plain-language explanations. Malformed or incomplete health
+responses cannot clear incidents; provider error bodies and credentials are excluded.
+This follow-up accepts the previously verified operational runtime (`fb281b1`) and
+the new payload; unreviewed local source remains blocked by the installer.
+
 Reproduced defects and correction:
 
 - GET requests could occupy the request worker pool while waiting on the singleton

@@ -184,3 +184,8 @@
 /test_trade_review_runtime.py text eol=lf
 /test_trade_review_install.ps1 text eol=lf
 /SCHWAB-EXECUTION-READINESS.md text eol=lf
+PAPER-EXIT-STATE.py text eol=lf
+REPAIR-PAPER-EXIT-STATE.ps1 text eol=lf
+PAPER-EXIT-SHA256.txt text eol=lf
+test_paper_exit_state.py text eol=lf
+test_paper_exit_wrapper.ps1 text eol=lf

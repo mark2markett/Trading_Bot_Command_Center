@@ -37,9 +37,9 @@ paper IDs/fills are labeled simulations; no setting turns them into paperMoney
 executions. Nothing enables live trading.
 
 
-Release validation: native source 48c4aba; 447 backend tests, 52 frontend tests,
+Release validation: native source includes exact-session reconciliation and pending-exit checks; 456 backend tests, 55 frontend tests,
 production build, targeted Ruff checks and Chromium desktop/phone checks pass.
-The transfer package passes 242 Python tests including launching the actual
+The transfer package passes 258 Python tests including launching the actual
 bundled server and generating a saved review against an owned test ledger.
 PowerShell checks cover five idle guards, four review wrapper scenarios, eight
 source install/recovery scenarios, five options-policy scenarios and seven
@@ -73,4 +73,29 @@ cannot supply its fill close; missing/ambiguous matches leave paper state intact
 This installs bot.py source under the same idle and exact-source compatibility
 checks. state_paper.json and paper_ledger.json are never packaged, overwritten or
 reconciled by this installer. It does not fill or cancel the owner's current
-orders 29/21. Their saved paper queue/stop state still requires inspection.
+orders 29/21. Their saved paper queue/stop state was inspected; the separately audited stale-stop repair below applies only after a fresh matching preflight.
+
+October 21 paper exit state repair:
+The owner confirmed the simulator holds 130 SPY, has exactly one queued October
+20 SELL130 MOC, and has no SPY stop. State and native order 21 still refer to the
+old simulated stop. REPAIR-PAPER-EXIT-STATE.ps1 installs the session-date guard and
+pending-exit display, then rechecks this evidence while bot commands are idle.
+Its separately audited helper changes only the stale native stop status/reason
+and saved stop_order_id; it appends one control audit record. Native position,
+pending order 29, cash, paper queue, fills and flags are verified unchanged.
+
+Ambiguous, filled, changed or live evidence refuses the metadata correction.
+Both database and JSON state are checked before commit; a failed database write
+rolls back and restores only its own state bytes. The recovery receipt supports
+idempotent helper apply after an interrupted write. Do not manually delete the
+receipt, stop files or orders. A new wrapper invocation after a completed repair
+may refuse preflight because the stale stop is already retired; use the original
+receipt for read-only verification rather than preparing another correction.
+
+The dashboard says "Paper sell-at-close exit pending reconciliation" while the
+holding remains open. It does not claim broker protection or settlement. Bot
+reconciliation can settle only against the actual saved session bar. Installation
+does not run a trading command. Schwab-side paper execution remains unestablished;
+authorization renewal still requires the owner's Schwab login.
+
+Current release validation also covers 16 real-file/SQLite paper-metadata cases, six metadata wrapper scenarios and a Chromium pending-exit desktop/phone check. The native/transfer suites each emit one existing Starlette/httpx deprecation warning; no failing tests. Independent review has no remaining Important/Critical findings. Windows activation still requires the owner to run the pinned release and return its receipt/output.

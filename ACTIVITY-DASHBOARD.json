@@ -1,9 +1,9 @@
 {
-  "version": 8,
-  "native_source_commit": "48c4aba9c2182274425346d7db02b416fba4b4f9",
+  "version": 9,
+  "native_source_commit": "79d85e07b390088b45175349306885c6a5566617",
   "compatible_base": "3c85161a989488f71e4b43aa129e305ae831dcea",
-  "scope": "Pending SPY paper reconciliation requires the exact saved order session bar before settlement; paper state and orders are not changed by installation. Options-only-disabled share strategies skip entry-only scanner/data dependencies; existing exits and genuine missed-opening history retained. Linked future option decision/execution evidence, read-only daily review API, operator timelines and automatic exchange close+30 minute JSON/Markdown reports. Existing paper/options-only controls, holdings, exits and financial schema retained. No broker execution certification or parameter changes.",
-  "archive_sha256": "b5c91bdffae07b3ee3723368834b91e21c7b7fc403b806df6d381a723c2d5b82",
+  "scope": "A unique unfilled local SPY paper MOC is displayed as pending reconciliation, without stop or broker-protection claims. Separate receipt-bound maintenance may retire only a proven absent paper stop and its saved reference; source installation never changes paper state. Pending SPY paper reconciliation requires the exact saved order session bar before settlement; paper state and orders are not changed by installation. Options-only-disabled share strategies skip entry-only scanner/data dependencies; existing exits and genuine missed-opening history retained. Linked future option decision/execution evidence, read-only daily review API, operator timelines and automatic exchange close+30 minute JSON/Markdown reports. Existing paper/options-only controls, holdings, exits and financial schema retained. No broker execution certification or parameter changes.",
+  "archive_sha256": "7b002bfed830b69a78e4475cd266e16b0c1836cfbb4956ac914c5d62cc760cd3",
   "files": {
     "bots/spy_mr_bot/bot.py": "89e79931bc404391bd06dc58823467be97cd1f54c4abbaf46b907c40b91a5c55",
     "cc_sdk/cc_sdk/control.py": "4001ab64b92b887e232c10ff687d1b918f181ca1b0e13c339874184cb1cd6a60",
@@ -21,7 +21,7 @@
     "cc_server/cc_server/incidents/readback.py": "6802af9ee060d775e57b592f9ce9f6bd03efac83bd1b303500c40d6424576656",
     "cc_server/cc_server/incidents/store.py": "65a055c08e1af7984b3c9b82dc238a3de38672b6f1fe15821ac85ae27dd5e3e8",
     "cc_server/cc_server/main.py": "4a28aa4335e001d9eb2b33d4e488339fc6eb047d7381b70d06bf399e1053c587",
-    "cc_server/cc_server/position_monitor.py": "cc2af8e4ae0e6a9010350434a0ae40629bbc8433cc899f99ad54355f9e0f4a4e",
+    "cc_server/cc_server/position_monitor.py": "f08ed2d9ce45af04446bb45d33d67b0c925454b46f66b7219d19027206b06fba",
     "cc_server/cc_server/request_ledger.py": "d4442d577ff976defb38e3f766ae9bb0fde1edd9d67d4ef0a2c9af8d67a45fcd",
     "cc_server/cc_server/review.py": "b1b59e64d456a0cc08c3d7fe54d10ab0d639025ebc72f41e711b5395dc269eac",
     "cc_server/cc_server/review_events.py": "c20c09c63996478b001078fcd4831df4adfd819519532e0c83566f8da3da98d3",
@@ -29,11 +29,11 @@
     "cc_server/cc_server/review_worker.py": "ff329ba5d2fb89c8dd697d610e076443e997d693c3739cc63993ea3924be4fbd",
     "cc_server/cc_server/risk_reporting.py": "8daf973a9aa973161151d842b8f237fc9aa8909775318a38e2cdf99cce826527",
     "cc_server/cc_server/riskd.py": "4b7bdcf1d10aeeffa84b1d054d46b9cc623c6da351287dbfa7a2e356aaa6574e",
-    "cc_web/dist/assets/index-CtXlDCBZ.js": "90a62199e4c6e62c95702915469fabed8f57144d907636da36cd2b00073cd55e",
+    "cc_web/dist/assets/index-B-2r7sS3.js": "c70570df355eb9c22276cbdcfe867ff366a6cc4643c56977572ce95d051a7900",
     "cc_web/dist/assets/index-Ldpg1gFI.css": "724109ff8f56f416da6045cb1f5b97136e27e76ee4bc64cd180f32f340b3abd3",
     "cc_web/dist/favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
     "cc_web/dist/icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
-    "cc_web/dist/index.html": "b1b8102555d3da797c59ad6cd415f006ec0d2cc94980bd73615f7414d0837752"
+    "cc_web/dist/index.html": "d2d24ab5c7397d0f701ee6a357633f1bf81e2345581ebfaeb962ae03f37873ac"
   },
   "compatible": {
     "cc_server/cc_server/api.py": "0c097f590f899687de19f5811fba095332b02ade2709a3eb9add0b2800fd3030",

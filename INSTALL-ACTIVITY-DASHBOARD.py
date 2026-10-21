@@ -16,7 +16,7 @@ SOURCE = {'cc_server/cc_server/api.py', 'cc_server/cc_server/activity.py', 'cc_s
           'cc_sdk/cc_sdk/intraday.py', 'cc_sdk/cc_sdk/options_runner.py', 'cc_sdk/cc_sdk/ledger.py',
           'cc_server/cc_server/main.py', 'cc_server/cc_server/request_ledger.py', 'cc_server/cc_server/position_monitor.py'}
 SOURCE |= {f'cc_server/cc_server/incidents/{name}.py' for name in ('models','observe','store','readback')}
-SOURCE |= {'cc_sdk/cc_sdk/trade_evidence.py'}
+SOURCE |= {'cc_sdk/cc_sdk/trade_evidence.py', 'bots/spy_mr_bot/bot.py'}
 SOURCE |= {f'cc_server/cc_server/{name}.py' for name in ('review','review_events','review_findings','review_worker')}
 INDEX = 'cc_web/dist/index.html'
 

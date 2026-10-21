@@ -40,6 +40,10 @@ def fixture(tmp_path):
         payload.setdefault(name,b'# reviewed runtime boundary\n')
         manifest['compatible'].setdefault(name,None)
         manifest['files'][name]=installer.digest(payload[name])
+    state_folder=repo/'bots/spy_mr_bot'
+    state_folder.mkdir(parents=True,exist_ok=True)
+    (state_folder/'state_paper.json').write_text('{"in_position":true,"qty":130,"pending":{"side":"SELL","qty":130,"date":"2026-10-20"}}')
+    (state_folder/'paper_ledger.json').write_text('{"cash":100000,"positions":{"SPY":130},"pending":[{"kind":"SELL_MOC","qty":130}],"stops":{}}')
     write_package(package,manifest,payload)
     def fetcher(route):
         if route=='/api/health':return json.dumps({'ok':True,'db':str(repo/'var/cc.db')}).encode()
@@ -59,7 +63,11 @@ def write_package(package,manifest,payload):
 
 
 def protected(repo):
-    return {p.relative_to(repo).as_posix():p.read_bytes() for p in (repo/'var').rglob('*') if p.is_file() and 'backups' not in p.parts}
+    result={p.relative_to(repo).as_posix():p.read_bytes() for p in (repo/'var').rglob('*') if p.is_file() and 'backups' not in p.parts}
+    for name in ('state_paper.json','paper_ledger.json'):
+        path=repo/'bots/spy_mr_bot'/name
+        if path.exists():result[path.relative_to(repo).as_posix()]=path.read_bytes()
+    return result
 
 
 def test_installs_and_verifies_preserving_shares_options_and_flags(tmp_path):
@@ -81,7 +89,7 @@ def test_installs_and_verifies_preserving_shares_options_and_flags(tmp_path):
     assert protected(repo)==before
 
 
-@pytest.mark.parametrize('name',['cc_server/cc_server/riskd.py','cc_sdk/cc_sdk/polygon_options.py'])
+@pytest.mark.parametrize('name',['cc_server/cc_server/riskd.py','cc_sdk/cc_sdk/polygon_options.py','bots/spy_mr_bot/bot.py'])
 def test_quote_source_update_preserves_owner_dependency_changes(tmp_path,name):
     repo,package,payload,fetcher=fixture(tmp_path)
     owner=b'# owner data source change\n';(repo/name).write_bytes(owner)
@@ -230,3 +238,9 @@ def test_persistent_copy_and_rollback_failure_can_be_recovered_without_ledger_wr
     assert installer.rollback(repo,package,receipt)['ok']
     assert (repo/installer.INDEX).read_bytes()==b'old index'
     assert (repo/'cc_server/cc_server/api.py').read_bytes()==b'# original\r\n'
+
+
+def test_pending_order_guard_is_packaged_without_paper_state_files():
+    manifest,payload=installer.read_package(ROOT)
+    assert 'bots/spy_mr_bot/bot.py' in payload
+    assert all(name not in payload for name in ('bots/spy_mr_bot/state_paper.json','bots/spy_mr_bot/paper_ledger.json'))

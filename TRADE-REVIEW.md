@@ -1,7 +1,7 @@
 # Options lifecycle evidence and daily review
 
-This release extends the owner-verified 013d53d review overlay (native
-04823ab). It preserves the options-only restriction, stock strategy pauses,
+This release extends the owner-verified 7dfbfdd readiness overlay (native
+3c85161). It preserves the options-only restriction, stock strategy pauses,
 existing SPY holding and exit handling. No broker orders, financial migrations,
 strategy changes, bot task starts/stops or risk-limit changes occur during install.
 
@@ -37,9 +37,9 @@ paper IDs/fills are labeled simulations; no setting turns them into paperMoney
 executions. Nothing enables live trading.
 
 
-Release validation: native source 3c85161; 444 backend tests, 52 frontend tests,
+Release validation: native source 48c4aba; 447 backend tests, 52 frontend tests,
 production build, targeted Ruff checks and Chromium desktop/phone checks pass.
-The transfer package passes 240 Python tests including launching the actual
+The transfer package passes 242 Python tests including launching the actual
 bundled server and generating a saved review against an owned test ledger.
 PowerShell checks cover five idle guards, four review wrapper scenarios, eight
 source install/recovery scenarios, five options-policy scenarios and seven
@@ -65,3 +65,12 @@ Run installation inside the original trading server session. The owner's DESKTOP
 profile C:\Users\markw has no trading checkout; localhost there is a different
 endpoint from the installed Administrator trading server. A failed connection on
 that desktop is not evidence that the original server is down.
+
+
+Pending paper session guard: the SPY daily bot must find exactly one daily bar
+matching the saved pending order date before settling. Earlier or later bars
+cannot supply its fill close; missing/ambiguous matches leave paper state intact.
+This installs bot.py source under the same idle and exact-source compatibility
+checks. state_paper.json and paper_ledger.json are never packaged, overwritten or
+reconciled by this installer. It does not fill or cancel the owner's current
+orders 29/21. Their saved paper queue/stop state still requires inspection.
